@@ -32,7 +32,7 @@ enum RumbleCategory {
   kRumbleCategoryCount,
 };
 
-// [Rumble] Enabled is the only switch (docs/adr/0002): off means no feedback interface, no patches, no per-tick work
+// [Rumble] Enabled is the only switch: off means no feedback interface, no patches, no per-tick work
 bool  bRumbleEnabled                             = true;
 bool  bRumbleSwapMotors                          = false;
 float fRumbleIntensity                           = 1.0f;
@@ -70,10 +70,8 @@ double RumbleGetTime() {
 int RumbleRoundToPercent(int value) { return (value * 100 + 32767) / 65535 * 65535 / 100; }
 
 // --- impulse triggers ([Rumble] ImpulseTriggers) ---
-// XInput can't reach the Xbox One / Series trigger motors; Windows.Gaming.Input can. It has no mapping to XInput user
-// indices, so while it is in use every WGI gamepad gets the full vibration (main motors included, the two APIs would
-// otherwise fight over them). That's why auto mode only uses it while exactly one real pad is connected.
-// Loaded at runtime so the Win7 builds still start; it's simply unavailable there.
+// Only Windows.Gaming.Input reaches the trigger motors, and it can't target one pad, so auto mode needs a single pad.
+// Loaded at runtime so the Win7 builds still start.
 
 enum RumbleTriggerMode {
   kTriggersOff,
@@ -207,20 +205,19 @@ void RumbleStopAllPads(bool fromDllMain = false) {
 void RumbleInstallPatches() {
   if (!bRumbleEnabled) return;
 
-  // LocalPlayer::DoFFB only calls UpdateShifting for cars without IEngineDamage; the engine damage branch jumps past it
-  // (0x6EE7F0 and 0x6EE7FF, both `jmp 0x6EE836`). Point both jumps at the shifting code (0x6EE801) so player cars, which
-  // have engine damage, report gear changes too. That code only uses the transmission/vehicle locals, valid on both paths.
+  // DoFFB skips UpdateShifting for cars with IEngineDamage (jumps at 0x6EE7F0 / 0x6EE7FF to 0x6EE836), which includes
+  // player cars. Point both at the shifting code (0x6EE801); it only uses locals valid on both paths.
   if (*(uint16_t*)0x006EE7F0 == 0x44EB && *(uint16_t*)0x006EE7FF == 0x35EB) {
     injector::WriteMemory<uint8_t>(0x006EE7F1, 0x0F, true);
     injector::WriteMemory<uint8_t>(0x006EE800, 0x00, true);
   }
 
-  // LocalPlayer::OnCollision skips ReportCollision when the save's hidden Rumble byte (settings +4) is 0, with a `je` at
-  // 0x6F23EA. The ini is the only switch (docs/adr/0002), so drop that jump; the null-settings check before it stays.
+  // LocalPlayer::OnCollision skips ReportCollision when the save's hidden Rumble byte is 0 (`je` at 0x6F23EA).
+  // The ini is the only switch, so drop that jump; the null-settings check before it stays.
   if (*(uint16_t*)0x006F23EA == 0x2B74) injector::WriteMemory<uint16_t>(0x006F23EA, 0x9090, true);
 }
 
-// --- player vehicle access (docs/research/mw-rumble-signals.md) ---
+// --- player vehicle access ---
 
 void*(__thiscall* UTL_Com_Object_IList_Find)(void* thethis, void* handle) = (void*(__thiscall*)(void*, void*))UTL_ILIST_FIND_ADDR;
 const void*(__thiscall* Attrib_Instance_GetAttributePointer)(const void* thethis, unsigned int key, unsigned int index) =
@@ -479,13 +476,13 @@ struct RumbleEnvelopePoint {
 
 const RumbleEnvelopePoint SmallRumblePoints[] = {{0.0f, 255.0f}, {0.05f, 200.0f}, {0.07f, 80.0f}, {0.8f, 0.0f}};
 const RumbleEnvelopePoint BigRumblePoints[]   = {{0.0f, 255.0f}, {0.15f, 255.0f}, {0.2f, 120.0f}, {1.2f, 0.0f}};
-// shift timing cues (ours): Perfect = light double tap, Miss = rough buzz
+// shift timing cues (not from the console code): Perfect = light double tap, Miss = rough buzz
 const RumbleEnvelopePoint PerfectShiftPoints[] = {{0.0f, 255.0f}, {0.07f, 255.0f}, {0.07f, 0.0f}, {0.13f, 0.0f}, {0.13f, 255.0f}, {0.2f, 255.0f}, {0.2f, 0.0f}};
 const RumbleEnvelopePoint MissShiftPoints[]    = {{0.0f, 255.0f}, {0.15f, 180.0f}, {0.15f, 0.0f}};
-// the same cues on the right trigger (docs/research/impulse-triggers.md 6.1): Perfect = one crisp tick, Miss = two
+// the same cues on the right trigger: Perfect = one crisp tick, Miss = two
 const RumbleEnvelopePoint TriggerPerfectPoints[] = {{0.0f, 255.0f}, {0.03f, 255.0f}, {0.03f, 0.0f}};
 const RumbleEnvelopePoint TriggerMissPoints[]    = {{0.0f, 255.0f}, {0.025f, 255.0f}, {0.025f, 0.0f}, {0.085f, 0.0f}, {0.085f, 255.0f}, {0.11f, 255.0f}, {0.11f, 0.0f}};
-// kerb / bump thump (ours): one sharp knock per wheel, so crossing a kerb gives the natural front-rear double knock
+// kerb / bump thump (not from the console code): one sharp knock per wheel, so crossing a kerb gives the natural front-rear double knock
 const RumbleEnvelopePoint BumpPoints[] = {{0.0f, 255.0f}, {0.04f, 255.0f}, {0.12f, 0.0f}};
 
 // PS2 surface wave record (FFBWaveRecord), one per channel: 0 left low, 1 left high, 2 right low, 3 right high.
@@ -545,7 +542,7 @@ const unsigned int ATTRIB_KEY_FFB_ROLL = 0xBA1297DA;
 const unsigned int ATTRIB_KEY_FFB_SKID = 0x0C149044;
 const unsigned int ATTRIB_KEY_FFB_SLIP = 0x8FD11D27;
 
-// tuning, from the 2026-10-11 telemetry drive (~120 ticks/s): normal roads stay under ~3 m/s of compression speed,
+// measured with the Telemetry log (~120 ticks/s): normal roads stay under ~3 m/s of compression speed,
 // mounting a kerb is a ~9 cm step in one tick (~11-12 m/s)
 const float RUMBLE_BUMP_MIN_VELOCITY  = 4.0f;   // m/s of suspension compression speed
 const float RUMBLE_BUMP_FULL_VELOCITY = 14.0f;
@@ -918,7 +915,7 @@ class IFeedback {
     }
   }
 
-  // never delete -- embedded in InputDevice
+  // never deleted: it's embedded in InputDevice
   virtual void* ScalarDtor(unsigned int /*flags*/) { return this; }
 
   virtual void PauseEffects() {
@@ -948,10 +945,8 @@ class IFeedback {
     RumbleTelemetry.nWheel = 0;
   }
 
-  // kerbs and bumps: a sharp rise in a wheel's suspension compression knocks once per wheel.
-  // Landings (wheel was in the air) are left to the ground collision.
-  // Compression speed is measured over the sim clock, not frame time: at high frame rates the physics value stays flat
-  // for some frames and then jumps, which over a frame's wall-clock time would look like a kerb on every smooth road.
+  // kerbs and bumps: a sharp rise in a grounded wheel's compression knocks once per wheel (landings are collisions).
+  // Measured over the sim clock, so frame rate doesn't matter.
   void UpdateBumps() {
     if (!mHasVehicle) {
       mHasPrevVehicle = false;
@@ -1040,7 +1035,7 @@ class IFeedback {
   // continuous trigger textures get the same fatigue fade as the motor textures
   float TriggerTexture(RumbleTextureState& state, float value, float dt) { return value * state.Update(value > 0.0f, dt); }
 
-  // levels per docs/research/impulse-triggers.md 6.1; each trigger takes the strongest effect, never the sum
+  // each trigger takes the strongest effect, never the sum
   void MixTriggers(float dt, float& leftTrigger, float& rightTrigger) {
     float gas   = mHasVehicle ? mVehicle.fGas : 0.0f;
     float brake = mHasVehicle ? mVehicle.fBrake : 0.0f;
@@ -1091,7 +1086,7 @@ class IFeedback {
     if (!mEngineBlown) mEngineBlownRamp.Stop();
 
     if (mShifting && !mPrevShifting && RumbleShiftFeels[RumbleShiftPreset].fTime > 0.0f)
-      mShiftTick.Start(1.0f, RumbleShiftFeels[RumbleShiftPreset].fFloor, RumbleShiftFeels[RumbleShiftPreset].fTime);  // ours, PS2 is 0.4 for 0.5 s
+      mShiftTick.Start(1.0f, RumbleShiftFeels[RumbleShiftPreset].fFloor, RumbleShiftFeels[RumbleShiftPreset].fTime);  // PS2 uses 0.4 for 0.5 s
 
     if (mShiftPotential != mPrevShiftPotential) {
       if (mShiftPotential == SHIFT_POTENTIAL_PERFECT) {
@@ -1111,7 +1106,7 @@ class IFeedback {
   }
 
   virtual void EndUpdate() {
-    if (!bRumbleEnabled) return;  // never handed to the game then, but keep it inert either way
+    if (!bRumbleEnabled) return;  // GetInterfaces hides the object when disabled
 
     double now = RumbleGetTime();
     float  dt  = (float)(now - mLastUpdateTime);
@@ -1205,10 +1200,8 @@ class IFeedback {
   static float Length(const float* v) { return sqrtf(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]); }
   static float Clamp01(float v) { return v < 0.0f ? 0.0f : (v > 1.0f ? 1.0f : v); }
 
-  // the player's speed change across the hit: current body velocity against the pre-impact velocity in the contact
-  // (PS2: |me->GetLinearVelocity() - objAVel/objBVel|). Without a readable vehicle, estimate it from the closing speed
-  // along the contact normal (equal masses share the speed change in car-to-car hits). The estimate is also used when
-  // the measured change is far below it, i.e. the body hadn't taken the impulse yet. Returns -1 if invalid.
+  // the player's speed change across the hit, |body velocity - pre-impact velocity| like the PS2; falls back to the
+  // closing speed along the normal when the body can't be read or hasn't taken the hit yet. -1 if invalid.
   static float CollisionSpeedChange(const COLLISION_INFO& cinfo, bool iamA, bool& measured) {
     const float* n        = cinfo.normal;
     const float* cv       = cinfo.closingVel;

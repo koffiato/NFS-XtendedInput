@@ -283,7 +283,7 @@ Rumble is driven by the game's own force feedback events (which the PC version l
 
 | Setting | Default | Description |
 |---|---|---|
-| `Enabled` | 1 | Turns rumble on or off. This is the only switch: the game's own (hidden) vibration option is ignored, and 0 leaves the game completely untouched |
+| `Enabled` | 1 | Turns all rumble on or off. The game's own (hidden) vibration setting is ignored |
 | `Intensity` | 1.0 | Overall strength (0.0 - 2.0) |
 | `LeftMotorScale` / `RightMotorScale` | 1.0 | Heavy (left) and light (right) motor strength (0.0 - 2.0) |
 | `SwapMotors` | 0 | Swaps the left and right motors |
@@ -292,10 +292,12 @@ Rumble is driven by the game's own force feedback events (which the PC version l
 | `Tyres` | 1.0 | Lockup, wheelspin and slides (0.0 - 2.0) |
 | `Car` | 1.0 | NOS, gear shifts and engine (0.0 - 2.0) |
 | `GearShift` | 2 | Gear change knock: 0 = off, 1 = low, 2 = medium, 3 = strong, 4 = max |
-| `ImpulseTriggers` | 2 | Xbox One / Series trigger rumble (Windows 10+): LT = brake lockup, RT = wheelspin, power slides, NOS and gear shifts. 0 = off, 1 = always (every connected Xbox controller rumbles), 2 = auto: on only while exactly one Xbox controller is connected and Steam Input isn't in use; otherwise plain rumble on your own controller |
+| `ImpulseTriggers` | 2 | Xbox One / Series trigger rumble (Windows 10+): 0 = off, 1 = always, 2 = auto |
 | `TriggerIntensity` | 1.0 | Strength of the trigger rumble (0.0 - 2.0) |
 | `TriggerPedalScaling` | 1 | 1 = trigger rumble grows with how far the pedal is pressed, 0 = fixed strength |
 | `Telemetry` | 0 | 1 = logs the rumble inputs to `scripts\NFS_XtendedInput_Rumble.log` (for tuning, grows quickly) |
+
+Impulse triggers put brake lockup on LT, and wheelspin, power slides, NOS and gear shifts on RT. In auto mode they are used only while a single Xbox controller is connected and Steam Input is off; otherwise you get plain rumble on your own controller. With `1`, every connected Xbox controller rumbles.
 
 Rumble stops when the game is paused, loses focus or closes. Long continuous effects (drifts, off-road, wheelspin) slowly fade to 60% so they don't numb your hands, and recover after 2.5 s of quiet; knocks and hits always play at full strength.
 
@@ -330,3 +332,5 @@ These builds may or may not work in Windows XP with some hacks, YMMV as it wasn'
 - AeroWidescreen - for the amazing button icons!
 
 - LINK/2012 - injector
+
+Rumble support was developed with AI assistance (Claude Code). Testing and tuning were done in-game by Martin Penkava.
