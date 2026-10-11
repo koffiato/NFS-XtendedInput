@@ -6,6 +6,7 @@
     <ClInclude Include="NFS_XtendedInput_VKHash.h" />
     <ClInclude Include="NFS_XtendedInput_XInputConfig.h" />
     <ClInclude Include="NFS_XtendedInput_FEng.h" />
+    <ClInclude Include="NFS_XtendedInput_Rumble.h" />
     <ClInclude Include="NFS_XtentedInput_ActionID.h" />
     <ClInclude Include="_vs\stdafx.h">
       <Filter>_vs</Filter>

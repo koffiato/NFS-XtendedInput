@@ -248,6 +248,10 @@ enum ShiftPotential {
   SHIFT_POTENTIAL_MISS    = 5,
 };
 
+#ifdef GAME_MW
+#include "NFS_XtendedInput_Rumble.h"
+#endif
+
 enum InputUpdateType {
   kUpdate        = 0,
   kPress         = 1,
@@ -295,6 +299,9 @@ HRESULT UpdateControllerState() {
           LastControlledDevice = LASTCONTROLLED_CONTROLLER;
 #ifndef NO_FENG
           if (bUseDynamicFEngSwitching) bConsoleFEng = true;
+#endif
+#ifdef GAME_MW
+          RumbleLastActivePad = i;
 #endif
 
           // combine states into one
@@ -1092,6 +1099,9 @@ class InputDevice {
   float*        fCurrentValues;
   int           fDeviceIndex;
   float         fControllerCurve;
+#ifdef GAME_MW
+  IFeedback mFFB;  // +0x2C, same as the game's own device
+#endif
 #ifdef GAME_PROSTREET
   bool     bRemappingMode;
   uint32_t RemapType;
@@ -1107,6 +1117,10 @@ class InputDevice {
     fPrevValues      = PrevValues[DeviceIndex];
     fCurrentValues   = CurrValues[DeviceIndex];
     fDeviceScalar    = new (std::nothrow) DeviceScalar[MAX_ACTIONID];
+#ifdef GAME_MW
+    mFFB.Init(&Padding1, DeviceIndex);
+    UTL_Com_Object_IList_Add(&Padding1, (void*)IFEEDBACK_IHANDLE_ADDR, &mFFB);
+#endif
 #ifdef GAME_PROSTREET
     bRemappingMode = false;
     RemapType      = 0;
@@ -1118,6 +1132,9 @@ class InputDevice {
 #endif
   }
   virtual void* dtor(bool something) {
+#ifdef GAME_MW
+    mFFB.Stop();
+#endif
     delete (this);
     return this;
   }
@@ -1147,6 +1164,9 @@ class InputDevice {
 #endif
   }
   virtual void PollDevice() {
+#ifdef GAME_MW
+    mFFB.Watchdog();
+#endif
     if (!bGlobalDoPolling) return;
 
     if (bBlockThisPoll) {
@@ -1334,7 +1354,11 @@ class InputDevice {
     // this seems to be only called when the controller is unplugged...
     // printf("Called InputDevice::StopVibration\n");
   }
+#ifdef GAME_MW
+  virtual int GetInterfaces() { return (int)&mFFB; }
+#else
   virtual int GetInterfaces() { return 0; }
+#endif
   virtual int GetSecondaryDevice() { return 0; }
 #ifndef GAME_MW
   virtual int  GetBatteryLife() { return 0; }
@@ -1357,6 +1381,9 @@ class InputDevice {
   }
 #endif
 };
+#ifdef GAME_MW
+static_assert(offsetof(InputDevice, mFFB) == 0x2C, "IFeedback must sit at the same offset as in the game's device");
+#endif
 
 InputDevice* InputDeviceFactory(int DeviceIndex) {
   InputDevice* out = new InputDevice(DeviceIndex);
@@ -1668,12 +1695,25 @@ LRESULT WINAPI CustomWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) 
 #endif
       return 0;
     case WM_SETFOCUS:
+#ifdef GAME_MW
+      bRumbleAppActive = true;
+#endif
       // confine mouse within the game window
       if (bConfineMouse) {
         GetWindowRect(*(HWND*)GAME_HWND_ADDR, &windowRect);
         ClipCursor(&windowRect);
       }
       break;
+#ifdef GAME_MW
+    case WM_ACTIVATEAPP:
+      bRumbleAppActive = wParam != FALSE;
+      if (!bRumbleAppActive) RumbleStopAllPads();
+      break;
+    case WM_KILLFOCUS:
+      bRumbleAppActive = false;
+      RumbleStopAllPads();
+      break;
+#endif
     case WM_KEYDOWN:
       LastControlledDevice = LASTCONTROLLED_KB;
 #ifndef NO_FENG
@@ -1740,6 +1780,16 @@ void InitConfig() {
       TRIGGER_ACTIVATION_THRESHOLD =
           static_cast<SHORT>(clampf(std::stof(ini[dzSection]["Percent_AnalogTriggerDigital"]), 0.0f, 1.0f) * std::numeric_limits<SHORT>::max());
   }
+
+#ifdef GAME_MW
+  constexpr const char* rumbleSection = "Rumble";
+  if (ini.has(rumbleSection)) {
+    if (ini[rumbleSection].has("Enabled")) bRumbleEnabled = std::stol(ini[rumbleSection]["Enabled"]) != 0;
+    if (ini[rumbleSection].has("Intensity")) fRumbleIntensity = clampf(std::stof(ini[rumbleSection]["Intensity"]), 0.0f, 2.0f);
+    if (ini[rumbleSection].has("LeftMotorScale")) fRumbleLeftScale = clampf(std::stof(ini[rumbleSection]["LeftMotorScale"]), 0.0f, 2.0f);
+    if (ini[rumbleSection].has("RightMotorScale")) fRumbleRightScale = clampf(std::stof(ini[rumbleSection]["RightMotorScale"]), 0.0f, 2.0f);
+  }
+#endif
 
 #ifndef NO_FENG
   constexpr const char* icoSection = "Icons";
