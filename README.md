@@ -23,7 +23,9 @@ Currently a work in progress, but fully usable and playable!
 
 - Choice between Xbox (One and 360), PS4/PS3 and Switch icons (made by [AeroWidescreen (Aero_)](https://github.com/AeroWidescreen) )
 
-- Console control feature parity (except rumble): restored debug camera analog control
+- Console control feature parity: restored debug camera analog control
+
+- (MW ONLY) Controller rumble - collisions, scrapes, kerbs & bumps, landings, off-road, brake lockup, wheelspin, slides, NOS, gear shifts and shift timing cues. Optional Xbox One / Series impulse trigger rumble
 
 - Re-done keyboard input code - not using DInput8 anymore. Now talks directly over Win32 (GetAsyncKeyState or GetKeyboardState)
 
@@ -274,6 +276,28 @@ They should be identical to the default game, with one exception: the navigation
 - Super Turbo: F
 
 - Drop car: 5
+
+## Rumble (MW only)
+
+Rumble is driven by the game's own force feedback events (which the PC version leaves unused), extended with suspension and tyre data. Configure it in the `[Rumble]` section of `NFS_XtendedInput.ini`:
+
+| Setting | Default | Description |
+|---|---|---|
+| `Enabled` | 1 | Turns rumble on or off |
+| `Intensity` | 1.0 | Overall strength (0.0 - 2.0) |
+| `LeftMotorScale` / `RightMotorScale` | 1.0 | Heavy (left) and light (right) motor strength (0.0 - 2.0) |
+| `SwapMotors` | 0 | Swaps the left and right motors |
+| `Impacts` | 1.0 | Hits, scrapes and spike strips (0.0 - 2.0) |
+| `Surface` | 1.0 | Kerbs, bumps, landings and off-road (0.0 - 2.0) |
+| `Tyres` | 1.0 | Lockup, wheelspin and slides (0.0 - 2.0) |
+| `Car` | 1.0 | NOS, gear shifts and engine (0.0 - 2.0) |
+| `GearShift` | 3 | Gear change knock: 0 = off, 1 = low, 2 = medium, 3 = strong, 4 = huge |
+| `ImpulseTriggers` | 0 | Xbox One / Series trigger rumble (Windows 10+): LT = brake lockup, RT = wheelspin, power slides, NOS and gear shifts. While on, every connected Xbox controller rumbles |
+| `TriggerIntensity` | 1.0 | Strength of the trigger rumble (0.0 - 2.0) |
+| `TriggerPedalScaling` | 1 | 1 = trigger rumble grows with how far the pedal is pressed, 0 = fixed strength |
+| `Telemetry` | 0 | 1 = logs the rumble inputs to `scripts\NFS_XtendedInput_Rumble.log` (for tuning, grows quickly) |
+
+Rumble follows the game's own vibration option and stops when the game is paused or loses focus.
 
 ## Windows 7 compatibility
 
