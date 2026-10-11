@@ -5,6 +5,8 @@
 //    Need for Speed (Black Box, MW & newer) - Xtended Input plugin
 //    Bringing native XInput to NFS
 //
+//    Rumble: Copyright (c) 2026 Martin Penkava
+//
 // clang-format on
 */
 
