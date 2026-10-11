@@ -25,13 +25,14 @@
 #include <windows.gaming.input.h>
 
 enum RumbleCategory {
-  kRumbleImpacts,  // hits, scrapes, spike strips
-  kRumbleSurface,  // kerbs, bumps, landing, road baseline
-  kRumbleTyres,    // lockup, wheelspin, slides, cornering
+  kRumbleImpacts,  // hits, scrapes, spike strips, blown tyres
+  kRumbleSurface,  // kerbs, bumps, landings, road texture
+  kRumbleTyres,    // lockup, wheelspin, slides
   kRumbleCar,      // NOS, shifts, engine
   kRumbleCategoryCount,
 };
 
+// [Rumble] Enabled is the only switch (docs/adr/0002): off means no feedback interface, no patches, no per-tick work
 bool  bRumbleEnabled                             = true;
 bool  bRumbleSwapMotors                          = false;
 float fRumbleIntensity                           = 1.0f;
@@ -43,11 +44,11 @@ float fRumbleCategoryScale[kRumbleCategoryCount] = {1.0f, 1.0f, 1.0f, 1.0f};
 const float RUMBLE_DUCK_LEVEL     = 0.3f;
 const float RUMBLE_DUCK_THRESHOLD = 0.05f;
 // fatigue fade: a texture running longer than FATIGUE_START seconds fades to FATIGUE_FLOOR over FATIGUE_RAMP seconds,
-// and recovers once it has been quiet for FATIGUE_RESET seconds
+// and recovers once it has been quiet for FATIGUE_RESET seconds. Pulses never fade.
 const float RUMBLE_FATIGUE_START = 3.0f;
 const float RUMBLE_FATIGUE_RAMP  = 5.0f;
 const float RUMBLE_FATIGUE_FLOOR = 0.6f;
-const float RUMBLE_FATIGUE_RESET = 1.0f;
+const float RUMBLE_FATIGUE_RESET = 2.5f;
 
 // pad that last produced input (used in omni mode, where both game ports read every pad)
 int  RumbleLastActivePad = 0;
@@ -57,12 +58,31 @@ unsigned int RumbleStopGeneration = 0;
 
 void(__thiscall* UTL_Com_Object_IList_Add)(void* thethis, void* handle, void* iface) = (void(__thiscall*)(void*, void*, void*))UTL_ILIST_ADD_ADDR;
 
-// --- impulse triggers (experimental, [Rumble] ImpulseTriggers) ---
+double RumbleGetTime() {
+  static LARGE_INTEGER freq = {0};
+  if (!freq.QuadPart) QueryPerformanceFrequency(&freq);
+  LARGE_INTEGER now;
+  QueryPerformanceCounter(&now);
+  return (double)now.QuadPart / (double)freq.QuadPart;
+}
+
+// the Xbox motors have 101 levels (0-100 %); round 0-65535 values to them so near-identical values don't cost a call
+int RumbleRoundToPercent(int value) { return (value * 100 + 32767) / 65535 * 65535 / 100; }
+
+// --- impulse triggers ([Rumble] ImpulseTriggers) ---
 // XInput can't reach the Xbox One / Series trigger motors; Windows.Gaming.Input can. It has no mapping to XInput user
 // indices, so while it is in use every WGI gamepad gets the full vibration (main motors included, the two APIs would
-// otherwise fight over them). Loaded at runtime so the Win7 builds still start; it's simply unavailable there.
+// otherwise fight over them). That's why auto mode only uses it while exactly one real pad is connected.
+// Loaded at runtime so the Win7 builds still start; it's simply unavailable there.
 
-bool  bRumbleImpulseTriggers     = false;
+enum RumbleTriggerMode {
+  kTriggersOff,
+  kTriggersOn,    // always, to every WGI gamepad
+  kTriggersAuto,  // only while exactly one real Xbox pad (not Steam's virtual one) is connected
+  kTriggerModeCount,
+};
+
+int   RumbleTriggerMode          = kTriggersAuto;
 float fRumbleTriggerIntensity    = 1.0f;
 bool  bRumbleTriggerPedalScaling = true;  // trigger effects grow with how far the pedal is pressed
 
@@ -72,24 +92,32 @@ typedef HRESULT(WINAPI* RoGetActivationFactory_t)(HSTRING, REFIID, void**);
 typedef HRESULT(WINAPI* WindowsCreateStringReference_t)(PCWSTR, UINT32, HSTRING_HEADER*, HSTRING*);
 
 using ABI::Windows::Gaming::Input::GamepadVibration;
+using ABI::Windows::Gaming::Input::IGameController;
 using ABI::Windows::Gaming::Input::IGamepad;
 using ABI::Windows::Gaming::Input::IGamepadStatics;
+using ABI::Windows::Gaming::Input::IRawGameController;
+using ABI::Windows::Gaming::Input::IRawGameControllerStatics;
 typedef ABI::Windows::Foundation::Collections::IVectorView<ABI::Windows::Gaming::Input::Gamepad*> GamepadList;
 
-bool             bTried   = false;
-IGamepadStatics* pStatics = NULL;
+const UINT16 STEAM_VIRTUAL_VID = 0x28DE;  // Valve
 
-const int MAX_PADS     = 8;
+bool                       bTried      = false;
+IGamepadStatics*           pStatics    = NULL;
+IRawGameControllerStatics* pRawStatics = NULL;  // Windows 10 1607+, only used to spot Steam's virtual pad
+
+const int MAX_PADS = 8;
 IGamepad* Pads[MAX_PADS];  // cached, the list is refreshed once a second
-int       PadCount     = 0;
-double    PadListTime  = -1.0;
+int       PadCount    = 0;
+bool      bSteamPad   = false;  // one of the cached pads is Steam Input's virtual controller
+double    PadListTime = -1.0;
 
-double Now() {
-  static LARGE_INTEGER freq = {0};
-  if (!freq.QuadPart) QueryPerformanceFrequency(&freq);
-  LARGE_INTEGER now;
-  QueryPerformanceCounter(&now);
-  return (double)now.QuadPart / (double)freq.QuadPart;
+HRESULT GetFactory(WindowsCreateStringReference_t createStringRef, RoGetActivationFactory_t roGetFactory, const wchar_t* className, UINT32 length,
+                   REFIID iid, void** factory) {
+  HSTRING_HEADER header;
+  HSTRING        name;
+  HRESULT        hr = createStringRef(className, length, &header, &name);
+  if (FAILED(hr)) return hr;
+  return roGetFactory(name, iid, factory);
 }
 
 bool Init() {
@@ -105,66 +133,91 @@ bool Init() {
   // like SDL: prefer a single-threaded apartment (what the game's own COM users expect); if the thread is already in
   // the multithreaded one that fails with RPC_E_CHANGED_MODE and the existing apartment is used
   if (roInitialize(RO_INIT_SINGLETHREADED) == RPC_E_CHANGED_MODE) roInitialize(RO_INIT_MULTITHREADED);
-  static const wchar_t className[] = L"Windows.Gaming.Input.Gamepad";
-  HSTRING_HEADER       header;
-  HSTRING              name;
-  if (FAILED(createStringRef(className, _countof(className) - 1, &header, &name))) return false;
-  if (FAILED(roGetFactory(name, __uuidof(IGamepadStatics), (void**)&pStatics))) pStatics = NULL;
+  static const wchar_t gamepadClass[] = L"Windows.Gaming.Input.Gamepad";
+  static const wchar_t rawClass[]     = L"Windows.Gaming.Input.RawGameController";
+  if (FAILED(GetFactory(createStringRef, roGetFactory, gamepadClass, _countof(gamepadClass) - 1, __uuidof(IGamepadStatics), (void**)&pStatics)))
+    pStatics = NULL;
+  if (FAILED(GetFactory(createStringRef, roGetFactory, rawClass, _countof(rawClass) - 1, __uuidof(IRawGameControllerStatics), (void**)&pRawStatics)))
+    pRawStatics = NULL;
   return pStatics != NULL;
+}
+
+// Steam Input's virtual controller carries Valve's vendor id on the raw controller (SDL checks the same)
+bool IsSteamVirtualPad(IGamepad* pad) {
+  if (!pRawStatics) return false;
+  bool             steam = false;
+  IGameController* ctrl  = NULL;
+  if (SUCCEEDED(pad->QueryInterface(__uuidof(IGameController), (void**)&ctrl)) && ctrl) {
+    IRawGameController* raw = NULL;
+    if (SUCCEEDED(pRawStatics->FromGameController(ctrl, &raw)) && raw) {
+      UINT16 vid = 0;
+      if (SUCCEEDED(raw->get_HardwareVendorId(&vid))) steam = vid == STEAM_VIRTUAL_VID;
+      raw->Release();
+    }
+    ctrl->Release();
+  }
+  return steam;
 }
 
 void RefreshPads() {
   for (int i = 0; i < PadCount; i++) Pads[i]->Release();
   PadCount          = 0;
+  bSteamPad         = false;
   GamepadList* list = NULL;
   if (FAILED(pStatics->get_Gamepads(&list)) || !list) return;
   unsigned int count = 0;
   list->get_Size(&count);
   for (unsigned int i = 0; i < count && PadCount < MAX_PADS; i++) {
     IGamepad* pad = NULL;
-    if (SUCCEEDED(list->GetAt(i, &pad)) && pad) Pads[PadCount++] = pad;
+    if (SUCCEEDED(list->GetAt(i, &pad)) && pad) {
+      if (IsSteamVirtualPad(pad)) bSteamPad = true;
+      Pads[PadCount++] = pad;
+    }
   }
   list->Release();
 }
 
-// returns false when there's nothing to send to, so the caller can fall back to XInput
-bool Send(double leftMotor, double rightMotor, double leftTrigger, double rightTrigger) {
-  if (!Init()) return false;
-  double now = Now();
+// whether output goes through WGI (main motors and triggers) instead of XInput; re-checks the pads once a second
+bool ShouldUse() {
+  if (RumbleTriggerMode == kTriggersOff || !Init()) return false;
+  double now = RumbleGetTime();
   if (PadListTime < 0.0 || now - PadListTime > 1.0) {
     PadListTime = now;
     RefreshPads();
   }
+  if (RumbleTriggerMode == kTriggersAuto) return PadCount == 1 && !bSteamPad;
+  return PadCount > 0;
+}
+
+void Send(double leftMotor, double rightMotor, double leftTrigger, double rightTrigger) {
   GamepadVibration vib = {leftMotor, rightMotor, leftTrigger, rightTrigger};
   for (int i = 0; i < PadCount; i++) Pads[i]->put_Vibration(vib);
-  return PadCount > 0;
 }
 }  // namespace RumbleWGI
 
 // fromDllMain: no WinRT calls under the loader lock (the gamepads stop with the process anyway)
 void RumbleStopAllPads(bool fromDllMain = false) {
+  if (!bRumbleEnabled) return;  // we never started anything
   XINPUT_VIBRATION vib = {0, 0};
   for (DWORD i = 0; i < MAX_CONTROLLERS; i++) XInputSetState(i, &vib);
   if (!fromDllMain && RumbleWGI::pStatics) RumbleWGI::Send(0, 0, 0, 0);
   RumbleStopGeneration++;
 }
 
-// LocalPlayer::DoFFB only calls UpdateShifting for cars without IEngineDamage; the engine damage branch jumps past it
-// (0x6EE7F0 and 0x6EE7FF, both `jmp 0x6EE836`). Point both jumps at the shifting code (0x6EE801) so player cars, which
-// have engine damage, report gear changes too. That code only uses the transmission/vehicle locals, valid on both paths.
 void RumbleInstallPatches() {
+  if (!bRumbleEnabled) return;
+
+  // LocalPlayer::DoFFB only calls UpdateShifting for cars without IEngineDamage; the engine damage branch jumps past it
+  // (0x6EE7F0 and 0x6EE7FF, both `jmp 0x6EE836`). Point both jumps at the shifting code (0x6EE801) so player cars, which
+  // have engine damage, report gear changes too. That code only uses the transmission/vehicle locals, valid on both paths.
   if (*(uint16_t*)0x006EE7F0 == 0x44EB && *(uint16_t*)0x006EE7FF == 0x35EB) {
     injector::WriteMemory<uint8_t>(0x006EE7F1, 0x0F, true);
     injector::WriteMemory<uint8_t>(0x006EE800, 0x00, true);
   }
-}
 
-double RumbleGetTime() {
-  static LARGE_INTEGER freq = {0};
-  if (!freq.QuadPart) QueryPerformanceFrequency(&freq);
-  LARGE_INTEGER now;
-  QueryPerformanceCounter(&now);
-  return (double)now.QuadPart / (double)freq.QuadPart;
+  // LocalPlayer::OnCollision skips ReportCollision when the save's hidden Rumble byte (settings +4) is 0, with a `je` at
+  // 0x6F23EA. The ini is the only switch (docs/adr/0002), so drop that jump; the null-settings check before it stays.
+  if (*(uint16_t*)0x006F23EA == 0x2B74) injector::WriteMemory<uint16_t>(0x006F23EA, 0x9090, true);
 }
 
 // --- player vehicle access (docs/research/mw-rumble-signals.md) ---
@@ -198,11 +251,16 @@ struct RumbleVehicleState {
   float fAngVel[3];                       // world rad/s
 };
 
-bool RumbleReadVehicleUnsafe(RumbleVehicleState& s) {
-  if (*(int*)GAMEFLOWMANAGER_STATUS_ADDR != 6) return false;
+// the local player's ISimable, or NULL outside a race / while the player list is empty or being rebuilt
+void* RumbleGetPlayerSimable() {
+  if (*(int*)GAMEFLOWMANAGER_STATUS_ADDR != 6) return NULL;
   void** players = *(void***)PLAYER_ILISTABLE_ADDR;
-  if (!players || !players[0]) return false;
-  void* simable = RumbleVCall<void*>(players[0], 0x04);  // IPlayer::GetSimable
+  if (!players || *(int*)PLAYER_ILISTABLE_COUNT_ADDR <= 0 || !players[0]) return NULL;
+  return RumbleVCall<void*>(players[0], 0x04);  // IPlayer::GetSimable
+}
+
+bool RumbleReadVehicleUnsafe(RumbleVehicleState& s) {
+  void* simable = RumbleGetPlayerSimable();
   if (!simable) return false;
 
   void* susp  = RumbleFindInterface(simable, ISUSPENSION_IHANDLE_ADDR);
@@ -242,6 +300,43 @@ bool RumbleReadVehicle(RumbleVehicleState& s) {
   }
 }
 
+bool RumbleReadLinearVelocityUnsafe(float* velocity) {
+  void* simable = RumbleGetPlayerSimable();
+  if (!simable) return false;
+  void* body = RumbleFindInterface(simable, IRIGIDBODY_IHANDLE_ADDR);
+  if (!body) return false;
+  memcpy(velocity, RumbleVCall<const float*>(body, 0x24), 3 * sizeof(float));  // IRigidBody::GetLinearVelocity
+  return true;
+}
+
+// the player's current body velocity (world m/s), for the speed change across a collision
+bool RumbleReadLinearVelocity(float* velocity) {
+  __try {
+    return RumbleReadLinearVelocityUnsafe(velocity);
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
+    return false;
+  }
+}
+
+// simulation clock (Sim::GetTime), seconds; advances only when the physics steps
+float RumbleGetSimTime() { return *(const float*)SIM_TIME_ADDR; }
+
+// --- surfaces ---
+
+const void*(__cdecl* Attrib_FindCollection)(unsigned int classKey, unsigned int collectionKey) =
+    (const void*(__cdecl*)(unsigned int, unsigned int))ATTRIB_FINDCOLLECTION_ADDR;
+
+const unsigned int ATTRIB_CLASS_SIMSURFACE   = 0xFB111FEF;
+const unsigned int SIMSURFACE_KEY_BLOWN_TIRE = 0xD929E923;  // DoFFB swaps every wheel's surface for this one when spiked
+
+const void* RumbleBlownTireCollection = NULL;
+
+// whether a SimSurface (an Attrib::Instance, collection at +4) is the spiked / blown tyre surface
+bool RumbleIsBlownTireSurface(const void* surface) {
+  if (!RumbleBlownTireCollection) RumbleBlownTireCollection = Attrib_FindCollection(ATTRIB_CLASS_SIMSURFACE, SIMSURFACE_KEY_BLOWN_TIRE);
+  return RumbleBlownTireCollection && *(const void* const*)((const char*)surface + 4) == RumbleBlownTireCollection;
+}
+
 // --- telemetry: [Rumble] Telemetry = 1 logs what the game feeds us to scripts\NFS_XtendedInput_Rumble.log ---
 
 bool  bRumbleTelemetry     = false;
@@ -261,7 +356,7 @@ void RumbleTelemetryPrintf(const char* fmt, ...) {
     }
     fprintf(RumbleTelemetryFile, "# S,id,collection,name,renderNoise[freq amp minSpeed maxSpeed],wheelEffect[freq intensity],friction[6],FFB_ROLL/SKID/SLIP[4 x 8]\n");
     fprintf(RumbleTelemetryFile, "# T,time,speed,gas,brake,handbrake,powerband,throttle,nos,shifting,shiftPotential,{surf,ground,comp,slip,skid,av,fbSlip,fbSkid}x4,linVel[3],angVel[3]\n");
-    fprintf(RumbleTelemetryFile, "# C,time,type,flags,closingVel,normalSpeed,slidingSpeed,strength\n");
+    fprintf(RumbleTelemetryFile, "# C,time,type,flags,closingVel,normalSpeed,slidingSpeed,speedChange,strength,measuredSpeedChange\n");
   }
   va_list args;
   va_start(args, fmt);
@@ -357,7 +452,7 @@ enum RumbleShiftPreset {
   kShiftLow,
   kShiftMedium,
   kShiftStrong,
-  kShiftHuge,  // experimental: everything at full power
+  kShiftMax,  // everything at full power
   kShiftPresetCount,
 };
 struct RumbleShiftFeel {
@@ -372,9 +467,9 @@ const RumbleShiftFeel RumbleShiftFeels[kShiftPresetCount] = {
     {0.3f, 0.0f, 0.3f, 0.1f, 0.6f},      // low
     {0.55f, 0.15f, 0.6f, 0.12f, 0.6f},   // medium
     {0.9f, 0.45f, 0.9f, 0.16f, 0.6f},    // strong
-    {1.0f, 1.0f, 1.0f, 0.22f, 0.8f},     // huge
+    {1.0f, 1.0f, 1.0f, 0.22f, 0.8f},     // max
 };
-int RumbleShiftPreset = kShiftStrong;
+int RumbleShiftPreset = kShiftMedium;
 
 // envelopes from the console Rumble.cpp (time in seconds, value 0-255)
 struct RumbleEnvelopePoint {
@@ -413,8 +508,11 @@ struct RumbleWave {
 
   // surface: the SimSurface passed by the game, key: FFB_ROLL / FFB_SKID / FFB_SLIP
   void Add(const void* surface, unsigned int key, float x) {
-    for (unsigned int ch = 0; ch < 4; ch++) {
-      const RumbleWaveRecord* w = (const RumbleWaveRecord*)Attrib_Instance_GetAttributePointer(surface, key, ch);
+    // a non-array attribute returns the same record for every index: it only describes channel 0
+    const void* first  = Attrib_Instance_GetAttributePointer(surface, key, 0);
+    bool        single = first && Attrib_Instance_GetAttributePointer(surface, key, 1) == first;
+    for (unsigned int ch = 0; ch < (single ? 1u : 4u); ch++) {
+      const RumbleWaveRecord* w = (const RumbleWaveRecord*)(ch == 0 ? first : Attrib_Instance_GetAttributePointer(surface, key, ch));
       if (!w || x < w->fXMin || !(w->fXMin < w->fXMax)) continue;
       float t = (x - w->fXMin) / (w->fXMax - w->fXMin);
       if (t > 1.0f) t = 1.0f;
@@ -452,6 +550,7 @@ const unsigned int ATTRIB_KEY_FFB_SLIP = 0x8FD11D27;
 const float RUMBLE_BUMP_MIN_VELOCITY  = 4.0f;   // m/s of suspension compression speed
 const float RUMBLE_BUMP_FULL_VELOCITY = 14.0f;
 const float RUMBLE_BUMP_MIN_SPEED     = 2.0f;   // m/s car speed
+const float RUMBLE_BUMP_MAX_SIM_STEP  = 0.1f;   // s; longer gaps (loading, restarts) aren't one physics step
 const float RUMBLE_SURFACE_WAVE_SCALE = 0.4f;   // console wave data is authored for a single big motor
 const float RUMBLE_SKID_WAVE_SCALE    = 0.35f;
 const float RUMBLE_LOCKUP_MIN_SLIP    = 3.0f;   // m/s of braking slip
@@ -460,6 +559,8 @@ const float RUMBLE_SPIN_MIN_SLIP      = 3.0f;   // m/s of wheelspin
 const float RUMBLE_SPIN_FULL_SLIP     = 20.0f;
 const float RUMBLE_SLIDE_MIN_SKID     = 2.0f;   // m/s of lateral tyre speed
 const float RUMBLE_SLIDE_FULL_SKID    = 20.0f;
+// measured collision speed change below this share of the contact-normal estimate means the body hadn't taken the hit yet
+const float RUMBLE_COLLISION_MIN_MEASURED = 0.25f;
 
 // PS2 InputEffectState ramp: starts at amplitude, falls linearly to the floor over its time, then cuts to 0
 struct RumbleRamp {
@@ -569,7 +670,7 @@ struct RumbleMixer {
 
   static int ToMotor(float value, float scale) {
     float v = value * fRumbleIntensity * scale;
-    if (v <= 0.0f) return 0;
+    if (!(v > 0.0f)) return 0;  // also NaN
     if (v >= 1.0f) return 65535;
     return (int)(v * 65535.0f);
   }
@@ -630,6 +731,7 @@ class IFeedback {
   unsigned int mStopGeneration;
   RumblePulse  mPulseLeft;   // collisions
   RumblePulse  mPulseRight;  // collisions
+  bool         mOnWGI;       // last output went through Windows.Gaming.Input (else XInput)
   RumbleTextureState mNOSTexture;
   RumbleMixer  mMixer;
 
@@ -638,7 +740,7 @@ class IFeedback {
   bool           mEngineBlown;
   ShiftPotential mShiftPotential;
   float          mScrapeSpeed;  // m/s, from sliding collision contacts
-  // previous tick, for edge detection
+  // previous tick, for edge detection; survives pauses so a held NOS doesn't kick again on resume
   bool           mPrevNOSEngaged;
   bool           mPrevShifting;
   bool           mPrevEngineBlown;
@@ -656,15 +758,20 @@ class IFeedback {
   RumbleVehicleState mVehicle;
   bool               mHasVehicle;
   bool               mHasPrevVehicle;
+  float              mPrevSimTime;  // sim clock at the previous suspension sample
   float              mPrevCompression[RUMBLE_MAX_WHEELS];
   bool               mPrevOnGround[RUMBLE_MAX_WHEELS];
   RumblePulse        mBumpLeft;
   RumblePulse        mBumpRight;
   RumbleWave         mRoadWave;
   RumbleWave         mSkidWave;
+  RumbleWave         mBlownTireWave;  // the spiked surface's road wave, an Impacts effect
+  RumblePulse        mLandingLeft;    // GROUND collisions, a Surface effect
+  RumblePulse        mLandingRight;
   float              mWheelSkid[RUMBLE_MAX_WHEELS];  // from DoFFB, |lateral m/s|
   int                mWheelArg;                      // wheel DoFFB is reporting
   RumbleTextureState mRoadTexture;
+  RumbleTextureState mBlownTireTexture;
   RumbleTextureState mSlideTexture;
   RumbleTextureState mLockupTexture;
   RumbleTextureState mSpinTexture;
@@ -678,7 +785,8 @@ class IFeedback {
   RumbleTextureState mTriggerSpinTexture;
   RumbleTextureState mTriggerSlideTexture;
   RumbleTextureState mTriggerNOSTexture;
-  float              mLockupPhase;
+  float              mLockupPhase;         // main motor stutter
+  float              mTriggerLockupPhase;  // LT pulses
 
   // impulse triggers (0-65535 like the motors), last sent values
   int mLastTriggerLeft;
@@ -696,11 +804,16 @@ class IFeedback {
     mNOSEngaged     = false;
     mLastUpdateTime = 0.0;
     mStopGeneration = RumbleStopGeneration;
+    mOnWGI          = false;
     memset(&mPulseLeft, 0, sizeof(RumblePulse));
     memset(&mPulseRight, 0, sizeof(RumblePulse));
     memset(&mNOSTexture, 0, sizeof(RumbleTextureState));
     memset(&mMixer, 0, sizeof(RumbleMixer));
-    memset(&mScrapeTexture, 0, (char*)(&mLockupPhase + 1) - (char*)&mScrapeTexture);  // everything from the scrape texture on
+    memset(&mScrapeTexture, 0, (char*)(&mTriggerLockupPhase + 1) - (char*)&mScrapeTexture);  // everything from the scrape texture on
+    mPrevNOSEngaged     = false;
+    mPrevShifting       = false;
+    mPrevEngineBlown    = false;
+    mPrevShiftPotential = SHIFT_POTENTIAL_NONE;
     ClearEffects();
   }
 
@@ -711,6 +824,8 @@ class IFeedback {
     mShiftCueRight.pPoints = NULL;
     mBumpLeft.pPoints      = NULL;
     mBumpRight.pPoints     = NULL;
+    mLandingLeft.pPoints   = NULL;
+    mLandingRight.pPoints  = NULL;
     mTriggerCue.pPoints    = NULL;
     mLockupLevel           = 0.0f;
     mSpinLevel             = 0.0f;
@@ -718,6 +833,7 @@ class IFeedback {
     mHasPrevVehicle        = false;
     mRoadWave.Begin();
     mSkidWave.Begin();
+    mBlownTireWave.Begin();
     mNOSKick.Stop();
     mShiftTick.Stop();
     mEngineBlownRamp.Stop();
@@ -727,10 +843,6 @@ class IFeedback {
     mShiftPotential     = SHIFT_POTENTIAL_NONE;
     mScrapeSpeed        = 0.0f;
     mScrapeLevel        = 0.0f;
-    mPrevNOSEngaged     = false;
-    mPrevShifting       = false;
-    mPrevEngineBlown    = false;
-    mPrevShiftPotential = SHIFT_POTENTIAL_NONE;
   }
 
   void Send(int left, int right, int triggerLeft = 0, int triggerRight = 0) {
@@ -743,22 +855,34 @@ class IFeedback {
       mLastTriggerRight = 0;
     }
 
-    if (bRumbleImpulseTriggers) {
-      // WGI motors have 101 levels; round to them so near-identical values don't cost a call
-      left         = (left * 100 + 32767) / 65535 * 65535 / 100;
-      right        = (right * 100 + 32767) / 65535 * 65535 / 100;
-      triggerLeft  = (triggerLeft * 100 + 32767) / 65535 * 65535 / 100;
-      triggerRight = (triggerRight * 100 + 32767) / 65535 * 65535 / 100;
-      if (left == mLastLeft && right == mLastRight && triggerLeft == mLastTriggerLeft && triggerRight == mLastTriggerRight) return;
-      if (RumbleWGI::Send(left / 65535.0, right / 65535.0, triggerLeft / 65535.0, triggerRight / 65535.0)) {
-        mLastLeft         = left;
-        mLastRight        = right;
-        mLastTriggerLeft  = triggerLeft;
-        mLastTriggerRight = triggerRight;
-        return;
+    bool useWGI = RumbleWGI::ShouldUse();
+    if (useWGI != mOnWGI) {
+      // switching paths: zero the one we leave so nothing sticks, and resend everything on the new one
+      if (mOnWGI) {
+        RumbleWGI::Send(0, 0, 0, 0);
+      } else {
+        XINPUT_VIBRATION off = {0, 0};
+        XInputSetState(mPad, &off);
       }
-      // no Windows.Gaming.Input gamepad: fall through to plain XInput
+      mOnWGI    = useWGI;
+      mLastLeft = mLastRight = mLastTriggerLeft = mLastTriggerRight = -1;
     }
+
+    left  = RumbleRoundToPercent(left);
+    right = RumbleRoundToPercent(right);
+
+    if (useWGI) {
+      triggerLeft  = RumbleRoundToPercent(triggerLeft);
+      triggerRight = RumbleRoundToPercent(triggerRight);
+      if (left == mLastLeft && right == mLastRight && triggerLeft == mLastTriggerLeft && triggerRight == mLastTriggerRight) return;
+      RumbleWGI::Send(left / 65535.0, right / 65535.0, triggerLeft / 65535.0, triggerRight / 65535.0);
+      mLastLeft         = left;
+      mLastRight        = right;
+      mLastTriggerLeft  = triggerLeft;
+      mLastTriggerRight = triggerRight;
+      return;
+    }
+    mLastTriggerLeft = mLastTriggerRight = 0;  // XInput can't drive the triggers
 
     int pad = bXInputOmniMode ? RumbleLastActivePad : mDeviceIndex;
     if (pad != mPad) {
@@ -820,21 +944,27 @@ class IFeedback {
     for (int i = 0; i < RUMBLE_MAX_WHEELS; i++) mWheelSkid[i] = 0.0f;
     mRoadWave.Begin();
     mSkidWave.Begin();
+    mBlownTireWave.Begin();
     RumbleTelemetry.nWheel = 0;
   }
 
   // kerbs and bumps: a sharp rise in a wheel's suspension compression knocks once per wheel.
   // Landings (wheel was in the air) are left to the ground collision.
-  void UpdateBumps(float dt) {
+  // Compression speed is measured over the sim clock, not frame time: at high frame rates the physics value stays flat
+  // for some frames and then jumps, which over a frame's wall-clock time would look like a kerb on every smooth road.
+  void UpdateBumps() {
     if (!mHasVehicle) {
       mHasPrevVehicle = false;
       return;
     }
-    if (mHasPrevVehicle && dt > 0.0f && mVehicle.fSpeed > RUMBLE_BUMP_MIN_SPEED) {
+    float simTime = RumbleGetSimTime();
+    if (mHasPrevVehicle && simTime == mPrevSimTime) return;  // the physics hasn't stepped since the last sample
+    float simDt = simTime - mPrevSimTime;
+    if (mHasPrevVehicle && simDt > 0.0f && simDt < RUMBLE_BUMP_MAX_SIM_STEP && mVehicle.fSpeed > RUMBLE_BUMP_MIN_SPEED) {
       for (int i = 0; i < mVehicle.nWheels; i++) {
         if (!mVehicle.bOnGround[i] || !mPrevOnGround[i]) continue;
-        float velocity = (mVehicle.fCompression[i] - mPrevCompression[i]) / dt;
-        if (velocity < RUMBLE_BUMP_MIN_VELOCITY) continue;
+        float velocity = (mVehicle.fCompression[i] - mPrevCompression[i]) / simDt;
+        if (!(velocity >= RUMBLE_BUMP_MIN_VELOCITY)) continue;
         float strength = Clamp01((velocity - RUMBLE_BUMP_MIN_VELOCITY) / (RUMBLE_BUMP_FULL_VELOCITY - RUMBLE_BUMP_MIN_VELOCITY));
         strength       = 0.35f + 0.65f * strength;
         mBumpLeft.Start(BumpPoints, _countof(BumpPoints), strength * 0.8f);
@@ -845,6 +975,7 @@ class IFeedback {
       mPrevCompression[i] = mVehicle.fCompression[i];
       mPrevOnGround[i]    = mVehicle.bOnGround[i];
     }
+    mPrevSimTime    = simTime;
     mHasPrevVehicle = true;
   }
 
@@ -873,8 +1004,9 @@ class IFeedback {
       }
     }
 
-    // lockup: a tyre juddering against the road, light motor buzz with a ~12 Hz heavy motor stutter
-    mLockupPhase += dt * 12.0f;
+    // lockup: a tyre juddering against the road, light motor buzz with a ~7 Hz heavy motor stutter (the heavy motor
+    // can't spin up and down fast enough for more)
+    mLockupPhase += dt * 7.0f;
     mLockupPhase -= floorf(mLockupPhase);
     float stutter = mLockupPhase < 0.5f ? 1.0f : 0.3f;
     mMixer.AddTexture(kRumbleTyres, mLockupTexture, lockup > 0.0f ? (0.15f + 0.25f * lockup) * stutter : 0.0f, lockup > 0.0f ? 0.25f + 0.35f * lockup : 0.0f);
@@ -915,10 +1047,12 @@ class IFeedback {
     float tyres = fRumbleCategoryScale[kRumbleTyres];
     float car   = fRumbleCategoryScale[kRumbleCar];
 
-    // LT: lockup, ABS-style ~12 Hz on/off pulses (in step with the main motor stutter), steady with a stutter when severe
+    // LT: lockup, ABS-style ~12 Hz on/off pulses (the trigger motors are quick enough), steady with a stutter when severe
+    mTriggerLockupPhase += dt * 12.0f;
+    mTriggerLockupPhase -= floorf(mTriggerLockupPhase);
     float lockup = 0.0f;
     if (mLockupLevel > 0.0f) {
-      bool  on    = mLockupPhase < 0.5f;
+      bool  on    = mTriggerLockupPhase < 0.5f;
       float pulse = mLockupLevel > 0.8f ? (on ? 1.0f : 0.8f) : (on ? 1.0f : 0.0f);
       lockup      = (0.2f + 0.4f * mLockupLevel) * pulse * PedalGain(brake, 0.05f);
     }
@@ -977,6 +1111,8 @@ class IFeedback {
   }
 
   virtual void EndUpdate() {
+    if (!bRumbleEnabled) return;  // never handed to the game then, but keep it inert either way
+
     double now = RumbleGetTime();
     float  dt  = (float)(now - mLastUpdateTime);
     if (dt < 0.0f) dt = 0.0f;
@@ -992,11 +1128,13 @@ class IFeedback {
     mEngineBlownRamp.Advance(dt);
     mBumpLeft.Advance(dt);
     mBumpRight.Advance(dt);
+    mLandingLeft.Advance(dt);
+    mLandingRight.Advance(dt);
     mTriggerCue.Advance(dt);
     UpdateCarEffects();
 
     mHasVehicle = !mPaused && RumbleReadVehicle(mVehicle);
-    UpdateBumps(dt);
+    UpdateBumps();
 
     // scrape: sliding contacts keep it alive, it fades quickly once they stop
     float scrapeTarget = mScrapeSpeed > 1.0f ? (mScrapeSpeed - 1.0f) / 20.0f : 0.0f;
@@ -1007,7 +1145,7 @@ class IFeedback {
 
     if (bRumbleTelemetry && !mPaused) RumbleTelemetryWriteTick(now, mHasVehicle ? &mVehicle : NULL, mNOSEngaged, mShifting, mShiftPotential);
 
-    if (!bRumbleEnabled || !bRumbleAppActive || mPaused) {
+    if (!bRumbleAppActive || mPaused) {
       Send(0, 0);
       return;
     }
@@ -1015,8 +1153,12 @@ class IFeedback {
     mMixer.Begin(dt);
     mMixer.AddPulse(kRumbleImpacts, mPulseLeft.GetValue(), mPulseRight.GetValue());
     mMixer.AddTexture(kRumbleImpacts, mScrapeTexture, mScrapeLevel * 0.1f, mScrapeLevel * 0.4f);
+    float blownLeft, blownRight;  // spiked / blown tyre wobble
+    mBlownTireWave.Sample(dt, blownLeft, blownRight);
+    mMixer.AddTexture(kRumbleImpacts, mBlownTireTexture, blownLeft * RUMBLE_SURFACE_WAVE_SCALE, blownRight * RUMBLE_SURFACE_WAVE_SCALE);
 
     mMixer.AddPulse(kRumbleSurface, mBumpLeft.GetValue(), mBumpRight.GetValue());
+    mMixer.AddPulse(kRumbleSurface, mLandingLeft.GetValue(), mLandingRight.GetValue());
     float roadLeft, roadRight;
     mRoadWave.Sample(dt, roadLeft, roadRight);
     mMixer.AddTexture(kRumbleSurface, mRoadTexture, roadLeft * RUMBLE_SURFACE_WAVE_SCALE, roadRight * RUMBLE_SURFACE_WAVE_SCALE);
@@ -1032,13 +1174,13 @@ class IFeedback {
     int left, right;
     mMixer.Resolve(left, right);
     float leftTrigger = 0.0f, rightTrigger = 0.0f;
-    if (bRumbleImpulseTriggers) MixTriggers(dt, leftTrigger, rightTrigger);
+    if (mOnWGI) MixTriggers(dt, leftTrigger, rightTrigger);
     Send(left, right, RumbleMixer::ToMotor(leftTrigger, 1.0f), RumbleMixer::ToMotor(rightTrigger, 1.0f));
   }
 
   // DoFFB calls Slip, Skid, then RoadNoise for each wheel in turn
   virtual void UpdateRoadNoise(bool /*front*/, const SimSurface& surface, float speed) {
-    mRoadWave.Add(&surface, ATTRIB_KEY_FFB_ROLL, speed);
+    (RumbleIsBlownTireSurface(&surface) ? mBlownTireWave : mRoadWave).Add(&surface, ATTRIB_KEY_FFB_ROLL, speed);
     mWheelArg++;
     if (bRumbleTelemetry && RumbleTelemetry.nWheel < RUMBLE_MAX_WHEELS) RumbleTelemetry.iSurface[RumbleTelemetry.nWheel] = RumbleTelemetrySurfaceId(&surface);
     RumbleTelemetry.nWheel++;
@@ -1063,21 +1205,41 @@ class IFeedback {
   static float Length(const float* v) { return sqrtf(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]); }
   static float Clamp01(float v) { return v < 0.0f ? 0.0f : (v > 1.0f ? 1.0f : v); }
 
-  // PS2 GameDevice::ReportCollision strength. The PS2 uses the player's real speed change; until we can read the player's
-  // velocity we estimate it from the closing speed along the contact normal.
-  static float CollisionMagnitude(const COLLISION_INFO& cinfo, bool iamA) {
-    const float* n  = cinfo.normal;
-    const float* cv = cinfo.closingVel;
-    float        dv = fabsf(cv[0] * n[0] + cv[1] * n[1] + cv[2] * n[2]);
-    if (!(dv == dv)) return 0.0f;  // NaN
+  // the player's speed change across the hit: current body velocity against the pre-impact velocity in the contact
+  // (PS2: |me->GetLinearVelocity() - objAVel/objBVel|). Without a readable vehicle, estimate it from the closing speed
+  // along the contact normal (equal masses share the speed change in car-to-car hits). The estimate is also used when
+  // the measured change is far below it, i.e. the body hadn't taken the impulse yet. Returns -1 if invalid.
+  static float CollisionSpeedChange(const COLLISION_INFO& cinfo, bool iamA, bool& measured) {
+    const float* n        = cinfo.normal;
+    const float* cv       = cinfo.closingVel;
+    float        estimate = fabsf(cv[0] * n[0] + cv[1] * n[1] + cv[2] * n[2]);
+    if ((cinfo.flags & 7) == 1) estimate *= 0.5f;
+
+    const float* preVel = iamA ? cinfo.objAVel : cinfo.objBVel;
+    float        vel[3];
+    float        dv = estimate;
+    measured        = false;
+    if (RumbleReadLinearVelocity(vel)) {
+      float d[3]   = {vel[0] - preVel[0], vel[1] - preVel[1], vel[2] - preVel[2]};
+      float change = Length(d);
+      if (change >= estimate * RUMBLE_COLLISION_MIN_MEASURED) {
+        dv       = change;
+        measured = true;
+      }
+    }
+    return dv == dv ? dv : -1.0f;  // NaN
+  }
+
+  // PS2 GameDevice::ReportCollision strength, from the speed change dv (m/s)
+  static float CollisionMagnitude(const COLLISION_INFO& cinfo, bool iamA, float dv) {
+    if (dv < 0.0f) return 0.0f;
 
     switch (cinfo.flags & 7) {
       case 2:  // WORLD (walls)
         return Clamp01(dv / 30.0f);
       case 3:  // GROUND (landings, bottoming out)
         return Clamp01((dv - 1.0f) / 3.0f);
-      case 1: {  // OBJECT (cars, props); equal masses share the speed change
-        dv *= 0.5f;
+      case 1: {  // OBJECT (cars, props)
         if (dv >= 5.0f) return Clamp01((dv - 5.0f) / 20.0f);
 
         const float* myVel    = iamA ? cinfo.objAVel : cinfo.objBVel;
@@ -1102,16 +1264,19 @@ class IFeedback {
   virtual void ReportCollision(const COLLISION_INFO& cinfo, bool iamA) {
     if (!bRumbleEnabled || mPaused) return;
 
-    float strength = (cinfo.flags & 0x80) ? 0.0f : CollisionMagnitude(cinfo, iamA);
+    bool  sliding  = (cinfo.flags & 0x80) != 0;
+    bool  measured = false;
+    float dv       = sliding ? 0.0f : CollisionSpeedChange(cinfo, iamA, measured);
+    float strength = sliding ? 0.0f : CollisionMagnitude(cinfo, iamA, dv);
     if (bRumbleTelemetry) {
       const float* n  = cinfo.normal;
       const float* cv = cinfo.closingVel;
-      RumbleTelemetryPrintf("C,%.4f,%d,0x%02X,%.2f,%.2f,%.2f,%.2f\n", RumbleGetTime() - RumbleTelemetry.fStartTime, cinfo.flags & 7, cinfo.flags & 0xFF,
-                            Length(cv), fabsf(cv[0] * n[0] + cv[1] * n[1] + cv[2] * n[2]), Length(cinfo.slidingVel), strength);
+      RumbleTelemetryPrintf("C,%.4f,%d,0x%02X,%.2f,%.2f,%.2f,%.2f,%.2f,%d\n", RumbleGetTime() - RumbleTelemetry.fStartTime, cinfo.flags & 7, cinfo.flags & 0xFF,
+                            Length(cv), fabsf(cv[0] * n[0] + cv[1] * n[1] + cv[2] * n[2]), Length(cinfo.slidingVel), dv, strength, measured);
     }
 
     // sliding contacts feed the scrape texture instead of starting a hit
-    if (cinfo.flags & 0x80) {
+    if (sliding) {
       float speed = Length(cinfo.slidingVel);
       if (speed > mScrapeSpeed) mScrapeSpeed = speed;
       return;
@@ -1119,9 +1284,13 @@ class IFeedback {
 
     if (strength <= 0.0f) return;
 
-    mPulseRight.Start(SmallRumblePoints, _countof(SmallRumblePoints), strength);
+    // landings and bottoming out are a Surface effect, everything else an Impact
+    bool         ground = (cinfo.flags & 7) == 3;
+    RumblePulse& light  = ground ? mLandingRight : mPulseRight;
+    RumblePulse& heavy  = ground ? mLandingLeft : mPulseLeft;
+    light.Start(SmallRumblePoints, _countof(SmallRumblePoints), strength);
     // the heavy motor only kicks in for proper hits
-    if (strength > 0.4f) mPulseLeft.Start(BigRumblePoints, _countof(BigRumblePoints), strength);
+    if (strength > 0.4f) heavy.Start(BigRumblePoints, _countof(BigRumblePoints), strength);
 
 #ifdef _DEBUG
     char buf[160];

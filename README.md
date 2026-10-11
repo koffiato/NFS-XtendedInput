@@ -25,7 +25,7 @@ Currently a work in progress, but fully usable and playable!
 
 - Console control feature parity: restored debug camera analog control
 
-- (MW ONLY) Controller rumble - collisions, scrapes, kerbs & bumps, landings, off-road, brake lockup, wheelspin, slides, NOS, gear shifts and shift timing cues. Optional Xbox One / Series impulse trigger rumble
+- (MW ONLY) Controller rumble - collisions, scrapes, kerbs & bumps, landings, off-road, brake lockup, wheelspin, slides, NOS, gear shifts and shift timing cues. Xbox One / Series impulse trigger rumble (automatic with a single controller)
 
 - Re-done keyboard input code - not using DInput8 anymore. Now talks directly over Win32 (GetAsyncKeyState or GetKeyboardState)
 
@@ -283,21 +283,21 @@ Rumble is driven by the game's own force feedback events (which the PC version l
 
 | Setting | Default | Description |
 |---|---|---|
-| `Enabled` | 1 | Turns rumble on or off |
+| `Enabled` | 1 | Turns rumble on or off. This is the only switch: the game's own (hidden) vibration option is ignored, and 0 leaves the game completely untouched |
 | `Intensity` | 1.0 | Overall strength (0.0 - 2.0) |
 | `LeftMotorScale` / `RightMotorScale` | 1.0 | Heavy (left) and light (right) motor strength (0.0 - 2.0) |
 | `SwapMotors` | 0 | Swaps the left and right motors |
-| `Impacts` | 1.0 | Hits, scrapes and spike strips (0.0 - 2.0) |
+| `Impacts` | 1.0 | Hits, scrapes, spike strips and blown tyres (0.0 - 2.0) |
 | `Surface` | 1.0 | Kerbs, bumps, landings and off-road (0.0 - 2.0) |
 | `Tyres` | 1.0 | Lockup, wheelspin and slides (0.0 - 2.0) |
 | `Car` | 1.0 | NOS, gear shifts and engine (0.0 - 2.0) |
-| `GearShift` | 3 | Gear change knock: 0 = off, 1 = low, 2 = medium, 3 = strong, 4 = huge |
-| `ImpulseTriggers` | 0 | Xbox One / Series trigger rumble (Windows 10+): LT = brake lockup, RT = wheelspin, power slides, NOS and gear shifts. While on, every connected Xbox controller rumbles |
+| `GearShift` | 2 | Gear change knock: 0 = off, 1 = low, 2 = medium, 3 = strong, 4 = max |
+| `ImpulseTriggers` | 2 | Xbox One / Series trigger rumble (Windows 10+): LT = brake lockup, RT = wheelspin, power slides, NOS and gear shifts. 0 = off, 1 = always (every connected Xbox controller rumbles), 2 = auto: on only while exactly one Xbox controller is connected and Steam Input isn't in use; otherwise plain rumble on your own controller |
 | `TriggerIntensity` | 1.0 | Strength of the trigger rumble (0.0 - 2.0) |
 | `TriggerPedalScaling` | 1 | 1 = trigger rumble grows with how far the pedal is pressed, 0 = fixed strength |
 | `Telemetry` | 0 | 1 = logs the rumble inputs to `scripts\NFS_XtendedInput_Rumble.log` (for tuning, grows quickly) |
 
-Rumble follows the game's own vibration option and stops when the game is paused or loses focus.
+Rumble stops when the game is paused, loses focus or closes. Long continuous effects (drifts, off-road, wheelspin) slowly fade to 60% so they don't numb your hands, and recover after 2.5 s of quiet; knocks and hits always play at full strength.
 
 ## Windows 7 compatibility
 

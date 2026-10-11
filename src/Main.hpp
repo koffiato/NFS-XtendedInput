@@ -1119,7 +1119,7 @@ class InputDevice {
     fDeviceScalar    = new (std::nothrow) DeviceScalar[MAX_ACTIONID];
 #ifdef GAME_MW
     mFFB.Init(&Padding1, DeviceIndex);
-    UTL_Com_Object_IList_Add(&Padding1, (void*)IFEEDBACK_IHANDLE_ADDR, &mFFB);
+    if (bRumbleEnabled) UTL_Com_Object_IList_Add(&Padding1, (void*)IFEEDBACK_IHANDLE_ADDR, &mFFB);
 #endif
 #ifdef GAME_PROSTREET
     bRemappingMode = false;
@@ -1133,7 +1133,7 @@ class InputDevice {
   }
   virtual void* dtor(bool something) {
 #ifdef GAME_MW
-    mFFB.Stop();
+    if (bRumbleEnabled) mFFB.Stop();
 #endif
     delete (this);
     return this;
@@ -1355,7 +1355,7 @@ class InputDevice {
     // printf("Called InputDevice::StopVibration\n");
   }
 #ifdef GAME_MW
-  virtual int GetInterfaces() { return (int)&mFFB; }
+  virtual int GetInterfaces() { return bRumbleEnabled ? (int)&mFFB : 0; }
 #else
   virtual int GetInterfaces() { return 0; }
 #endif
@@ -1713,6 +1713,15 @@ LRESULT WINAPI CustomWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) 
       bRumbleAppActive = false;
       RumbleStopAllPads();
       break;
+    case WM_CLOSE:
+      // stop the trigger motors too while WinRT can still be called (DllMain can only stop XInput); if the close is
+      // cancelled, the next tick resends
+      RumbleStopAllPads();
+      break;
+    case WM_DESTROY:
+      bRumbleAppActive = false;
+      RumbleStopAllPads();
+      break;
 #endif
     case WM_KEYDOWN:
       LastControlledDevice = LASTCONTROLLED_KB;
@@ -1790,7 +1799,7 @@ void InitConfig() {
     if (ini[rumbleSection].has("RightMotorScale")) fRumbleRightScale = clampf(std::stof(ini[rumbleSection]["RightMotorScale"]), 0.0f, 2.0f);
     if (ini[rumbleSection].has("SwapMotors")) bRumbleSwapMotors = std::stol(ini[rumbleSection]["SwapMotors"]) != 0;
     if (ini[rumbleSection].has("GearShift")) RumbleShiftPreset = (int)clampf((float)std::stol(ini[rumbleSection]["GearShift"]), 0.0f, (float)(kShiftPresetCount - 1));
-    if (ini[rumbleSection].has("ImpulseTriggers")) bRumbleImpulseTriggers = std::stol(ini[rumbleSection]["ImpulseTriggers"]) != 0;
+    if (ini[rumbleSection].has("ImpulseTriggers")) RumbleTriggerMode = (int)clampf((float)std::stol(ini[rumbleSection]["ImpulseTriggers"]), 0.0f, (float)(kTriggerModeCount - 1));
     if (ini[rumbleSection].has("TriggerIntensity")) fRumbleTriggerIntensity = clampf(std::stof(ini[rumbleSection]["TriggerIntensity"]), 0.0f, 2.0f);
     if (ini[rumbleSection].has("TriggerPedalScaling")) bRumbleTriggerPedalScaling = std::stol(ini[rumbleSection]["TriggerPedalScaling"]) != 0;
     if (ini[rumbleSection].has("Telemetry")) bRumbleTelemetry = std::stol(ini[rumbleSection]["Telemetry"]) != 0;
