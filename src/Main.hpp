@@ -1788,6 +1788,12 @@ void InitConfig() {
     if (ini[rumbleSection].has("Intensity")) fRumbleIntensity = clampf(std::stof(ini[rumbleSection]["Intensity"]), 0.0f, 2.0f);
     if (ini[rumbleSection].has("LeftMotorScale")) fRumbleLeftScale = clampf(std::stof(ini[rumbleSection]["LeftMotorScale"]), 0.0f, 2.0f);
     if (ini[rumbleSection].has("RightMotorScale")) fRumbleRightScale = clampf(std::stof(ini[rumbleSection]["RightMotorScale"]), 0.0f, 2.0f);
+    if (ini[rumbleSection].has("SwapMotors")) bRumbleSwapMotors = std::stol(ini[rumbleSection]["SwapMotors"]) != 0;
+
+    const char* categoryKeys[kRumbleCategoryCount] = {"Impacts", "Surface", "Tyres", "Car"};
+    for (int i = 0; i < kRumbleCategoryCount; i++) {
+      if (ini[rumbleSection].has(categoryKeys[i])) fRumbleCategoryScale[i] = clampf(std::stof(ini[rumbleSection][categoryKeys[i]]), 0.0f, 2.0f);
+    }
   }
 #endif
 

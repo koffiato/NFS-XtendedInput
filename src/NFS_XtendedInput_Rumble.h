@@ -21,12 +21,32 @@
 
 #pragma once
 
-bool  bRumbleEnabled      = true;
-float fRumbleIntensity    = 1.0f;
-float fRumbleLeftScale    = 1.0f;  // low frequency (heavy) motor
-float fRumbleRightScale   = 1.0f;  // high frequency (light) motor
-float fRumbleMinImpactVel = 2.0f;   // m/s, closing speeds below this don't rumble
-float fRumbleMaxImpactVel = 25.0f;  // m/s, closing speed for full strength
+enum RumbleCategory {
+  kRumbleImpacts,  // hits, scrapes, spike strips
+  kRumbleSurface,  // kerbs, bumps, landing, road baseline
+  kRumbleTyres,    // lockup, wheelspin, slides, cornering
+  kRumbleCar,      // NOS, shifts, engine
+  kRumbleCategoryCount,
+};
+
+bool  bRumbleEnabled                             = true;
+bool  bRumbleSwapMotors                          = false;
+float fRumbleIntensity                           = 1.0f;
+float fRumbleLeftScale                           = 1.0f;  // low frequency (heavy) motor
+float fRumbleRightScale                          = 1.0f;  // high frequency (light) motor
+float fRumbleCategoryScale[kRumbleCategoryCount] = {1.0f, 1.0f, 1.0f, 1.0f};
+float fRumbleMinImpactVel                        = 2.0f;   // m/s, closing speeds below this don't rumble
+float fRumbleMaxImpactVel                        = 25.0f;  // m/s, closing speed for full strength
+
+// ducking: textures drop to this level while an impact pulse is playing
+const float RUMBLE_DUCK_LEVEL     = 0.3f;
+const float RUMBLE_DUCK_THRESHOLD = 0.05f;
+// fatigue fade: a texture running longer than FATIGUE_START seconds fades to FATIGUE_FLOOR over FATIGUE_RAMP seconds,
+// and recovers once it has been quiet for FATIGUE_RESET seconds
+const float RUMBLE_FATIGUE_START = 3.0f;
+const float RUMBLE_FATIGUE_RAMP  = 5.0f;
+const float RUMBLE_FATIGUE_FLOOR = 0.6f;
+const float RUMBLE_FATIGUE_RESET = 1.0f;
 
 // pad that last produced input (used in omni mode, where both game ports read every pad)
 int  RumbleLastActivePad = 0;
@@ -91,6 +111,75 @@ struct RumblePulse {
   }
 };
 
+// running time of a texture, for the fatigue fade
+struct RumbleTextureState {
+  float fActiveTime;
+  float fQuietTime;
+
+  float Update(bool active, float dt) {
+    if (active) {
+      fActiveTime += dt;
+      fQuietTime = 0.0f;
+    } else {
+      fQuietTime += dt;
+      if (fQuietTime >= RUMBLE_FATIGUE_RESET) fActiveTime = 0.0f;
+    }
+    if (fActiveTime <= RUMBLE_FATIGUE_START) return 1.0f;
+    float t = (fActiveTime - RUMBLE_FATIGUE_START) / RUMBLE_FATIGUE_RAMP;
+    if (t > 1.0f) t = 1.0f;
+    return 1.0f - (1.0f - RUMBLE_FATIGUE_FLOOR) * t;
+  }
+};
+
+// collects every effect's motor values for one tick and resolves them to the final motor output
+struct RumbleMixer {
+  float fDt;
+  float fPulse[2];
+  float fTexture[2];
+  bool  bImpactPlaying;
+
+  void Begin(float dt) {
+    fDt            = dt;
+    fPulse[0]      = fPulse[1] = 0.0f;
+    fTexture[0]    = fTexture[1] = 0.0f;
+    bImpactPlaying = false;
+  }
+
+  void AddPulse(RumbleCategory category, float left, float right) {
+    float scale = fRumbleCategoryScale[category];
+    if (category == kRumbleImpacts && (left > RUMBLE_DUCK_THRESHOLD || right > RUMBLE_DUCK_THRESHOLD) && scale > 0.0f) bImpactPlaying = true;
+    if (left * scale > fPulse[0]) fPulse[0] = left * scale;
+    if (right * scale > fPulse[1]) fPulse[1] = right * scale;
+  }
+
+  void AddTexture(RumbleCategory category, RumbleTextureState& state, float left, float right) {
+    float fatigue = state.Update(left > 0.0f || right > 0.0f, fDt);
+    float scale   = fRumbleCategoryScale[category] * fatigue;
+    if (left * scale > fTexture[0]) fTexture[0] = left * scale;
+    if (right * scale > fTexture[1]) fTexture[1] = right * scale;
+  }
+
+  static int ToMotor(float value, float scale) {
+    float v = value * fRumbleIntensity * scale;
+    if (v <= 0.0f) return 0;
+    if (v >= 1.0f) return 65535;
+    return (int)(v * 65535.0f);
+  }
+
+  void Resolve(int& leftMotor, int& rightMotor) const {
+    float duck  = bImpactPlaying ? RUMBLE_DUCK_LEVEL : 1.0f;
+    float left  = fPulse[0] > fTexture[0] * duck ? fPulse[0] : fTexture[0] * duck;
+    float right = fPulse[1] > fTexture[1] * duck ? fPulse[1] : fTexture[1] * duck;
+    leftMotor   = ToMotor(left, fRumbleLeftScale);
+    rightMotor  = ToMotor(right, fRumbleRightScale);
+    if (bRumbleSwapMotors) {
+      int tmp    = leftMotor;
+      leftMotor  = rightMotor;
+      rightMotor = tmp;
+    }
+  }
+};
+
 struct SimSurface;
 
 // Sim::Collision::Info, 0x80 bytes
@@ -133,6 +222,8 @@ class IFeedback {
   unsigned int mStopGeneration;
   RumblePulse  mPulseLeft;
   RumblePulse  mPulseRight;
+  RumbleTextureState mNOSTexture;
+  RumbleMixer  mMixer;
 
   void Init(void* ownerList, int deviceIndex) {
     mOwnerList      = ownerList;
@@ -146,6 +237,8 @@ class IFeedback {
     mStopGeneration = RumbleStopGeneration;
     memset(&mPulseLeft, 0, sizeof(RumblePulse));
     memset(&mPulseRight, 0, sizeof(RumblePulse));
+    memset(&mNOSTexture, 0, sizeof(RumbleTextureState));
+    memset(&mMixer, 0, sizeof(RumbleMixer));
   }
 
   void Send(int left, int right) {
@@ -192,13 +285,6 @@ class IFeedback {
     }
   }
 
-  static int ToMotor(float value, float scale) {
-    float v = value * fRumbleIntensity * scale;
-    if (v <= 0.0f) return 0;
-    if (v >= 1.0f) return 65535;
-    return (int)(v * 65535.0f);
-  }
-
   // never delete -- embedded in InputDevice
   virtual void* ScalarDtor(unsigned int /*flags*/) { return this; }
 
@@ -233,14 +319,13 @@ class IFeedback {
       return;
     }
 
-    float left  = mPulseLeft.GetValue();
-    float right = mPulseRight.GetValue();
-    if (mNOSEngaged) {
-      if (left < 0.15f) left = 0.15f;
-      if (right < 0.30f) right = 0.30f;
-    }
+    mMixer.Begin(dt);
+    mMixer.AddPulse(kRumbleImpacts, mPulseLeft.GetValue(), mPulseRight.GetValue());
+    mMixer.AddTexture(kRumbleCar, mNOSTexture, mNOSEngaged ? 0.15f : 0.0f, mNOSEngaged ? 0.30f : 0.0f);
 
-    Send(ToMotor(left, fRumbleLeftScale), ToMotor(right, fRumbleRightScale));
+    int left, right;
+    mMixer.Resolve(left, right);
+    Send(left, right);
   }
 
   virtual void UpdateRoadNoise(bool /*front*/, const SimSurface& /*surface*/, float /*speed*/) {}
