@@ -1342,9 +1342,7 @@ class InputDevice {
   virtual int  GetControllerTypeMask() { return 0; }
 #endif
   virtual bool DeviceHasChanged() { return false; }
-#ifndef GAME_MW
   virtual bool DeviceHasAnyActivity() { return false; }
-#endif
   virtual void* SaveCurrentState() { return NULL; }
   virtual void  RestoreToState(float* unk) { return; }
 #ifndef GAME_MW
