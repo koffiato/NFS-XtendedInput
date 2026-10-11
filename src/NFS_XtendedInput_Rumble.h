@@ -62,7 +62,9 @@ void(__thiscall* UTL_Com_Object_IList_Add)(void* thethis, void* handle, void* if
 // indices, so while it is in use every WGI gamepad gets the full vibration (main motors included, the two APIs would
 // otherwise fight over them). Loaded at runtime so the Win7 builds still start; it's simply unavailable there.
 
-bool bRumbleImpulseTriggers = false;
+bool  bRumbleImpulseTriggers     = false;
+float fRumbleTriggerIntensity    = 1.0f;
+bool  bRumbleTriggerPedalScaling = true;  // trigger effects grow with how far the pedal is pressed
 
 namespace RumbleWGI {
 typedef HRESULT(WINAPI* RoInitialize_t)(RO_INIT_TYPE);
@@ -77,17 +79,32 @@ typedef ABI::Windows::Foundation::Collections::IVectorView<ABI::Windows::Gaming:
 bool             bTried   = false;
 IGamepadStatics* pStatics = NULL;
 
+const int MAX_PADS     = 8;
+IGamepad* Pads[MAX_PADS];  // cached, the list is refreshed once a second
+int       PadCount     = 0;
+double    PadListTime  = -1.0;
+
+double Now() {
+  static LARGE_INTEGER freq = {0};
+  if (!freq.QuadPart) QueryPerformanceFrequency(&freq);
+  LARGE_INTEGER now;
+  QueryPerformanceCounter(&now);
+  return (double)now.QuadPart / (double)freq.QuadPart;
+}
+
 bool Init() {
   if (bTried) return pStatics != NULL;
-  bTried         = true;
-  HMODULE combase = LoadLibraryA("combase.dll");
+  bTried          = true;
+  HMODULE combase = LoadLibraryExA("combase.dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32);
   if (!combase) return false;
-  RoInitialize_t                 roInitialize       = (RoInitialize_t)GetProcAddress(combase, "RoInitialize");
-  RoGetActivationFactory_t       roGetFactory       = (RoGetActivationFactory_t)GetProcAddress(combase, "RoGetActivationFactory");
-  WindowsCreateStringReference_t createStringRef    = (WindowsCreateStringReference_t)GetProcAddress(combase, "WindowsCreateStringReference");
+  RoInitialize_t                 roInitialize    = (RoInitialize_t)GetProcAddress(combase, "RoInitialize");
+  RoGetActivationFactory_t       roGetFactory    = (RoGetActivationFactory_t)GetProcAddress(combase, "RoGetActivationFactory");
+  WindowsCreateStringReference_t createStringRef = (WindowsCreateStringReference_t)GetProcAddress(combase, "WindowsCreateStringReference");
   if (!roInitialize || !roGetFactory || !createStringRef) return false;
 
-  roInitialize(RO_INIT_MULTITHREADED);  // fails harmlessly if the game thread already has an apartment
+  // like SDL: prefer a single-threaded apartment (what the game's own COM users expect); if the thread is already in
+  // the multithreaded one that fails with RPC_E_CHANGED_MODE and the existing apartment is used
+  if (roInitialize(RO_INIT_SINGLETHREADED) == RPC_E_CHANGED_MODE) roInitialize(RO_INIT_MULTITHREADED);
   static const wchar_t className[] = L"Windows.Gaming.Input.Gamepad";
   HSTRING_HEADER       header;
   HSTRING              name;
@@ -96,23 +113,31 @@ bool Init() {
   return pStatics != NULL;
 }
 
+void RefreshPads() {
+  for (int i = 0; i < PadCount; i++) Pads[i]->Release();
+  PadCount          = 0;
+  GamepadList* list = NULL;
+  if (FAILED(pStatics->get_Gamepads(&list)) || !list) return;
+  unsigned int count = 0;
+  list->get_Size(&count);
+  for (unsigned int i = 0; i < count && PadCount < MAX_PADS; i++) {
+    IGamepad* pad = NULL;
+    if (SUCCEEDED(list->GetAt(i, &pad)) && pad) Pads[PadCount++] = pad;
+  }
+  list->Release();
+}
+
 // returns false when there's nothing to send to, so the caller can fall back to XInput
 bool Send(double leftMotor, double rightMotor, double leftTrigger, double rightTrigger) {
   if (!Init()) return false;
-  GamepadList* list = NULL;
-  if (FAILED(pStatics->get_Gamepads(&list)) || !list) return false;
-  unsigned int count = 0;
-  list->get_Size(&count);
-  GamepadVibration vib = {leftMotor, rightMotor, leftTrigger, rightTrigger};
-  for (unsigned int i = 0; i < count; i++) {
-    IGamepad* pad = NULL;
-    if (SUCCEEDED(list->GetAt(i, &pad)) && pad) {
-      pad->put_Vibration(vib);
-      pad->Release();
-    }
+  double now = Now();
+  if (PadListTime < 0.0 || now - PadListTime > 1.0) {
+    PadListTime = now;
+    RefreshPads();
   }
-  list->Release();
-  return count > 0;
+  GamepadVibration vib = {leftMotor, rightMotor, leftTrigger, rightTrigger};
+  for (int i = 0; i < PadCount; i++) Pads[i]->put_Vibration(vib);
+  return PadCount > 0;
 }
 }  // namespace RumbleWGI
 
@@ -362,6 +387,9 @@ const RumbleEnvelopePoint BigRumblePoints[]   = {{0.0f, 255.0f}, {0.15f, 255.0f}
 // shift timing cues (ours): Perfect = light double tap, Miss = rough buzz
 const RumbleEnvelopePoint PerfectShiftPoints[] = {{0.0f, 255.0f}, {0.07f, 255.0f}, {0.07f, 0.0f}, {0.13f, 0.0f}, {0.13f, 255.0f}, {0.2f, 255.0f}, {0.2f, 0.0f}};
 const RumbleEnvelopePoint MissShiftPoints[]    = {{0.0f, 255.0f}, {0.15f, 180.0f}, {0.15f, 0.0f}};
+// the same cues on the right trigger (docs/research/impulse-triggers.md 6.1): Perfect = one crisp tick, Miss = two
+const RumbleEnvelopePoint TriggerPerfectPoints[] = {{0.0f, 255.0f}, {0.03f, 255.0f}, {0.03f, 0.0f}};
+const RumbleEnvelopePoint TriggerMissPoints[]    = {{0.0f, 255.0f}, {0.025f, 255.0f}, {0.025f, 0.0f}, {0.085f, 0.0f}, {0.085f, 255.0f}, {0.11f, 255.0f}, {0.11f, 0.0f}};
 // kerb / bump thump (ours): one sharp knock per wheel, so crossing a kerb gives the natural front-rear double knock
 const RumbleEnvelopePoint BumpPoints[] = {{0.0f, 255.0f}, {0.04f, 255.0f}, {0.12f, 0.0f}};
 
@@ -640,6 +668,16 @@ class IFeedback {
   RumbleTextureState mSlideTexture;
   RumbleTextureState mLockupTexture;
   RumbleTextureState mSpinTexture;
+  // impulse triggers (Forza layout: LT = braking slip, RT = throttle slip, plus the shift knock and cues on RT)
+  float              mLockupLevel;  // 0-1, this tick
+  float              mSpinLevel;
+  float              mSlideLevel;
+  float              mSpinPhase;
+  RumblePulse        mTriggerCue;
+  RumbleTextureState mTriggerLockupTexture;
+  RumbleTextureState mTriggerSpinTexture;
+  RumbleTextureState mTriggerSlideTexture;
+  RumbleTextureState mTriggerNOSTexture;
   float              mLockupPhase;
 
   // impulse triggers (0-65535 like the motors), last sent values
@@ -673,6 +711,10 @@ class IFeedback {
     mShiftCueRight.pPoints = NULL;
     mBumpLeft.pPoints      = NULL;
     mBumpRight.pPoints     = NULL;
+    mTriggerCue.pPoints    = NULL;
+    mLockupLevel           = 0.0f;
+    mSpinLevel             = 0.0f;
+    mSlideLevel            = 0.0f;
     mHasPrevVehicle        = false;
     mRoadWave.Begin();
     mSkidWave.Begin();
@@ -702,6 +744,11 @@ class IFeedback {
     }
 
     if (bRumbleImpulseTriggers) {
+      // WGI motors have 101 levels; round to them so near-identical values don't cost a call
+      left         = (left * 100 + 32767) / 65535 * 65535 / 100;
+      right        = (right * 100 + 32767) / 65535 * 65535 / 100;
+      triggerLeft  = (triggerLeft * 100 + 32767) / 65535 * 65535 / 100;
+      triggerRight = (triggerRight * 100 + 32767) / 65535 * 65535 / 100;
       if (left == mLastLeft && right == mLastRight && triggerLeft == mLastTriggerLeft && triggerRight == mLastTriggerRight) return;
       if (RumbleWGI::Send(left / 65535.0, right / 65535.0, triggerLeft / 65535.0, triggerRight / 65535.0)) {
         mLastLeft         = left;
@@ -845,6 +892,60 @@ class IFeedback {
     mSkidWave.Sample(dt, waveLeft, waveRight);
     float slide = Clamp01((skid - RUMBLE_SLIDE_MIN_SKID) / (RUMBLE_SLIDE_FULL_SKID - RUMBLE_SLIDE_MIN_SKID));
     mMixer.AddTexture(kRumbleTyres, mSlideTexture, waveLeft * RUMBLE_SKID_WAVE_SCALE, slide > 0.0f ? 0.05f + 0.15f * slide : 0.0f);
+
+    mLockupLevel = lockup;
+    mSpinLevel   = spin;
+    mSlideLevel  = slide;
+  }
+
+  // pedal coupling: off with the pedal (nearly) released, so a resting finger feels no phantom buzz
+  static float PedalGain(float pedal, float gate) {
+    if (pedal < gate) return 0.0f;
+    if (!bRumbleTriggerPedalScaling) return 1.0f;
+    return 0.35f + 0.65f * powf(pedal, 0.7f);
+  }
+
+  // continuous trigger textures get the same fatigue fade as the motor textures
+  float TriggerTexture(RumbleTextureState& state, float value, float dt) { return value * state.Update(value > 0.0f, dt); }
+
+  // levels per docs/research/impulse-triggers.md 6.1; each trigger takes the strongest effect, never the sum
+  void MixTriggers(float dt, float& leftTrigger, float& rightTrigger) {
+    float gas   = mHasVehicle ? mVehicle.fGas : 0.0f;
+    float brake = mHasVehicle ? mVehicle.fBrake : 0.0f;
+    float tyres = fRumbleCategoryScale[kRumbleTyres];
+    float car   = fRumbleCategoryScale[kRumbleCar];
+
+    // LT: lockup, ABS-style ~12 Hz on/off pulses (in step with the main motor stutter), steady with a stutter when severe
+    float lockup = 0.0f;
+    if (mLockupLevel > 0.0f) {
+      bool  on    = mLockupPhase < 0.5f;
+      float pulse = mLockupLevel > 0.8f ? (on ? 1.0f : 0.8f) : (on ? 1.0f : 0.0f);
+      lockup      = (0.2f + 0.4f * mLockupLevel) * pulse * PedalGain(brake, 0.05f);
+    }
+    float lockupFatigue = mTriggerLockupTexture.Update(mLockupLevel > 0.0f && brake >= 0.05f, dt);
+    leftTrigger         = lockup * lockupFatigue * tyres;
+
+    // RT: wheelspin with an ~11 Hz grain so it reads differently from the lockup pulses
+    mSpinPhase += dt * 11.0f;
+    mSpinPhase -= floorf(mSpinPhase);
+    float throttle = PedalGain(gas, 0.1f);
+    float spin     = mSpinLevel > 0.0f ? (0.15f + 0.35f * mSpinLevel) * (1.0f + 0.2f * sinf(6.2831853f * mSpinPhase)) * throttle : 0.0f;
+    float slide    = mSlideLevel > 0.0f ? (0.1f + 0.2f * mSlideLevel) * throttle : 0.0f;  // power-on slides only
+    float nos      = mNOSEngaged ? 0.12f * throttle : 0.0f;
+
+    float right = TriggerTexture(mTriggerSpinTexture, spin, dt) * tyres;
+    float v     = TriggerTexture(mTriggerSlideTexture, slide, dt) * tyres;
+    if (v > right) right = v;
+    v = TriggerTexture(mTriggerNOSTexture, nos, dt) * car;
+    if (v > right) right = v;
+    v = mShiftTick.GetValue() * RumbleShiftFeels[RumbleShiftPreset].fTrigger * car;
+    if (v > right) right = v;
+    v = mTriggerCue.GetValue() * car;
+    if (v > right) right = v;
+    rightTrigger = right;
+
+    leftTrigger *= fRumbleTriggerIntensity;
+    rightTrigger *= fRumbleTriggerIntensity;
   }
 
   // edge-triggered car effects (PS2 InputEffectState values unless noted)
@@ -861,9 +962,11 @@ class IFeedback {
     if (mShiftPotential != mPrevShiftPotential) {
       if (mShiftPotential == SHIFT_POTENTIAL_PERFECT) {
         mShiftCueRight.Start(PerfectShiftPoints, _countof(PerfectShiftPoints), 0.4f);
+        mTriggerCue.Start(TriggerPerfectPoints, _countof(TriggerPerfectPoints), 0.35f);
       } else if (mShiftPotential == SHIFT_POTENTIAL_MISS) {
         mShiftCueLeft.Start(MissShiftPoints, _countof(MissShiftPoints), 0.35f);
         mShiftCueRight.Start(MissShiftPoints, _countof(MissShiftPoints), 0.5f);
+        mTriggerCue.Start(TriggerMissPoints, _countof(TriggerMissPoints), 0.25f);
       }
     }
 
@@ -889,6 +992,7 @@ class IFeedback {
     mEngineBlownRamp.Advance(dt);
     mBumpLeft.Advance(dt);
     mBumpRight.Advance(dt);
+    mTriggerCue.Advance(dt);
     UpdateCarEffects();
 
     mHasVehicle = !mPaused && RumbleReadVehicle(mVehicle);
@@ -927,9 +1031,9 @@ class IFeedback {
 
     int left, right;
     mMixer.Resolve(left, right);
-    // impulse triggers: the shift knock kicks the right trigger
-    int triggerRight = RumbleMixer::ToMotor(mShiftTick.GetValue() * RumbleShiftFeels[RumbleShiftPreset].fTrigger * fRumbleCategoryScale[kRumbleCar], 1.0f);
-    Send(left, right, 0, triggerRight);
+    float leftTrigger = 0.0f, rightTrigger = 0.0f;
+    if (bRumbleImpulseTriggers) MixTriggers(dt, leftTrigger, rightTrigger);
+    Send(left, right, RumbleMixer::ToMotor(leftTrigger, 1.0f), RumbleMixer::ToMotor(rightTrigger, 1.0f));
   }
 
   // DoFFB calls Slip, Skid, then RoadNoise for each wheel in turn
