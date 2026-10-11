@@ -1789,6 +1789,9 @@ void InitConfig() {
     if (ini[rumbleSection].has("LeftMotorScale")) fRumbleLeftScale = clampf(std::stof(ini[rumbleSection]["LeftMotorScale"]), 0.0f, 2.0f);
     if (ini[rumbleSection].has("RightMotorScale")) fRumbleRightScale = clampf(std::stof(ini[rumbleSection]["RightMotorScale"]), 0.0f, 2.0f);
     if (ini[rumbleSection].has("SwapMotors")) bRumbleSwapMotors = std::stol(ini[rumbleSection]["SwapMotors"]) != 0;
+    if (ini[rumbleSection].has("GearShift")) RumbleShiftPreset = (int)clampf((float)std::stol(ini[rumbleSection]["GearShift"]), 0.0f, (float)(kShiftPresetCount - 1));
+    if (ini[rumbleSection].has("ImpulseTriggers")) bRumbleImpulseTriggers = std::stol(ini[rumbleSection]["ImpulseTriggers"]) != 0;
+    if (ini[rumbleSection].has("Telemetry")) bRumbleTelemetry = std::stol(ini[rumbleSection]["Telemetry"]) != 0;
 
     const char* categoryKeys[kRumbleCategoryCount] = {"Impacts", "Surface", "Tyres", "Car"};
     for (int i = 0; i < kRumbleCategoryCount; i++) {
@@ -2042,6 +2045,8 @@ int Init() {
 #endif
 
 #ifdef GAME_MW
+  RumbleInstallPatches();
+
   MemCardLoadAddr = reinterpret_cast<uintptr_t>(injector::MakeCALL(0x00563F33, MemoryCard_Load_Hook).get_raw<void>());
   injector::MakeCALL(0x00563CF7, MemoryCard_Load_Hook);
 #endif
