@@ -1,5 +1,8 @@
 # Underground 2 rumble
 
+For installation, shared settings and current game support, start with the
+[main README](../README.md). This page covers UG2-specific behavior and validation.
+
 The port uses U2's console feedback event dispatcher and authored envelopes,
 adapted to the MW fork's category mixer, impact ducking, fatigue fade, motor
 scaling and Windows.Gaming.Input impulse trigger output. It replaces the U2
@@ -10,7 +13,8 @@ wheel slip, NOS, gear shifts and the game's drag RPM effect. Wheel data adds
 wheelspin and brake lockup outside drift events. LT carries braking slip; RT
 carries wheelspin, NOS and shifts. MW's Attrib surface waves, spike strips,
 engine-damage effects and perfect/missed-shift cues are not part of this port.
-Underground 1 rumble is deferred.
+Underground 1 now has a separate experimental hook profile in the shared adapter;
+it does not use U2's wheel layout. See the main README for its status.
 
 ## Install
 
@@ -51,7 +55,7 @@ connected, and no detected Steam virtual pad. Otherwise output uses each player'
 own XInput slot. WGI cannot map its enumeration order to XInput slots, so mode 1
 intentionally broadcasts the combined effects to all WGI pads. Trigger motors
 require compatible hardware and Windows 10+. WGI is loaded dynamically; failure
-falls back to ordinary XInput rumble. The Windows 7 build uses XInput 9.1.0.
+falls back to ordinary XInput rumble. The unified build targets Windows 10/11.
 
 The INI is the master switch; the profile's hidden feedback byte is not modified.
 Continuous effects fade to 60% after sustained use, recover after quiet, and duck
@@ -63,17 +67,12 @@ no extra slip effect.
 
 ## Build and verify
 
-Open the solution in Visual Studio with C++ desktop tools and a Windows SDK.
-Build `Release-UG2|Win32`. The legacy project configuration uses v140;
-`build.cmd UG2-Win7` can also build against an installed modern compiler with
-`XINPUT_OLD` for the XInput 9.1.0 path. Windows 7 runtime behavior still needs testing.
-
-From an **x86** Visual Studio developer command prompt:
+Use the root build script from an **x86** Visual Studio developer command prompt
+with C++ desktop tools and a Windows SDK. From the repository root:
 
 ```bat
 build.cmd UG2
-build.cmd UG2-Win7
-tests\run.cmd "D:\Games\NFS Underground 2\SPEED2.EXE"
+underground\tests\run.cmd "path\to\SPEED2.EXE"
 ```
 
 The test harness maps a user-supplied executable into a separate test process,

@@ -1,67 +1,59 @@
-# Unified branch — work in progress
+# Unified implementation notes
 
-All seven input targets build from `src/Unified.cpp` with `build.cmd all` in
-an x86 Visual Studio developer prompt. Windows 10/11 only; no Win7 packages.
-Individual targets are UG, UG2, MW, CB (Carbon), UC, PS and W (World).
-This is a development branch, not a seven-game rumble release.
+The [README](README.md) is the main guide for game support, installation,
+configuration, builds and validation. This document describes the shared
+implementation and where its configuration data came from.
 
-## Feedback status
+## Source layout
 
-| Game | Input build | Feedback |
-| --- | --- | --- |
-| Underground | Compiles | Experimental US 1.4 native-event adapter; gameplay untested |
-| Underground 2 | Compiles | Existing US 1.2 adapter; executable integration harness passes |
-| Most Wanted | Compiles | Existing PC 1.3 IFeedback adapter preserved |
-| Carbon | Compiles | Adapter pending; stock MW feedback layout is incompatible |
-| Undercover | Compiles | Adapter pending; callbacks have different argument sizes |
-| ProStreet | Compiles | Adapter pending; installed executable could not be inspected after launch |
-| World | Compiles | Adapter pending |
+| Path | Responsibility |
+| --- | --- |
+| `src/Unified.cpp` | Build entry point for all seven targets |
+| `src/Main.hpp` | MW and newer input engine |
+| `underground/dllmain.cpp` | UG/UG2 input engine |
+| `src/rumble/Core.h` | Categories, gains, envelopes, ramps, shift presets, fatigue, ducking and mixing |
+| `src/rumble/Output.h` | Timing, motor quantization and Windows.Gaming.Input backend |
+| `src/rumble/Settings.h` | Shared bounded settings reader |
+| `src/rumble/Underground.h` | UG/UG2 native events, game-specific hooks, routing and lifecycle |
+| `src/NFS_XtendedInput_Rumble.h` | MW feedback interface and vehicle/surface access |
+| `underground/NFSU_XtendedInput_Rumble.h` | Compatibility include for the shared Underground adapter |
 
-`[Rumble]` currently takes effect only in UG, UG2 and MW. No new hardware or
-in-game validation has been completed for this branch. The installed local
-copies available for further testing are UG2, MW and ProStreet. Completing
-and verifying the remaining adapters requires suitable local executables.
-No downloaded game executables or research binaries are included in the repo.
-
-## Shared implementation
-
-`src/rumble/Core.h` owns categories, gains, fatigue, ducking, envelopes, ramps,
-shift presets and the mixer. `Output.h` owns timing, motor quantization and
-the dynamically loaded Windows.Gaming.Input trigger backend. `Settings.h`
-defines one bounded configuration reader for both input engines.
-`Underground.h` shares UG/UG2 event processing, routing, output, lifecycle and
-native-curve playback; each game has its own validated hook addresses.
-The existing MW adapter uses the same core, output and settings headers.
-
-The two upstream input engines remain separate adapters because their native
-event scanners and ActionID interfaces differ. They share the entry point,
-build, feedback implementation and configuration layout in this repository.
+The two input engines remain separate because Underground's event scanners and
+the later games' ActionID interfaces differ. The existing feedback adapters
+share the core, settings and WGI backend. Carbon, Undercover, ProStreet and
+World do not yet have feedback adapters.
 
 ## Configuration provenance
 
-The files under `data/Config-*` come from the actual shipped non-Win7 ZIPs:
+The canonical `data/Config-*` files come from the shipped non-Win7 packages of
+[NFS-XtendedInput 1.22](https://github.com/xan1242/NFS-XtendedInput/releases/tag/1.22)
+and [NFSU-XtendedInput 2.7](https://github.com/xan1242/NFSU-XtendedInput/releases/tag/2.7).
 
-- [NFS-XtendedInput 1.22](https://github.com/xan1242/NFS-XtendedInput/releases/tag/1.22)
-- [NFSU-XtendedInput 2.7](https://github.com/xan1242/NFSU-XtendedInput/releases/tag/2.7)
+Control mappings are preserved. A `[Rumble]` section was appended, the supplied
+UG configuration disables experimental rumble, and the stray
+`<<<<<<< HEAD` line in the UG2 release INI was removed.
+[data/config-provenance.json](data/config-provenance.json) records SHA-256
+hashes of the original files. The legacy `underground/Config-*` directories
+mirror their canonical configurations.
 
-Control mappings are preserved. Only a `[Rumble]` section was appended and
-the stray `<<<<<<< HEAD` line in the UG2 release INI was removed.
-`data/config-provenance.json` records the SHA-256 of each original config.
-The legacy `underground/Config-*` paths mirror the canonical data files.
+The upstream ZIPs contain input mappings and controller-icon assets, not
+authored feedback profiles. UG/UG2 read their native event curves from the
+running game. MW reads native surface attributes and retains the fork's
+console-derived effects. Console profiles have not been recovered or verified
+for all seven games.
 
-Those release packages contain input mappings, not authored feedback curves.
-UG/UG2 read the curves from the running game; the existing MW adapter reads
-its native surface attributes and retains the fork's console-derived effects.
-These are not newly recovered, console-verified profiles for all seven games.
+## Hook and interface differences
 
-Xan's [IFeedback research](https://github.com/xan1242/NFS-XtendedInput/issues/10#issuecomment-1181213340)
-documents why the PC stubs need replacing and why the hidden feedback setting
-must be considered. Its PS3/PS2/Xbox controller-icon packages are not feedback data.
+UG and UG2 share an event-table format but use different dispatcher calling
+conventions, addresses and some curve values. Each profile validates its added
+hook signatures before installing rumble patches.
 
-## Validation
+Later games also differ: Carbon's feedback interface has additional slots
+compared with MW, and Undercover changes callback argument sizes. Reusing the
+MW interface layout unchanged would therefore be unsafe. These adapters remain
+unfinished.
 
-Run `underground\tests\run.cmd "path\to\SPEED2.EXE"` from an x86 developer
-prompt. This harness maps only feedback data and hook signatures, mocks device
-output and native frame calls, and exercises native curves, ABI, routing,
-lifecycle stops, pedal remaps, wheel fixtures, mixer and shared settings.
-It does not launch the game or establish that the effects feel correct.
+Xan's [IFeedback investigation](https://github.com/xan1242/NFS-XtendedInput/issues/10#issuecomment-1181213340)
+explains the PC feedback stubs, interface registration and hidden vibration
+setting. [UG2 research and validation notes](underground/RUMBLE.md) document
+the existing adapter in more detail.

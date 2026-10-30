@@ -1,340 +1,176 @@
-> Development branch: see [UNIFIED.md](UNIFIED.md) for seven-game build instructions and the current feedback support matrix.
+# NFS XtendedInput - unified feedback branch
+
+XInput controller support for seven Black Box Need for Speed games, with shared
+rumble code for Underground, Underground 2 and Most Wanted.
+
+This unofficial fork builds on [NFS-XtendedInput](https://github.com/xan1242/NFS-XtendedInput)
+and [NFSU-XtendedInput](https://github.com/xan1242/NFSU-XtendedInput).
+**`unified-feedback` is a development branch. Rumble is not implemented for all seven games.**
+
+## Game support
+
+All seven input targets compile. The feedback status below is separate from
+input support; a passing build does not establish in-game compatibility.
+
+| Game | Build target | Configuration | Rumble status |
+| --- | --- | --- | --- |
+| Underground | `UG` | [Config-UG](data/Config-UG) | Experimental US 1.4 adapter; disabled in the supplied INI |
+| Underground 2 | `UG2` | [Config-UG2](data/Config-UG2) | US 1.2 adapter; executable integration tests pass |
+| Most Wanted (2005) | `MW` | [Config-MW](data/Config-MW) | PC 1.3 adapter retained from the rumble fork |
+| Carbon | `CB` | [Config-Carbon](data/Config-Carbon) | Not implemented |
+| Undercover | `UC` | [Config-UC](data/Config-UC) | Not implemented |
+| ProStreet | `PS` | [Config-ProStreet](data/Config-ProStreet) | Not implemented |
+| World | `W` | [Config-World](data/Config-World) | Not implemented; upstream input support remains experimental |
+
+No new in-game or controller hardware validation has been completed for this
+branch. UG/UG2 check their added rumble hook signatures before patching; those
+checks do not validate the upstream input hooks.
+
+This branch targets **Windows 10/11 and 32-bit game executables**.
+The unified build does not produce Windows 7 variants.
+
+## Installation
+
+1. Back up your existing XtendedInput ASI, INI and custom mappings.
+2. Install the matching upstream package to obtain its ASI loader, button
+   textures and cursor assets:
+   - [Version 2.7](https://github.com/xan1242/NFSU-XtendedInput/releases/tag/2.7)
+     for UG/UG2.
+   - [Version 1.22](https://github.com/xan1242/NFS-XtendedInput/releases/tag/1.22)
+     for MW/Carbon/Undercover/ProStreet/World.
+3. Replace the XtendedInput ASI in the game's `scripts` folder with the build
+   for that game:
+   - UG/UG2: `build/<target>/NFSU_XtendedInput.asi`
+   - Other games: `build/<target>/NFS_XtendedInput.asi`
+4. For a fresh configuration, copy the INIs from the corresponding
+   `data/Config-*` directory into `scripts`. To preserve existing bindings,
+   merge the settings you need instead of replacing your INIs.
+
+Use one XtendedInput ASI per game. If using Underground's dynamic button icons,
+disable the Widescreen Fix's button-icon replacement. The x86 Visual C++
+runtime is required by these builds.
+
+The existing [UG2 rumble release](https://github.com/koffiato/NFS-XtendedInput/releases/tag/u2-rumble-v0.1.0)
+predates this branch; it is not a unified seven-game release.
+
+## Controls and configuration
+
+The shipped control mappings come from the actual upstream 1.22 and 2.7
+release packages. Each game's configuration directory also contains
+`EventReference.txt` for its available actions.
+
+Common defaults are right trigger for throttle, left trigger for brake,
+left stick for steering, A for handbrake, B for NOS and Start/Menu for pause.
+Camera controls and game-specific actions vary; use your game's INI as the
+reference.
+
+| Games | General settings | Controller and keyboard bindings |
+| --- | --- | --- |
+| UG/UG2 | `scripts/NFSU_XtendedInput.ini` | `[Events]` and `[EventsKB]` in the same file |
+| MW and newer | `scripts/NFS_XtendedInput.ini` | `scripts/XtendedInputMaps/<profile>/NFS_XtendedInput.usermap.ini` |
+
+For MW and newer, `NFS_XtendedInput.default.ini` supplies mappings when a
+profile is created or its controls are reset. Secondary bindings use
+`[Events_Secondary]` and `[EventsKB_Secondary]`.
+
+ProStreet supports in-game remapping. MW's Controls menu remains disabled
+because of an upstream crash. See the [Underground notes](underground/README.md)
+for UG's remapping limits.
+
+## Rumble settings
+
+Edit `[Rumble]` in the main INI beside the ASI. These settings currently
+affect **UG, UG2 and MW only**. The supplied UG INI sets `Enabled = 0`
+because its adapter is experimental.
+
+| Setting | Default | Meaning |
+| --- | --- | --- |
+| `Enabled` | 1; supplied UG config: 0 | Master switch |
+| `Intensity` | 1.0 | Overall strength, 0-2 |
+| `LeftMotorScale` / `RightMotorScale` | 1.0 | Heavy/light motor strength, 0-2 |
+| `SwapMotors` | 0 | Swap the main motors |
+| `Impacts` / `Surface` / `Tyres` / `Car` | 1.0 | Category strength, 0-2; zero mutes a category |
+| `GearShift` | 2 | Shift knock: 0 off, 1 low, 2 medium, 3 strong, 4 maximum |
+| `ImpulseTriggers` | 2 | Trigger rumble: 0 off, 1 broadcast, 2 automatic |
+| `TriggerIntensity` | 1.0 | Trigger strength, 0-2 |
+| `TriggerPedalScaling` | 1 | Scale trigger effects with pedal input |
+| `Telemetry` | 0 | Write diagnostic feedback logs beside the plugin |
+
+UG/UG2 use their own native event curves for impacts, road texture, suspension,
+drift, wheel slip, NOS, shifts and drag RPM. UG2 additionally reads wheel data
+for wheelspin and brake lockup. MW retains the fork's surface, collision,
+suspension, tyre and car effects, including shift cues and blown tyres.
 
-# XtendedInput rumble fork
+Impulse triggers require compatible Xbox One/Series hardware and
+Windows.Gaming.Input. Automatic mode uses conservative controller detection;
+UG2 additionally requires a single XInput controller on port 0. When automatic
+mode is unavailable, ordinary XInput rumble remains available.
+Broadcast mode sends combined output to all detected WGI pads.
 
-This is an unofficial fork of [NFS-XtendedInput](https://github.com/xan1242/NFS-XtendedInput) by xan1242 (Lovro Pleše) and Berkay Yiğit. It adds controller rumble to Need for Speed: Most Wanted (2005), including Xbox One / Series impulse triggers. See [Rumble (MW only)](#rumble-mw-only) for what you feel and how to tune it.
+Continuous effects fade during sustained use, and impacts reduce background
+textures. The adapters include stops for pause, focus loss, disconnect and
+shutdown. See [UG2 feedback details](underground/RUMBLE.md) for its lifecycle
+checks and diagnostics.
 
-Carbon, ProStreet, Undercover and World are unchanged from upstream 1.22, so get those from the [original releases](https://github.com/xan1242/NFS-XtendedInput/releases). Please report problems with this fork here, not upstream.
+## Build
 
+Install Visual Studio C++ desktop tools with an x86 compiler and a Windows SDK.
+Clone the branch with its pinned submodule:
 
-Underground 2 rumble is available in the [Underground project](underground/README.md). This initial port targets U2 US 1.2 and includes the shared mixer, category controls and Xbox impulse trigger backend. Builds and automated integration checks pass; in-game controller testing remains pending. Underground 1 rumble is deferred. See the [U2 rumble notes](underground/RUMBLE.md) for installation, settings and validation.
+```bat
+git clone --branch unified-feedback --recurse-submodules https://github.com/koffiato/NFS-XtendedInput.git
+cd NFS-XtendedInput
+```
 
-# README
+From an **x86 Visual Studio developer command prompt**, run:
 
-# Need for Speed (MW & newer) - Xtended Input
+```bat
+build.cmd all
+```
 
-This is a plugin for NFS games by Black Box (MW and newer only) which brings XInput support to the games!
+To build one game, use its target from the support table, for example:
 
-Currently a work in progress, but fully usable and playable!
+```bat
+build.cmd UG2
+build.cmd MW
+```
 
-(NFS World currently at ALPHA stage!)
+Outputs go to `build/<target>/`. The root build script is the supported build
+entry point for this branch; the older Visual Studio projects remain in the
+repository.
 
-[Also available for Underground and Underground 2 here](https://github.com/xan1242/NFSU-XtendedInput)
+## Validation and development
 
-## Features
+All seven input builds and the UG2 executable integration harness passed at
+the initial unified checkpoint. To run the harness against your local US 1.2
+executable:
 
-- Automatic UI and text swapping for button icons - dynamically detects when you use either a keyboard or a controller
+```bat
+underground\tests\run.cmd "path\to\SPEED2.EXE"
+```
 
-- Choice between Xbox (One and 360), PS4/PS3 and Switch icons (made by [AeroWidescreen (Aero_)](https://github.com/AeroWidescreen) )
+The harness checks hook signatures, native curves, routing, lifecycle stops,
+pedal mappings, wheel fixtures, mixer behavior and shared settings. It mocks
+controller output and game callbacks; it does not launch the game.
 
-- Console control feature parity: restored debug camera analog control
+Carbon, Undercover, ProStreet and World still need feedback adapters.
+UG needs gameplay validation, and the shared refactor needs controller testing.
+See [UNIFIED.md](UNIFIED.md) for the code layout and data provenance.
 
-- (MW ONLY) Controller rumble - collisions, scrapes, kerbs & bumps, landings, off-road, brake lockup, wheelspin, slides, NOS, gear shifts and shift timing cues. Xbox One / Series impulse trigger rumble (automatic with a single controller)
+Report issues with this fork in
+[this repository](https://github.com/koffiato/NFS-XtendedInput/issues).
 
-- Re-done keyboard input code - not using DInput8 anymore. Now talks directly over Win32 (GetAsyncKeyState or GetKeyboardState)
+## Credits and license
 
-- Re-done mouse input - also using Win32 for mouse input (with auto hiding after 5 seconds)
+- Xan/Tenjoin (Lovro Plese) and Berkay Yigit - upstream XtendedInput projects.
+- Martin Penkava - the Most Wanted rumble implementation.
+- AeroWidescreen - controller button icons.
+- LINK/2012 - injector.
+- [NFSU2-SplitScreen research](https://github.com/mihaits/NFSU2-SplitScreen/blob/main/docs/input.md)
+  - reference material for the UG2 adapter.
+- [Xan's feedback research](https://github.com/xan1242/NFS-XtendedInput/issues/10#issuecomment-1181213340)
+  - interface and console-effect investigation.
 
-- Mouse look for debug camera
-
-- Optional - Win32 / OS mouse rendering with a custom cursor
-
-- All game actions are now rebindable
-
-## Button mappings & configuration
-
-NOTE: If the remaps don't have any effect, either disable UAC virtualization or run the game as Administrator! 
-
-You may remap the buttons in the `NFS_XtendedInput.usermap.ini` file found inside the `scripts\XtendedInputMaps\<your save name>` folder.
-
-For secondary maps, use the sections `[Events_Secondary]` for gamepads and `[EventsKB_Secondary]` for keyboards.
-
-Refer to the EventReference.txt file to see what's available.
-
-(PROSTREET ONLY) You may also freely remap inside the game's settings menu. This feature will become available in other games soon.
-
-You can configure other settings (such as deadzones, omni mode, etc.) in the `NFS_XtendedInput.ini` file found inside the `scripts` folder.
-
-`NFS_XtendedInput.default.ini` contains default mappings for when a new profile is created or settings reset to default in the remap menu.
-
-(MW ONLY) You cannot enter the "Controls" settings menu as it currently crashes the game, therefore it has been disabled. If you need to access it, disable this plugin.
-
-The button remaps will change the textures as well according to what you set it to (only for gamepads).
-
-Default mapping follows the Xbox 360 version of the games.
-
-Default controller button mappings are:
-
-### Ingame
-
-- Throttle: Right Trigger
-
-- Brake: Left Trigger
-
-- Steering: Left Stick X axis
-
-- E-Brake: A button
-
-- NOS: B button
-
-- Speedbreaker: X button
-
-- Look back: Left shoulder (Pro Street: Y)
-
-- Change camera: Right shoulder (Pro Street: X)
-
-- Shift up/down: Right Stick Y axis up/down
-
-- Car reset: View/Back
-
-- Pause/Unpause: Menu/Start
-
-- SMS/Map/Status/Engage Event: D-Pad
-
-(Carbon only)
-
-- Activate crew member: Y
-
-(Pro Street only)
-
-- Clutch: Left shoulder
-
-- Toggle arrow indicators: D-Pad Up
-
-- Toggle best line indicators: D-Pad Down
-
-- Toggle Leaderboards: D-Pad Left
-
-- Toggle minimap: D-Pad Right
-
-One note about the World Map screen: during this screen and only then, you can control the mouse cursor with the right analog stick (and click with the Left shoulder button). If you're using the OS mouse, it **will ** take control of it (and subequently confine the mouse wihin the game window).
-
-### FrontEnd
-
-Please note that some menus may not advertise their functions properly, but they should be fully functional and controllable like in the console versions.
-
-- Navigation: D-Pad & Left Analog Stick
-
-- Accept: A button
-
-- Back: B button
-
-- L1: Left Trigger
-
-- R1: Right Trigger
-
-- Car orbit: Right Stick
-
-- Button 0: Right shoulder
-
-- Button 1: Light shoulder
-
-- Button 2: Left Thumbstick (L3)
-
-- Button 3: Right Thumbstick (R3)
-
-- Button 4: X
-
-- Button 5: Y
-
-- Start: Start
-
-- Quit game: View/Back button
-
-### Debug camera
-
-You must use a controller on the second port to use it. Invoke it with a debug camera plugin like Extra Options.
-
-- Debug camera trigger: View/Back
-
-- Move forward: A button
-
-- Move backward: Y button
-
-- Move left: X button
-
-- Move right: B button
-
-- Move up: Left Shoulder
-
-- Move down: Right Shoulder
-
-- Look up/down/left/right: D-Pad
-
-- Turbo: Left Trigger
-
-- Super Turbo: Right Trigger
-
-- Movement (analog): Left Stick X/Y
-
-- Look (analog): Right stick X/Y
-
-- Drop car: Start
-
-## Keyboard controls
-
-They're slightly changed from default.
-
-By default it'll use GetAsyncKeyState (unbuffered) to read keys which might cause some issues with other hooks to the WndProc of this game, but will deliver the most optimal performance. A key's status is being read as it's being scanned in this mode.
-
-Second mode is GetKeyboardState (buffered). This will store all keys in a buffer and read them during `InputDevice::PollDevice()` (which starts right before eDisplayFrame). Use this if you have some issues.
-
-### Ingame
-
-- Throttle: Up
-
-- Brake: Down
-
-- Steering: Left/Right
-
-- E-Brake: Space (Pro Street: Right Control)
-
-- NOS: Left Alt
-
-- Speedbreaker: X
-
-- Look back: L
-
-- Change camera: C
-
-- Pull camera back: P
-
-- Shift up/down: Left Shift / Left Control
-
-- Pause: Escape
-
-- Quit game: Q
-
-- SMS: Tab
-
-- Map: M
-
-- Blacklist menu: B
-
-- Engage event: Enter (Undercover: Tab)
-
-(Carbon only)
-
-- Activate crew member: Right Control
-
-(Pro Street only)
-
-- Clutch: Space
-
-### FrontEnd
-
-They should be identical to the default game, with one exception: the navigation keys do not control the camera anymore. They were moved to their own buttons.
-
-- Navigation: Navigation keys (U/D/L/R)
-
-- Accept: Enter
-
-- Back: Escape
-
-- Left shoulder & Right shoulder buttons: 9 & 0
-
-- Car orbit: WASD
-
-- Button 0: Most Wanted: 3, Carbon: 5, Pro Street: 3
-
-- Button 1: Most Wanted: 5, Carbon: 3, Pro Street: 4
-
-- Button 2: Most Wanted: T, Pro Street: 5
-
-- Button 3: Most Wanted: R, Pro Street: M
-
-- Button 4: 2
-
-- Button 5: 1
-
-- Start: Most Wanted: 4, Carbon & newer: Space
-
-- Quit game: Q
-
-### Debug camera
-
-- Debug camera trigger: Subtract (minus key on numpad)
-
-- Move forward: W
-
-- Move backward: S
-
-- Move left: A
-
-- Move right: D
-
-- Move up: Space
-
-- Move down: Left Control
-
-- Look up: I
-
-- Look down: K
-
-- Look left: J
-
-- Look right: L
-
-- Turbo: Right Shift
-
-- Super Turbo: F
-
-- Drop car: 5
-
-## Rumble (MW only)
-
-Rumble is driven by the game's own force feedback events (which the PC version leaves unused), extended with suspension and tyre data. Configure it in the `[Rumble]` section of `NFS_XtendedInput.ini`:
-
-| Setting | Default | Description |
-|---|---|---|
-| `Enabled` | 1 | Turns all rumble on or off. The game's own (hidden) vibration setting is ignored |
-| `Intensity` | 1.0 | Overall strength (0.0 - 2.0) |
-| `LeftMotorScale` / `RightMotorScale` | 1.0 | Heavy (left) and light (right) motor strength (0.0 - 2.0) |
-| `SwapMotors` | 0 | Swaps the left and right motors |
-| `Impacts` | 1.0 | Hits, scrapes, spike strips and blown tyres (0.0 - 2.0) |
-| `Surface` | 1.0 | Kerbs, bumps, landings and off-road (0.0 - 2.0) |
-| `Tyres` | 1.0 | Lockup, wheelspin and slides (0.0 - 2.0) |
-| `Car` | 1.0 | NOS, gear shifts and engine (0.0 - 2.0) |
-| `GearShift` | 2 | Gear change knock: 0 = off, 1 = low, 2 = medium, 3 = strong, 4 = max |
-| `ImpulseTriggers` | 2 | Xbox One / Series trigger rumble (Windows 10+): 0 = off, 1 = always, 2 = auto |
-| `TriggerIntensity` | 1.0 | Strength of the trigger rumble (0.0 - 2.0) |
-| `TriggerPedalScaling` | 1 | 1 = trigger rumble grows with how far the pedal is pressed, 0 = fixed strength |
-| `Telemetry` | 0 | 1 = logs the rumble inputs to `scripts\NFS_XtendedInput_Rumble.log` (for tuning, grows quickly) |
-
-Impulse triggers put brake lockup on LT, and wheelspin, power slides, NOS and gear shifts on RT. In auto mode they are used only while a single Xbox controller is connected and Steam Input is off; otherwise you get plain rumble on your own controller. With `1`, every connected Xbox controller rumbles.
-
-Rumble stops when the game is paused, loses focus or closes. Long continuous effects (drifts, off-road, wheelspin) slowly fade to 60% so they don't numb your hands, and recover after 2.5 s of quiet; knocks and hits always play at full strength.
-
-## Windows 7 compatibility
-
-To use in Windows 7 (and maybe Vista & XP), you need to use the "Win7" builds.
-
-Requirements are:
-
-- [Xbox 360 Controller Driver](https://archive.org/details/xbox-360-64-engwin-7)
-
-- [DirectX Runtime](https://www.microsoft.com/en-us/download/details.aspx?id=8109) (for XInput 9.1.0)
-
-- [Visual C++ Redistributable](https://aka.ms/vs/17/release/vc_redist.x86.exe) (2019 are used by ASI Loader and XtendedInput, both are included in the installation package)
-
-This was tested on a Pentium 3 machine running Windows 7 and it is fully working.
-
-These builds are made with SSE instructions enabled (and other extensions disabled), so it should also work on Athlon XP as well.
-
-The release package comes with a special build of ASI loader which is made without any CPU extensions required. It is also patched to work in Windows XP.
-
-These builds may or may not work in Windows XP with some hacks, YMMV as it wasn't tested. Follow the instructions found [here](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist?view=msvc-170) to find out more. TLDR: "The last version of the Visual C++ Redistributable that works on Windows XP shipped in Visual Studio 2019 version 16.7 (file versions starting with **14.27**)."
-
-## TODO list:
-
-- Check the top of the source file
-
-- Currently KILLS Direct Input, beware
-
-# Credits
-
-- AeroWidescreen - for the amazing button icons!
-
-- LINK/2012 - injector
-
-Rumble support was developed with AI assistance (Claude Code). Testing and tuning were done in-game by Martin Penkava.
+The rumble work and unified refactor include AI-assisted development.
+The project is distributed under the [MIT license](LICENSE); bundled
+dependencies retain their own licenses.
