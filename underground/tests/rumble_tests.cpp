@@ -12,8 +12,13 @@
 #include "../includes/injector/injector.hpp"
 
 #define MAX_CONTROLLERS 4
-#define GAME_HWND_ADDR 0x00870990
-#define GAMEFLOWMANAGER_STATUS_ADDR 0x008654A4
+// A private image buffer allows the harness to run at any Windows load address.
+// Only the feedback data and hook bytes are copied; game callbacks are mocked.
+#pragma section(".game", read, write)
+__declspec(allocate(".game")) char gameArena[0x600000] = {};
+#define RUMBLE_IMAGE_BASE ((uintptr_t)gameArena)
+#define GAME_HWND_ADDR (RUMBLE_IMAGE_BASE + 0x00470990)
+#define GAMEFLOWMANAGER_STATUS_ADDR (RUMBLE_IMAGE_BASE + 0x004654A4)
 #define JOY_EVENT_THROTTLE 0x91
 #define JOY_EVENT_THROTTLE_ANALOG 0x92
 #define JOY_EVENT_THROTTLE_ANALOG_ALTERNATE 0x93
@@ -51,11 +56,6 @@ struct CIniReader {
 #define XInputGetState TestGetState
 #include "../NFSU_XtendedInput_Rumble.h"
 
-// Reserve the game's address range inside this test image, before Windows can
-// place heaps there. The harness's own code lives below the copied hook sites.
-#pragma section(".game", read, write)
-__declspec(allocate(".game")) char gameArena[0x600000] = {};
-
 void LoadImage(const char* path) {
   std::ifstream stream(path, std::ios::binary);
   assert(stream.good());
@@ -63,22 +63,35 @@ void LoadImage(const char* path) {
   auto* dos = (IMAGE_DOS_HEADER*)image.data();
   auto* nt = (IMAGE_NT_HEADERS*)(image.data()+dos->e_lfanew);
   assert(nt->OptionalHeader.ImageBase == 0x400000);
-  assert((uintptr_t)gameArena < RUMBLE_PACKAGE_ACTIVE_ADDR &&
-         (uintptr_t)gameArena+sizeof(gameArena) > 0x00940000);
+  assert(nt->OptionalHeader.SizeOfImage <= sizeof(gameArena));
   DWORD oldProtect;
   assert(VirtualProtect(gameArena,sizeof(gameArena),PAGE_EXECUTE_READWRITE,&oldProtect));
   auto* sec = IMAGE_FIRST_SECTION(nt);
   for (int i = 0; i < nt->FileHeader.NumberOfSections; ++i) {
     if (!strcmp((const char*)sec[i].Name,".rdata") || !strcmp((const char*)sec[i].Name,".data"))
-      memcpy((void*)(0x400000+sec[i].VirtualAddress),image.data()+sec[i].PointerToRawData,sec[i].SizeOfRawData);
+      memcpy(gameArena+sec[i].VirtualAddress,image.data()+sec[i].PointerToRawData,sec[i].SizeOfRawData);
   }
   uintptr_t sites[] = {RUMBLE_EVENT_ADDR,RUMBLE_UPDATE_CALL,RUMBLE_UPDATE_ADDR,
     RUMBLE_SETTING_ADDR,RUMBLE_COLLISION_SETTING_ADDR-7,RUMBLE_PACKAGE_ACTIVE_ADDR};
   for (uintptr_t site : sites) {
     for (int i = 0; i < nt->FileHeader.NumberOfSections; ++i) {
-      uintptr_t start = 0x400000+sec[i].VirtualAddress;
+      uintptr_t start = RUMBLE_IMAGE_BASE+sec[i].VirtualAddress;
       if (site >= start && site+32 <= start+sec[i].SizeOfRawData)
         memcpy((void*)site,image.data()+sec[i].PointerToRawData+site-start,32);
+    }
+  }
+  // The copied event records contain pointers into the original fixed image.
+  // Rebase only those data pointers; copied instructions are never executed.
+  uintptr_t delta = RUMBLE_IMAGE_BASE - nt->OptionalHeader.ImageBase;
+  std::vector<RumbleNativeCurve*> curves;
+  for (int i = 0; i < RUMBLE_EVENT_COUNT; ++i) {
+    auto& event = ((RumbleNativeEvent*)RUMBLE_EVENT_TABLE_ADDR)[i];
+    event.params = (const float*)((uintptr_t)event.params + delta);
+    auto* curve = (RumbleNativeCurve*)((uintptr_t)event.curve + delta);
+    event.curve = curve;
+    if (std::find(curves.begin(),curves.end(),curve) == curves.end()) {
+      curve->points = (const RumbleEnvelopePoint*)((uintptr_t)curve->points + delta);
+      curves.push_back(curve);
     }
   }
 }

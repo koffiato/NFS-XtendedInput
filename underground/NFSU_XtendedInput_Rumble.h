@@ -336,16 +336,20 @@ struct RumbleMixer {
 // Underground 2 US 1.2. These sites are validated together before any rumble write.
 // Event dispatcher: cdecl(type, port, amount). The original only queues console
 // motor curves; steering-wheel forces have a separate path and remain intact.
-const uintptr_t RUMBLE_EVENT_ADDR = 0x005727B0;
-const uintptr_t RUMBLE_UPDATE_CALL = 0x005814AD;
-const uintptr_t RUMBLE_UPDATE_ADDR = 0x00572610;
-const uintptr_t RUMBLE_SETTING_ADDR = 0x005F6397;
-const uintptr_t RUMBLE_COLLISION_SETTING_ADDR = 0x005A9A24;
-const uintptr_t RUMBLE_EVENT_TABLE_ADDR = 0x007FB7D8;
-const uintptr_t RUMBLE_PLAYERS_ADDR = 0x008900AC;
-const uintptr_t RUMBLE_PLAYER_COUNT_ADDR = 0x008900BC;
-const uintptr_t RUMBLE_SIM_DT_ADDR = 0x00865154;
-const uintptr_t RUMBLE_PACKAGE_ACTIVE_ADDR = 0x0052CF60;
+// The test harness supplies its own image buffer; the plugin keeps U2's fixed base.
+#ifndef RUMBLE_IMAGE_BASE
+#define RUMBLE_IMAGE_BASE 0x00400000u
+#endif
+const uintptr_t RUMBLE_EVENT_ADDR = RUMBLE_IMAGE_BASE + 0x001727B0;
+const uintptr_t RUMBLE_UPDATE_CALL = RUMBLE_IMAGE_BASE + 0x001814AD;
+const uintptr_t RUMBLE_UPDATE_ADDR = RUMBLE_IMAGE_BASE + 0x00172610;
+const uintptr_t RUMBLE_SETTING_ADDR = RUMBLE_IMAGE_BASE + 0x001F6397;
+const uintptr_t RUMBLE_COLLISION_SETTING_ADDR = RUMBLE_IMAGE_BASE + 0x001A9A24;
+const uintptr_t RUMBLE_EVENT_TABLE_ADDR = RUMBLE_IMAGE_BASE + 0x003FB7D8;
+const uintptr_t RUMBLE_PLAYERS_ADDR = RUMBLE_IMAGE_BASE + 0x004900AC;
+const uintptr_t RUMBLE_PLAYER_COUNT_ADDR = RUMBLE_IMAGE_BASE + 0x004900BC;
+const uintptr_t RUMBLE_SIM_DT_ADDR = RUMBLE_IMAGE_BASE + 0x00465154;
+const uintptr_t RUMBLE_PACKAGE_ACTIVE_ADDR = RUMBLE_IMAGE_BASE + 0x0012CF60;
 const int RUMBLE_EVENT_COUNT = 12;
 const int RUMBLE_PORT_COUNT = 2;
 
