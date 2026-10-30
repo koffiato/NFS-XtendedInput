@@ -22,9 +22,10 @@ input support; a passing build does not establish in-game compatibility.
 | ProStreet | `PS` | [Config-ProStreet](data/Config-ProStreet) | Experimental native PC adapter; live data with temporary MW effect tuning |
 | World | `W` | [Config-World](data/Config-World) | Not implemented; upstream input support remains experimental |
 
-No new in-game or controller hardware validation has been completed for this
-branch. UG/UG2/PS check their added rumble hook signatures before patching; those
-checks do not validate the upstream input hooks.
+User testing confirms ProStreet lockup/wheelspin feedback and, after the
+telemetry/collision fixes, driving with telemetry enabled and wall impacts.
+Broader gameplay/controller validation remains pending. UG/UG2/PS validate
+their added rumble signatures; these checks do not validate upstream input hooks.
 
 This branch targets **Windows 10/11 and 32-bit game executables**.
 The unified build does not produce Windows 7 variants.

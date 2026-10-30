@@ -2,12 +2,11 @@
 
 ProStreet now uses the same feedback engine, settings, mixer, envelopes and
 XInput/Windows.Gaming.Input output as Most Wanted. The supplied ProStreet INI
-enables it. This is experimental support: the native interface was checked
-against the user's installed running game, but controller feel and a complete
-race have not been tested with the current revision. User testing of the
-first build confirmed lockup/wheelspin output but found a telemetry crash and
-missing impacts. This revision corrects the road argument order and routes
-collisions before the stock filters; another in-game check is pending.
+enables it. The native interface was checked against the user's installed
+running game. User testing confirmed lockup/wheelspin feedback, then confirmed
+that the corrected road argument order and collision routing allow driving
+with telemetry enabled and wall-impact rumble. This remains experimental:
+broader race/controller coverage and original console fidelity are pending.
 
 ## Live data and temporary values
 
