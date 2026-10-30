@@ -56,9 +56,11 @@ void RumbleInstallPatches() {
     OutputDebugStringA("[XtendedInput] ProStreet rumble disabled: unsupported feedback interface.\n");
     return;
   }
-  // Preserve the null-settings and pause checks; bypass only the hidden
-  // vibration byte in the save. The INI remains the feedback switch.
-  injector::MakeNOP(0x004D145E, 6, true);
+  // The stock producer drops contacts before calling IFeedback (including
+  // contacts where the player is B). Route both local-player listeners through
+  // the adapter; foreign feedback interfaces still call the original producer.
+  injector::WriteMemory<uintptr_t>(0x009FA07C, (uintptr_t)&RumblePSCollisionHook, true);
+  injector::WriteMemory<uintptr_t>(0x009FA324, (uintptr_t)&RumblePSCollisionHook, true);
 #else
   // DoFFB skips UpdateShifting for cars with IEngineDamage (jumps at 0x6EE7F0 / 0x6EE7FF to 0x6EE836), which includes
   // player cars. Point both at the shifting code (0x6EE801); it only uses locals valid on both paths.
@@ -273,6 +275,7 @@ void RumbleTelemetryPrintf(const char* fmt, ...) {
 #ifdef GAME_PROSTREET
     fprintf(RumbleTelemetryFile, "# PS native PC data; effect envelopes/tuning temporarily shared with MW; Xbox 360 curves not decoded\n");
     fprintf(RumbleTelemetryFile, "# S,id,collection,PS-live,FFB_ROLL/SKID/SLIP[4 x 8]; '-' means no native attribute\n");
+    fprintf(RumbleTelemetryFile, "# P,flags,objectA,objectB,localHandle (raw local-listener contact, before ownership filtering)\n");
 #else
     fprintf(RumbleTelemetryFile, "# S,id,collection,name,renderNoise[freq amp minSpeed maxSpeed],wheelEffect[freq intensity],friction[6],FFB_ROLL/SKID/SLIP[4 x 8]\n");
 #endif
@@ -321,7 +324,10 @@ void RumbleTelemetryDumpSurfaceUnsafe(int id, const void* surface) {
 
 // returns the surface's id in the log, dumping its data the first time it is seen
 int RumbleTelemetrySurfaceId(const void* surface) {
-  const void* collection = RumbleSurfaceCollection(surface);
+  const void* collection = NULL;
+  __try { collection = surface ? RumbleSurfaceCollection(surface) : NULL; }
+  __except (EXCEPTION_EXECUTE_HANDLER) { return -1; }
+  if (!collection) return -1;
   for (int i = 0; i < RumbleSurfaceCount; i++)
     if (RumbleSurfaces[i] == collection) return i;
   if (RumbleSurfaceCount >= RUMBLE_MAX_SURFACES) return -1;
@@ -495,6 +501,10 @@ static_assert(sizeof(COLLISION_INFO) == 0x80, "COLLISION_INFO size mismatch");
 #pragma pack(push, 4)
 #pragma warning(push)
 #pragma warning(disable : 4121)  // intentional, see above
+class IFeedback;
+#ifdef GAME_PROSTREET
+IFeedback* RumblePSDevices[MAX_CONTROLLERS] = {};
+#endif
 class IFeedback {
  public:
   void* mOwnerList;  // the owning device's UTL::COM::Object::_IList (the game reads it at +4)
@@ -571,6 +581,9 @@ class IFeedback {
   int mLastTriggerRight;
 
   void Init(void* ownerList, int deviceIndex) {
+#ifdef GAME_PROSTREET
+    if (deviceIndex >= 0 && deviceIndex < MAX_CONTROLLERS) RumblePSDevices[deviceIndex] = this;
+#endif
     mOwnerList      = ownerList;
     mDeviceIndex    = deviceIndex;
     mPad            = deviceIndex;
@@ -593,6 +606,14 @@ class IFeedback {
     mPrevEngineBlown    = false;
     mPrevShiftPotential = SHIFT_POTENTIAL_NONE;
     ClearEffects();
+  }
+
+  void Detach() {
+    if (bRumbleEnabled) Stop();
+#ifdef GAME_PROSTREET
+    if (mDeviceIndex >= 0 && mDeviceIndex < MAX_CONTROLLERS && RumblePSDevices[mDeviceIndex] == this)
+      RumblePSDevices[mDeviceIndex] = NULL;
+#endif
   }
 
   void ClearEffects() {
@@ -1012,7 +1033,7 @@ class IFeedback {
     AddSkid(mWheelArg < 2, surface, fabsf(skid));
   }
   virtual void UpdateSteering(float /*steering*/) {} // wheel force, not controller rumble
-  virtual void UpdateRoadNoise(unsigned int wheel, const SimSurface& surface, float speed) {
+  virtual void UpdateRoadNoise(unsigned int wheel, float speed, const SimSurface& surface) {
     mWheelArg = wheel < RUMBLE_MAX_WHEELS ? (int)wheel : RUMBLE_MAX_WHEELS;
     if (mWheelArg == RUMBLE_MAX_WHEELS) return;
     mRoadWave.Add(&surface, ATTRIB_KEY_FFB_ROLL, fabsf(speed));
@@ -1094,7 +1115,7 @@ class IFeedback {
     if (!sliding && _finite(velocityChange.x) && _finite(velocityChange.y) && _finite(velocityChange.z)) {
       float change = Length(&velocityChange.x);
       float estimate = fabsf(cinfo.closingVel[0]*cinfo.normal[0] + cinfo.closingVel[1]*cinfo.normal[1] + cinfo.closingVel[2]*cinfo.normal[2]);
-      if (change >= estimate * RUMBLE_COLLISION_MIN_MEASURED) { dv = change; measured = true; }
+      if (change > 0.0f && change >= estimate * RUMBLE_COLLISION_MIN_MEASURED) { dv = change; measured = true; }
     }
 #endif
     float strength = sliding ? 0.0f : CollisionMagnitude(cinfo, iamA, dv);
@@ -1135,3 +1156,41 @@ class IFeedback {
 #pragma warning(pop)
 #pragma pack(pop)
 static_assert(sizeof(void*) == 4, "32-bit only");
+
+#ifdef GAME_PROSTREET
+// Native listener this is LocalPlayer +0x4C (feedback at this+4). Its context
+// interface at this-0x28 supplies GetSimable in slot 3, as the original producer
+// does at 0x4D1466. Compare handles for BOTH contact participants before routing.
+void(__thiscall* RumblePSOriginalCollision)(void*, const COLLISION_INFO&) =
+    (void(__thiscall*)(void*, const COLLISION_INFO&))0x004D13F0;
+
+bool RumblePSCollisionTarget(void* listener, const COLLISION_INFO& hit, IFeedback*& feedback, bool& iamA) {
+  __try {
+    feedback = *(IFeedback**)((char*)listener + 4);
+    bool ours = false;
+    for (int i = 0; i < MAX_CONTROLLERS; ++i)
+      if (feedback && feedback == RumblePSDevices[i]) ours = true;
+    if (!ours) return false;
+    void* simable = RumbleVCall<void*>((char*)listener - 0x28, 0x0C);
+    if (!simable) { feedback = NULL; return true; }
+    void* handle = *(void**)((char*)simable + 8); // ISimable::_mHandle
+    if (bRumbleTelemetry)
+      RumbleTelemetryPrintf("P,0x%02X,%p,%p,%p\n", hit.flags & 0xFF, hit.objA, hit.objB, handle);
+    if (!handle || (handle != hit.objA && handle != hit.objB)) { feedback = NULL; return true; }
+    iamA = handle == hit.objA;
+    return true;
+  } __except (EXCEPTION_EXECUTE_HANDLER) { feedback = NULL; return false; }
+}
+
+void __fastcall RumblePSCollisionHook(void* listener, void*, const COLLISION_INFO& hit) {
+  IFeedback* feedback = NULL;
+  bool iamA = false;
+  if (!RumblePSCollisionTarget(listener, hit, feedback, iamA)) {
+    RumblePSOriginalCollision(listener, hit);
+    return;
+  }
+  // A local listener can survive a vehicle transition while old contacts drain.
+  if (!feedback || !bRumbleEnabled || !bRumbleAppActive || feedback->mPaused) return;
+  feedback->ReportCollision(hit, iamA, RumblePSVector{});
+}
+#endif

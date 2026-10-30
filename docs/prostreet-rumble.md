@@ -4,7 +4,10 @@ ProStreet now uses the same feedback engine, settings, mixer, envelopes and
 XInput/Windows.Gaming.Input output as Most Wanted. The supplied ProStreet INI
 enables it. This is experimental support: the native interface was checked
 against the user's installed running game, but controller feel and a complete
-race have not been tested with this plugin.
+race have not been tested with the current revision. User testing of the
+first build confirmed lockup/wheelspin output but found a telemetry crash and
+missing impacts. This revision corrects the road argument order and routes
+collisions before the stock filters; another in-game check is pending.
 
 ## Live data and temporary values
 
@@ -26,8 +29,11 @@ and no executable, memory snapshot or game data is shipped in this repository.
 
 Compression-derived kerb/bumps and the damaged-tyre surface's separate impact
 category remain pending. Ground impacts received through the native collision
-callback still produce landing feedback. PS's native collision producer filters
-the contacts it reports; this adapter does not synthesize missing collisions.
+callback still produce landing feedback. The adapter routes native local-player
+collision listeners before the stock
+producer's participant-A lookup and velocity/profile filters. It checks the
+local simable handle against both A and B and uses the existing MW impact
+math. Other feedback devices keep the original collision producer.
 
 ## Native interface
 
@@ -49,7 +55,7 @@ diagnostic; it does not validate or change upstream input-hook compatibility.
 | Slip | Slot 8: surface reference and two floats |
 | Drift skid | Slot 16: surface reference and three floats |
 | Steering force | Slot 17, consumed without a controller effect |
-| Road | Slot 18: wheel index, surface reference, angular speed |
+| Road | Slot 18: wheel index, angular speed, surface reference |
 | Collision | Slot 19: info reference, bool, 12-byte velocity vector by value |
 | Controller type | Slot 20: native PC default |
 
@@ -60,8 +66,10 @@ semantics have not been verified remain no-ops with the native stack size.
 PS surface collection/layout pointers are at `+0/+4`, unlike MW's `+4/+8`.
 The vehicle reader uses PS interface handles and accessors, not MW offsets.
 Transmission state supplies shift feedback even when the native engine-damage
-path omits UpdateShifting. The only new code patch bypasses the save's hidden
-collision-vibration byte at `0x4D145E`; its null-settings and pause checks remain.
+path omits UpdateShifting. The two local-player collision listener entries at
+`0x9FA07C` and `0x9FA324` route through the adapter. Only registered feedback
+instances receive these events; pause/focus stops and contact ownership checks
+still apply. Native steering-wheel feedback keeps the original handler.
 
 The input device also preserves PS's extra slot before StartVibration and the
 native battery-query/noise-return signatures. Its custom remapping method
@@ -71,7 +79,8 @@ follows the native slots and remains called through the existing remapping hook.
 
 Set `[Rumble] Telemetry = 1` to write `scripts/NFS_XtendedInput_Rumble.log`.
 `S` rows record native surface waves; `T` rows include live vehicle/wheel and
-callback values; `C` rows record collisions. PS surface rows use `PS-live`
+callback values; `P` rows record raw local-listener contact participants and
+`C` rows record the contacts routed into rumble. PS surface rows use `PS-live`
 instead of interpreting MW's surface-name/layout fields. Disable telemetry
 after capturing a short race to avoid an unnecessarily large log.
 
@@ -86,7 +95,10 @@ The harness mocks controller output and native accessors. It exercises calls
 through the actual compiled vtable, including stack cleanup for skid/drift/
 collision, live curve sampling, player-list transitions, vehicle accessors,
 interface registration/routing, pause, focus loss, missed ticks and malformed
-data. Actions runs it with runtime stack checks. Local validation also ran the
+data. An assembly replay follows the native road call's push/getter sequence,
+including its angular-speed-before-surface ordering; telemetry is enabled and
+written/read during that test. Collision fixtures include local car A/B,
+unrelated contacts, pause and original-handler forwarding. Actions runs it with runtime stack checks. Local validation also ran the
 signature checks against a read-only snapshot of the installed running game.
 These checks do not establish in-game stability or original console fidelity.
 

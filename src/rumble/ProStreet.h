@@ -11,6 +11,8 @@ uintptr_t RumblePSAddress(uintptr_t address) { return RUMBLE_PS_IMAGE_BASE + add
 
 struct RumblePSVector { float x, y, z; };
 static_assert(sizeof(RumblePSVector) == 12, "PS collision argument size");
+struct COLLISION_INFO;
+void __fastcall RumblePSCollisionHook(void*, void*, const COLLISION_INFO&);
 
 bool RumbleValidateProStreetUnsafe() {
   const unsigned int feedback[] = {
@@ -29,6 +31,8 @@ bool RumbleValidateProStreetUnsafe() {
   const unsigned char roadCall[] = {0x83,0xC0,0x48};
   const unsigned char collisionCall[] = {0x8B,0x53,0x4C};
   return *(unsigned int*)RumblePSAddress(0x98BE38) == 0x6C7F20 && // InputDevice slot 9
+      *(unsigned int*)RumblePSAddress(0x9FA07C) == 0x4D13F0 &&
+      *(unsigned int*)RumblePSAddress(0x9FA324) == 0x4D13F0 &&
       !memcmp((void*)RumblePSAddress(0x6C7F20), getter, sizeof(getter)) &&
       !memcmp((void*)RumblePSAddress(ATTRIB_GETATTRIBPTR_ADDR), attrib, sizeof(attrib)) &&
       !memcmp((void*)RumblePSAddress(UTL_ILIST_FIND_ADDR), find, sizeof(find)) &&

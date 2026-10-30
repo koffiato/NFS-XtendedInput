@@ -1133,7 +1133,7 @@ class InputDevice {
   }
   virtual void* dtor(bool something) {
 #if defined(GAME_MW) || defined(GAME_PROSTREET)
-    if (bRumbleEnabled) mFFB.Stop();
+    mFFB.Detach();
 #endif
     delete (this);
     return this;

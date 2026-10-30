@@ -32,11 +32,13 @@ void __fastcall TestListAdd(void* owner, void*, void* handle, void* iface) {
 void TestProfile() {}
 
 RumbleWaveRecord record = {5, 0.1f, 0.2f, 0, 10, 0.2f, 0.4f, 100};
-const void* __fastcall TestAttribute(const void*, void*, unsigned int, unsigned int index) {
+const void* expectedSurface = NULL;
+const void* __fastcall TestAttribute(const void* surface, void*, unsigned int, unsigned int index) {
+  assert(surface == expectedSurface); // also detects a float being misread as a surface
   return index == 0 ? &record : NULL;
 }
 
-struct NativeInterface { void** vtable; void* owner; };
+struct NativeInterface { void** vtable; void* owner; void* handle; };
 void* playerTable[16] = {}, *bodyTable[12] = {}, *suspensionTable[32] = {}, *inputTable[9] = {}, *transmissionTable[6] = {};
 NativeInterface simable = {}, player = {playerTable}, body = {bodyTable}, suspension = {suspensionTable},
                 input = {inputTable}, transmission = {transmissionTable};
@@ -85,6 +87,70 @@ void TestVehicle() {
   *(int*)RumblePSAddress(GAMEFLOWMANAGER_STATUS_ADDR) = 3;
 }
 
+// Replay the producer's ordering at 0x4D0FB9..0x4D105A: it pushes the surface
+// BEFORE calling GetWheelAV. That getter consumes only the wheel index, leaving
+// surface on the stack; the producer then pushes angular speed and wheel index.
+// A typed call with the adapter's own declaration would hide an ordering bug.
+__declspec(naked) void ReplayNativeRoad(void* feedback, unsigned int wheel, const void* surface) {
+  __asm {
+    push ebx
+    push esi
+    push edi
+    mov ebx, [esp+16]
+    mov edi, [esp+20]
+    lea esi, suspension
+    push [esp+24]
+    push edi
+    mov ecx, esi
+    mov eax, [esi]
+    call [eax+0x7C]
+    mov edx, [ebx]
+    push ecx
+    fstp dword ptr [esp]
+    push edi
+    mov ecx, ebx
+    call [edx+0x48]
+    pop edi
+    pop esi
+    pop ebx
+    ret
+  }
+}
+
+int originalCollisions = 0;
+void __fastcall OriginalCollision(void*, void*, const COLLISION_INFO&) { ++originalCollisions; }
+void TestCollisionListener(IFeedback& f) {
+  void* contextTable[4] = {}; contextTable[3] = GetSimable;
+  alignas(4) char listenerStorage[0x30] = {};
+  *(void***)listenerStorage = contextTable;
+  void* listener = listenerStorage+0x28;
+  *(IFeedback**)((char*)listener+4) = &f;
+  simable.handle = (void*)0x1234;
+  RumblePSOriginalCollision = (decltype(RumblePSOriginalCollision))OriginalCollision;
+  COLLISION_INFO hit = {}; hit.flags = 2; hit.normal[0] = 1; hit.closingVel[0] = 20;
+  // Reproduce the case dropped by the stock objA lookup: world A, local car B.
+  hit.objB = simable.handle;
+  f.ClearEffects(); f.ResumeEffects();
+  RumblePSCollisionHook(listener, NULL, hit);
+  assert(f.mPulseLeft.GetValue() > 0 && f.mPulseRight.GetValue() > 0);
+  f.EndUpdate();
+  assert(sent[0].wLeftMotorSpeed > 0 && sent[0].wRightMotorSpeed > 0);
+  assert(originalCollisions == 0);
+  // The reversed participant order works too.
+  hit.objA = simable.handle; hit.objB = NULL; f.ClearEffects();
+  RumblePSCollisionHook(listener, NULL, hit);
+  assert(f.mPulseRight.GetValue() > 0);
+  hit.objA = (void*)0x999; f.ClearEffects();
+  RumblePSCollisionHook(listener, NULL, hit);
+  assert(f.mPulseRight.GetValue() == 0); // stale/unrelated contact
+  hit.objA = simable.handle; f.PauseEffects();
+  RumblePSCollisionHook(listener, NULL, hit);
+  assert(f.mPulseRight.GetValue() == 0);
+  *(void**)((char*)listener+4) = NULL;
+  RumblePSCollisionHook(listener, NULL, hit);
+  assert(originalCollisions == 1); // foreign/native devices keep the original handler
+}
+
 void MapFixture(const char* path) {
   if (!path) return;
   std::ifstream stream(path, std::ios::binary);
@@ -127,15 +193,18 @@ int main(int argc, char** argv) {
   bRumbleEnabled = true;
 
   IFeedback& f = device.mFFB;
-  char surface[16] = {}; // test reader supplies native data without dereferencing it
+  void* surface[4] = {(void*)0x1234}; // PS collection at +0; test reader supplies its records
+  expectedSurface = surface;
+  assert(fopen_s(&RumbleTelemetryFile, "build/tests/prostreet-telemetry.log", "w+") == 0);
+  bRumbleTelemetry = true;
   RumbleVCall<void>(&f, 0x08); // Resume
   RumbleVCall<void>(&f, 0x10); // Begin
-  RumbleVCall<void>(&f, 0x48, 2u, (void*)surface, 50.0f); // PS road first, explicit wheel index
+  ReplayNativeRoad(&f, 2, surface); // native pushes wheel, angular speed, surface
   RumbleVCall<void>(&f, 0x20, (void*)surface, 12.0f, 1.0f); // surface + two floats
   RumbleVCall<void>(&f, 0x1C, (void*)surface, 15.0f, 1.0f, 1.0f, 4.0f); // five arguments
   assert(f.mWheelSkid[2] == 15 && f.mWheelSkid[0] == 0);
   assert(RumbleTelemetry.fSlip[2] == 12);
-  assert(f.mRoadWave.fFrequency[0] == 7.5f); // live native curve wins
+  assert(f.mRoadWave.fFrequency[0] == 10.0f); // GetWheelAV(2)=102 saturates the live curve
   RumbleVCall<void>(&f, 0x40, (void*)surface, 18.0f, 1.0f, 1.0f); // drift skid
   assert(f.mWheelSkid[2] == 18);
   RumbleVCall<void>(&f, 0x2C, true, 1.0f); // NOS
@@ -151,6 +220,8 @@ int main(int argc, char** argv) {
   RumbleVCall<void>(&f, 0x4C, &hit, true, delta); // 20 stack bytes, including by-value vector
   assert(f.mPulseLeft.GetValue() > 0 && f.mPulseRight.GetValue() > 0);
   assert(RumbleVCall<int>(&f, 0x50) == 5); // final slot returns an int
+  TestCollisionListener(f);
+  f.ResumeEffects();
   f.Send(30000, 20000);
   bRumbleAppActive = false; f.Watchdog();
   assert(f.mPaused && !sent[0].wLeftMotorSpeed && !sent[0].wRightMotorSpeed);
@@ -160,9 +231,16 @@ int main(int argc, char** argv) {
   assert(f.mPaused && !sent[0].wLeftMotorSpeed && !sent[0].wRightMotorSpeed);
 
   record.fAmplitudeMin = (std::numeric_limits<float>::quiet_NaN)();
-  f.BeginUpdate(); f.UpdateRoadNoise(0, *(SimSurface*)surface, 50);
+  f.BeginUpdate(); f.UpdateRoadNoise(0, 50, *(SimSurface*)surface);
   assert(f.mRoadWave.fFrequency[0] == 0); // malformed live records cannot poison output
   assert(!RumbleGetAttributePointer(NULL, ATTRIB_KEY_FFB_ROLL, 0));
+  assert(RumbleTelemetrySurfaceId(NULL) == -1);
+  assert(RumbleTelemetrySurfaceId((void*)1) == -1);
+  RumbleTelemetryFlush(); rewind(RumbleTelemetryFile);
+  char log[8192] = {}; fread(log,1,sizeof(log)-1,RumbleTelemetryFile);
+  assert(strstr(log,"PS-live") && strstr(log,"T,") && strstr(log,"C,"));
+  fclose(RumbleTelemetryFile); RumbleTelemetryFile = NULL; bRumbleTelemetry = false;
+  f.Detach(); assert(RumblePSDevices[0] == NULL);
   delete[] device.fDeviceScalar;
   puts("ProStreet callback ABI, live curves, routing and lifecycle checks passed.");
 }
