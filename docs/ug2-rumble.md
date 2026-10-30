@@ -72,7 +72,7 @@ with C++ desktop tools and a Windows SDK. From the repository root:
 
 ```bat
 build.cmd UG2
-underground\tests\run.cmd "path\to\SPEED2.EXE"
+tests\ug2.cmd "path\to\SPEED2.EXE"
 ```
 
 The test harness maps a user-supplied executable into a separate test process,

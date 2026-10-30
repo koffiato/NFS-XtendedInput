@@ -10,14 +10,13 @@ implementation and where its configuration data came from.
 | --- | --- |
 | `src/Unified.cpp` | Build entry point for all seven targets |
 | `src/Main.hpp` | MW and newer input engine |
-| `underground/dllmain.cpp` | UG/UG2 input engine |
+| `src/ug/Input.cpp` | UG/UG2 input engine |
 | `src/rumble/Core.h` | Categories, gains, envelopes, ramps, shift presets, fatigue, ducking and mixing |
 | `src/rumble/Output.h` | Timing, motor quantization and Windows.Gaming.Input backend |
 | `src/rumble/Settings.h` | Shared bounded settings reader |
 | `src/rumble/Underground.h` | UG/UG2 native events, game-specific hooks, routing and lifecycle |
 | `src/NFS_XtendedInput_Rumble.h` | Shared MW/PS feedback engine with game-specific interface slots and vehicle/surface access |
 | `src/rumble/ProStreet.h` | ProStreet native interface signatures and collision argument layout |
-| `underground/NFSU_XtendedInput_Rumble.h` | Compatibility include for the shared Underground adapter |
 
 The two input engines remain separate because Underground's event scanners and
 the later games' ActionID interfaces differ. The existing feedback adapters
@@ -33,8 +32,8 @@ Control mappings are preserved. A `[Rumble]` section was appended, the supplied
 UG configuration disables experimental rumble, and the stray
 `<<<<<<< HEAD` line in the UG2 release INI was removed.
 [data/config-provenance.json](data/config-provenance.json) records SHA-256
-hashes of the original files. The legacy `underground/Config-*` directories
-mirror their canonical configurations.
+hashes of the original files. All targets use the canonical `data/Config-*`
+directories; duplicated legacy configurations and projects have been removed.
 
 The upstream ZIPs contain input mappings and controller-icon assets, not
 authored feedback profiles. UG/UG2 read their native event curves from the
@@ -58,7 +57,7 @@ separate road callback. Carbon and Undercover adapters remain unfinished.
 
 Xan's [IFeedback investigation](https://github.com/xan1242/NFS-XtendedInput/issues/10#issuecomment-1181213340)
 explains the PC feedback stubs, interface registration and hidden vibration
-setting. [UG2 research and validation notes](underground/RUMBLE.md) document
+setting. [UG2 research and validation notes](docs/ug2-rumble.md) document
 the existing adapter in more detail.
 
 ## Release packaging

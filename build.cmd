@@ -33,7 +33,7 @@ if not exist "%OUTPUT%" mkdir "%OUTPUT%"
 set "NAME=NFS_XtendedInput"
 if /I "%~1"=="UG" set "NAME=NFSU_XtendedInput"
 if /I "%~1"=="UG2" set "NAME=NFSU_XtendedInput"
-cl /nologo /LD /O2 /MD /EHsc /std:c++14 /W3 /DWIN32 /DNDEBUG /D_WINDOWS /D_USRDLL /D_CRT_SECURE_NO_WARNINGS /D%GAME% /Isrc\inc /Isrc\_vs /Iunderground src\Unified.cpp /Fo"%OUTPUT%\Unified.obj" /link /IMPLIB:"%OUTPUT%\%NAME%.lib" /OUT:"%OUTPUT%\%NAME%.asi" /MACHINE:X86 /SUBSYSTEM:WINDOWS user32.lib winmm.lib
+cl /nologo /LD /O2 /MD /EHsc /std:c++14 /W3 /DWIN32 /DNDEBUG /D_WINDOWS /D_USRDLL /D_CRT_SECURE_NO_WARNINGS /D%GAME% /Isrc\inc /Isrc\_vs src\Unified.cpp /Fo"%OUTPUT%\Unified.obj" /link /IMPLIB:"%OUTPUT%\%NAME%.lib" /OUT:"%OUTPUT%\%NAME%.asi" /MACHINE:X86 /SUBSYSTEM:WINDOWS user32.lib winmm.lib
 set "RESULT=%errorlevel%"
 popd
 exit /b %RESULT%

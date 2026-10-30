@@ -9,7 +9,7 @@
 #include <cassert>
 #include <fstream>
 #include <vector>
-#include "../includes/injector/injector.hpp"
+#include "../src/inc/injector/injector.hpp"
 
 #define MAX_CONTROLLERS 4
 // A private image buffer allows the harness to run at any Windows load address.
@@ -58,7 +58,7 @@ struct CIniReader {
 #define IsIconic TestIconic
 #define XInputSetState TestSetState
 #define XInputGetState TestGetState
-#include "../NFSU_XtendedInput_Rumble.h"
+#include "../src/rumble/Underground.h"
 
 void LoadImage(const char* path) {
   std::ifstream stream(path, std::ios::binary);

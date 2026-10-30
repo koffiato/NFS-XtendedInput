@@ -76,7 +76,7 @@ profile is created or its controls are reset. Secondary bindings use
 `[Events_Secondary]` and `[EventsKB_Secondary]`.
 
 ProStreet supports in-game remapping. MW's Controls menu remains disabled
-because of an upstream crash. See the [Underground notes](underground/README.md)
+because of an upstream crash. See the [Underground notes](docs/underground-input.md)
 for UG's remapping limits.
 
 ## Rumble settings
@@ -118,7 +118,7 @@ Broadcast mode sends combined output to all detected WGI pads.
 
 Continuous effects fade during sustained use, and impacts reduce background
 textures. The adapters include stops for pause, focus loss, disconnect and
-shutdown. See [UG2 feedback details](underground/RUMBLE.md) for its lifecycle
+shutdown. See [UG2 feedback details](docs/ug2-rumble.md) for its lifecycle
 checks and diagnostics.
 
 ## Build
@@ -193,7 +193,7 @@ the initial unified checkpoint. To run the harness against your local US 1.2
 executable:
 
 ```bat
-underground\tests\run.cmd "path\to\SPEED2.EXE"
+tests\ug2.cmd "path\to\SPEED2.EXE"
 ```
 
 The harness checks hook signatures, native curves, routing, lifecycle stops,

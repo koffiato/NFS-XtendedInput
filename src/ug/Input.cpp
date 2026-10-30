@@ -12,11 +12,11 @@
 // TODO (UG2): ingame settings menu
 // TODO (UG): maybe rewrite the drag steering handler, DPad input for steering is currently not possible with the analog steering at the same time!
 
-#include "stdafx.h"
+#include "../_vs/stdafx.h"
 #include "stdio.h"
 #include <windows.h>
-#include "includes\injector\injector.hpp"
-#include "includes\IniReader.h"
+#include <injector/injector.hpp>
+#include <IniReader.h>
 
 #ifdef XINPUT_OLD
 #include <XInput.h>
@@ -108,7 +108,7 @@ WORD EventStates[2][MAX_JOY_EVENT];
 bool EventStatesKB[2][MAX_JOY_EVENT];
 
 #if defined(GAME_UG) || defined(GAME_UG2)
-#include "NFSU_XtendedInput_Rumble.h"
+#include "../rumble/Underground.h"
 #endif
 
 unsigned int GameWndProcAddr = 0;

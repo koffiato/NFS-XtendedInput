@@ -1,7 +1,7 @@
 # Underground input adapter
 
-This directory contains the UG/UG2 input engine used by the
-`unified-feedback` branch. Start with the [main README](../README.md) for
+The UG/UG2 input engine lives in [`src/ug`](../src/ug) and uses the root
+build and release workflow. Start with the [main README](../README.md) for
 current game support, installation, settings and build instructions.
 
 Both games now use [one shared feedback adapter](../src/rumble/Underground.h).
@@ -16,7 +16,6 @@ The canonical release-based configurations and action references are:
 - [Underground](../data/Config-UG)
 - [Underground 2](../data/Config-UG2)
 
-The `Config-*` directories here mirror those files for the legacy projects.
 UG/UG2 store settings and bindings in `NFSU_XtendedInput.ini`.
 One controller button can be assigned per event in the INI.
 Disable the Widescreen Fix's button-icon replacement to use XtendedInput's
@@ -41,13 +40,13 @@ From the repository root in an x86 Visual Studio developer command prompt:
 ```bat
 build.cmd UG
 build.cmd UG2
-underground\tests\run.cmd "path\to\SPEED2.EXE"
+tests\ug2.cmd "path\to\SPEED2.EXE"
 ```
 
-The local `build.cmd` delegates to the root build. Windows 7 variants are no
-longer part of the unified build.
+The root `build.cmd` is the build entry point for every target. Windows 7
+variants are not part of the unified build.
 
-See [RUMBLE.md](RUMBLE.md) for UG2's effect behavior, hook provenance and test
+See [UG2 rumble notes](ug2-rumble.md) for UG2's effect behavior, hook provenance and test
 coverage. The input engine originates from
 [xan1242/NFSU-XtendedInput](https://github.com/xan1242/NFSU-XtendedInput)
-under the [MIT license](LICENSE).
+under the [MIT license](../LICENSE).
