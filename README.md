@@ -1,9 +1,11 @@
-# MW rumble fork
+# XtendedInput rumble fork
 
 This is an unofficial fork of [NFS-XtendedInput](https://github.com/xan1242/NFS-XtendedInput) by xan1242 (Lovro Pleše) and Berkay Yiğit. It adds controller rumble to Need for Speed: Most Wanted (2005), including Xbox One / Series impulse triggers. See [Rumble (MW only)](#rumble-mw-only) for what you feel and how to tune it.
 
 Carbon, ProStreet, Undercover and World are unchanged from upstream 1.22, so get those from the [original releases](https://github.com/xan1242/NFS-XtendedInput/releases). Please report problems with this fork here, not upstream.
 
+
+Underground 2 rumble is available in the [Underground project](underground/README.md). This initial port targets U2 US 1.2 and includes the shared mixer, category controls and Xbox impulse trigger backend. Builds and automated integration checks pass; in-game controller testing remains pending. Underground 1 rumble is deferred. See the [U2 rumble notes](underground/RUMBLE.md) for installation, settings and validation.
 
 # README
 
