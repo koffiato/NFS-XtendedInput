@@ -54,7 +54,7 @@ int __fastcall Wheels(void*,void*) { return 4; }
 bool __fastcall Ground(void*,void*,unsigned int wheel) { return wheel != 3; }
 float __fastcall Slip(void*,void*,unsigned int wheel) { return 10.0f*wheel; }
 float __fastcall Skid(void*,void*,unsigned int wheel) { return 3.0f*wheel; }
-float __fastcall WheelAV(void*,void*,unsigned int wheel) { return 100.0f+wheel; }
+float __fastcall NativeRoad(void*,void*,unsigned int wheel) { return 0.3f+0.1f*wheel; }
 bool __fastcall Shifting(void*,void*) { return true; }
 void* __fastcall Find(void*,void*,void* handle) {
   if (handle == (void*)IRIGIDBODY_IHANDLE_ADDR) return &body;
@@ -69,7 +69,7 @@ void TestVehicle() {
   bodyTable[9] = Linear; bodyTable[10] = Angular; bodyTable[11] = Speed;
   inputTable[2] = Brake; inputTable[3] = Gas; inputTable[8] = Handbrake;
   suspensionTable[2] = Skid; suspensionTable[3] = Slip; suspensionTable[5] = Wheels;
-  suspensionTable[13] = Ground; suspensionTable[31] = WheelAV;
+  suspensionTable[13] = Ground; suspensionTable[31] = NativeRoad;
   transmissionTable[5] = Shifting;
   void* players[] = {&player};
   *(void***)RumblePSAddress(PLAYER_ILISTABLE_ADDR) = players;
@@ -80,7 +80,7 @@ void TestVehicle() {
   assert(RumbleReadVehicle(s));
   assert(s.fSpeed == 30 && s.fGas == 0.75f && s.fBrake == 0.2f && s.fHandBrake == 0.1f);
   assert(s.nWheels == 4 && !s.bOnGround[3] && s.bOnGround[0]);
-  assert(s.fSlip[2] == 20 && s.fSkid[2] == 6 && s.fWheelAV[2] == 102);
+  assert(s.fSlip[2] == 20 && s.fSkid[2] == 6 && s.fWheelAV[2] == 0 && s.fNativeRoad[2] == 0.5f);
   assert(s.fLinVel[0] == 30 && s.fAngVel[2] == 1 && RumblePSIsShifting());
   *(int*)RumblePSAddress(PLAYER_ILISTABLE_COUNT_ADDR) = 0;
   assert(!RumbleReadVehicle(s)); // rebuilding the player list
@@ -88,8 +88,8 @@ void TestVehicle() {
 }
 
 // Replay the producer's ordering at 0x4D0FB9..0x4D105A: it pushes the surface
-// BEFORE calling GetWheelAV. That getter consumes only the wheel index, leaving
-// surface on the stack; the producer then pushes angular speed and wheel index.
+// BEFORE calling the slot-0x7C getter. It consumes only the wheel index, leaving
+// surface on the stack; the producer then pushes its scalar and wheel index.
 // A typed call with the adapter's own declaration would hide an ordering bug.
 __declspec(naked) void ReplayNativeRoad(void* feedback, unsigned int wheel, const void* surface) {
   __asm {
@@ -151,6 +151,28 @@ void TestCollisionListener(IFeedback& f) {
   assert(originalCollisions == 1); // foreign/native devices keep the original handler
 }
 
+void TestPSTyreUnits(IFeedback& f, void* surface) {
+  f.ClearEffects(); f.mHasVehicle = true; memset(&f.mVehicle,0,sizeof(f.mVehicle));
+  f.mVehicle.nWheels = 4; f.mVehicle.fSpeed = 30; f.mVehicle.fGas = 1;
+  for (int i=0;i<4;++i) { f.mVehicle.bOnGround[i] = true; f.mVehicle.fSlip[i] = 0.2f; }
+  f.mMixer.Begin(0.016f); f.MixTyres(0.016f);
+  assert(f.mSpinLevel > 0); // .2 ratio is real wheelspin; MW's 3 m/s gate would miss it
+  f.mVehicle.fGas = 0; f.mVehicle.fBrake = 1;
+  for (int i=0;i<4;++i) f.mVehicle.fSlip[i] = -0.2f;
+  f.mMixer.Begin(0.016f); f.MixTyres(0.016f); assert(f.mLockupLevel > 0);
+  f.mVehicle.fBrake = 0;
+  for (int i=0;i<4;++i) f.mVehicle.fSlip[i] = 0;
+  f.mWheelSkid[2] = 0.2f;
+  f.mMixer.Begin(0.016f); f.MixTyres(0.016f); assert(f.mSlideLevel > 0);
+  f.mVehicle.fSpeed = 0;
+  for (int i=0;i<4;++i) f.mWheelSkid[i] = 3.14159f;
+  f.mSkidWave.Begin(); f.mSkidWave.Add(surface,ATTRIB_KEY_FFB_SKID,3.14f);
+  f.mMixer.Begin(0.016f); f.MixTyres(0.016f);
+  int left,right; f.mMixer.Resolve(left,right);
+  assert(f.mSlideLevel == 0 && left == 0 && right == 0); // pi at rest must not buzz
+  f.ClearEffects();
+}
+
 void MapFixture(const char* path) {
   if (!path) return;
   std::ifstream stream(path, std::ios::binary);
@@ -174,6 +196,11 @@ void MapFixture(const char* path) {
 }
 
 int main(int argc, char** argv) {
+  FILE* writer = RumbleOpenLog("build/tests/shared-telemetry.log");
+  assert(writer); fputs("live log",writer); fflush(writer);
+  FILE* reader = _fsopen("build/tests/shared-telemetry.log","r",_SH_DENYNO);
+  assert(reader); char sharedLog[16] = {}; fread(sharedLog,1,8,reader);
+  assert(!strcmp(sharedLog,"live log")); fclose(reader); fclose(writer);
   MapFixture(argc > 1 ? argv[1] : NULL);
   *(int*)RumblePSAddress(GAMEFLOWMANAGER_STATUS_ADDR) = 3; // no race: vehicle reader must safely decline
   RumbleTriggerMode = kTriggersOff;
@@ -199,12 +226,13 @@ int main(int argc, char** argv) {
   bRumbleTelemetry = true;
   RumbleVCall<void>(&f, 0x08); // Resume
   RumbleVCall<void>(&f, 0x10); // Begin
-  ReplayNativeRoad(&f, 2, surface); // native pushes wheel, angular speed, surface
+  f.mHasVehicle = true; f.mVehicle.fSpeed = 50;
+  ReplayNativeRoad(&f, 2, surface); // native pushes wheel, road signal, surface
   RumbleVCall<void>(&f, 0x20, (void*)surface, 12.0f, 1.0f); // surface + two floats
   RumbleVCall<void>(&f, 0x1C, (void*)surface, 15.0f, 1.0f, 1.0f, 4.0f); // five arguments
   assert(f.mWheelSkid[2] == 15 && f.mWheelSkid[0] == 0);
   assert(RumbleTelemetry.fSlip[2] == 12);
-  assert(f.mRoadWave.fFrequency[0] == 10.0f); // GetWheelAV(2)=102 saturates the live curve
+  assert(f.mRoadWave.fFrequency[0] == 7.5f); // live speed=50; native road signal=.5 is not speed
   RumbleVCall<void>(&f, 0x40, (void*)surface, 18.0f, 1.0f, 1.0f); // drift skid
   assert(f.mWheelSkid[2] == 18);
   RumbleVCall<void>(&f, 0x2C, true, 1.0f); // NOS
@@ -221,6 +249,7 @@ int main(int argc, char** argv) {
   assert(f.mPulseLeft.GetValue() > 0 && f.mPulseRight.GetValue() > 0);
   assert(RumbleVCall<int>(&f, 0x50) == 5); // final slot returns an int
   TestCollisionListener(f);
+  TestPSTyreUnits(f,surface);
   f.ResumeEffects();
   f.Send(30000, 20000);
   bRumbleAppActive = false; f.Watchdog();
@@ -231,7 +260,8 @@ int main(int argc, char** argv) {
   assert(f.mPaused && !sent[0].wLeftMotorSpeed && !sent[0].wRightMotorSpeed);
 
   record.fAmplitudeMin = (std::numeric_limits<float>::quiet_NaN)();
-  f.BeginUpdate(); f.UpdateRoadNoise(0, 50, *(SimSurface*)surface);
+  f.mHasVehicle = true; f.mVehicle.fSpeed = 50;
+  f.BeginUpdate(); f.UpdateRoadNoise(0, 0.5f, *(SimSurface*)surface);
   assert(f.mRoadWave.fFrequency[0] == 0); // malformed live records cannot poison output
   assert(!RumbleGetAttributePointer(NULL, ATTRIB_KEY_FFB_ROLL, 0));
   assert(RumbleTelemetrySurfaceId(NULL) == -1);

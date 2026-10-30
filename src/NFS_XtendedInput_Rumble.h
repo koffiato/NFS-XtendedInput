@@ -25,6 +25,7 @@
 
 #include <roapi.h>
 #include <windows.gaming.input.h>
+#include <share.h>
 
 #include "rumble/Settings.h"
 #ifdef GAME_PROSTREET
@@ -104,9 +105,12 @@ struct RumbleVehicleState {
   float fHandBrake;
   bool  bOnGround[RUMBLE_MAX_WHEELS];
   float fCompression[RUMBLE_MAX_WHEELS];  // m
-  float fSlip[RUMBLE_MAX_WHEELS];         // m/s, signed: + wheelspin, - braking
-  float fSkid[RUMBLE_MAX_WHEELS];         // m/s, lateral
-  float fWheelAV[RUMBLE_MAX_WHEELS];      // rad/s
+  float fSlip[RUMBLE_MAX_WHEELS];         // MW: m/s; PS: slip ratio. + wheelspin, - braking
+  float fSkid[RUMBLE_MAX_WHEELS];         // MW: lateral m/s; PS: slip angle, radians
+  float fWheelAV[RUMBLE_MAX_WHEELS];      // MW: rad/s; unused for PS
+#ifdef GAME_PROSTREET
+  float fNativeRoad[RUMBLE_MAX_WHEELS];   // raw slot-0x7C road signal, not wheel angular velocity
+#endif
   float fLinVel[3];                       // world m/s
   float fAngVel[3];                       // world rad/s
 };
@@ -168,7 +172,8 @@ bool RumbleReadVehicleUnsafe(RumbleVehicleState& s) {
     s.fCompression[i] = 0.0f; // PS suspension layout differs; no guessed compression offset
     s.fSlip[i] = RumbleVCall<float>(susp, 0x0C, i);
     s.fSkid[i] = RumbleVCall<float>(susp, 0x08, i);
-    s.fWheelAV[i] = RumbleVCall<float>(susp, 0x7C, i);
+    s.fWheelAV[i] = 0.0f;
+    s.fNativeRoad[i] = RumbleVCall<float>(susp, 0x7C, i);
 #else
     s.bOnGround[i]    = RumbleVCall<bool>(susp, 0x24, i);
     s.fCompression[i] = RumbleVCall<float>(susp, 0x28, i);
@@ -185,8 +190,12 @@ bool RumbleReadVehicle(RumbleVehicleState& s) {
   __try {
     if (!RumbleReadVehicleUnsafe(s)) return false;
     if (!_finite(s.fSpeed) || !_finite(s.fGas) || !_finite(s.fBrake) || !_finite(s.fHandBrake)) return false;
-    for (int i = 0; i < s.nWheels; ++i)
+    for (int i = 0; i < s.nWheels; ++i) {
       if (!_finite(s.fSlip[i]) || !_finite(s.fSkid[i]) || !_finite(s.fWheelAV[i]) || !_finite(s.fCompression[i])) return false;
+#ifdef GAME_PROSTREET
+      if (!_finite(s.fNativeRoad[i])) return false;
+#endif
+    }
     return true;
   } __except (EXCEPTION_EXECUTE_HANDLER) {
     return false;
@@ -265,10 +274,13 @@ const int   RUMBLE_MAX_SURFACES      = 128;
 const void* RumbleSurfaces[RUMBLE_MAX_SURFACES];  // collection pointers, index = id in the log
 int         RumbleSurfaceCount = 0;
 
+FILE* RumbleOpenLog(const char* path) { return _fsopen(path, "w", _SH_DENYNO); }
+
 void RumbleTelemetryPrintf(const char* fmt, ...) {
   if (!bRumbleTelemetry || bRumbleTelemetryDead) return;
   if (!RumbleTelemetryFile) {
-    if (fopen_s(&RumbleTelemetryFile, "scripts\\NFS_XtendedInput_Rumble.log", "w") != 0 || !RumbleTelemetryFile) {
+    RumbleTelemetryFile = RumbleOpenLog("scripts\\NFS_XtendedInput_Rumble.log");
+    if (!RumbleTelemetryFile) {
       bRumbleTelemetryDead = true;
       return;
     }
@@ -279,7 +291,11 @@ void RumbleTelemetryPrintf(const char* fmt, ...) {
 #else
     fprintf(RumbleTelemetryFile, "# S,id,collection,name,renderNoise[freq amp minSpeed maxSpeed],wheelEffect[freq intensity],friction[6],FFB_ROLL/SKID/SLIP[4 x 8]\n");
 #endif
+#ifdef GAME_PROSTREET
+    fprintf(RumbleTelemetryFile, "# T,time,speed,gas,brake,handbrake,powerband,throttle,nos,shifting,shiftPotential,{surf,ground,comp,slipRatio,skidRadians,nativeRoad,fbSlipRatio,fbSkidRadians}x4,linVel[3],angVel[3]\n");
+#else
     fprintf(RumbleTelemetryFile, "# T,time,speed,gas,brake,handbrake,powerband,throttle,nos,shifting,shiftPotential,{surf,ground,comp,slip,skid,av,fbSlip,fbSkid}x4,linVel[3],angVel[3]\n");
+#endif
     fprintf(RumbleTelemetryFile, "# C,time,type,flags,closingVel,normalSpeed,slidingSpeed,speedChange,strength,measuredSpeedChange\n");
   }
   va_list args;
@@ -367,7 +383,13 @@ void RumbleTelemetryWriteTick(double now, const RumbleVehicleState* vehicle, boo
   for (int i = 0; i < RUMBLE_MAX_WHEELS; i++) {
     bool wheel = i < RumbleTelemetry.nWheel;
     RumbleTelemetryPrintf(",%d,%d,%.4f,%.2f,%.2f,%.1f,%.2f,%.2f", wheel ? RumbleTelemetry.iSurface[i] : -1, hasVehicle && v.bOnGround[i], v.fCompression[i],
-                          v.fSlip[i], v.fSkid[i], v.fWheelAV[i], wheel ? RumbleTelemetry.fSlip[i] : 0.0f, wheel ? RumbleTelemetry.fSkid[i] : 0.0f);
+                          v.fSlip[i], v.fSkid[i],
+#ifdef GAME_PROSTREET
+                          v.fNativeRoad[i],
+#else
+                          v.fWheelAV[i],
+#endif
+                          wheel ? RumbleTelemetry.fSlip[i] : 0.0f, wheel ? RumbleTelemetry.fSkid[i] : 0.0f);
   }
   RumbleTelemetryPrintf(",%.2f %.2f %.2f,%.3f %.3f %.3f%s\n", v.fLinVel[0], v.fLinVel[1], v.fLinVel[2], v.fAngVel[0], v.fAngVel[1], v.fAngVel[2],
                         hasVehicle ? "" : ",novehicle");
@@ -463,12 +485,23 @@ const float RUMBLE_BUMP_MIN_SPEED     = 2.0f;   // m/s car speed
 const float RUMBLE_BUMP_MAX_SIM_STEP  = 0.1f;   // s; longer gaps (loading, restarts) aren't one physics step
 const float RUMBLE_SURFACE_WAVE_SCALE = 0.4f;   // console wave data is authored for a single big motor
 const float RUMBLE_SKID_WAVE_SCALE    = 0.35f;
+#ifdef GAME_PROSTREET
+// PC surface records and the gameplay log use ratios/angles, not MW's m/s:
+// FFB_SLIP spans .05..1 and FFB_SKID spans .1..1 on the captured tarmac surface.
+const float RUMBLE_LOCKUP_MIN_SLIP = 0.05f;
+const float RUMBLE_LOCKUP_FULL_SLIP = 1.0f;
+const float RUMBLE_SPIN_MIN_SLIP = 0.05f;
+const float RUMBLE_SPIN_FULL_SLIP = 1.0f;
+const float RUMBLE_SLIDE_MIN_SKID = 0.1f;
+const float RUMBLE_SLIDE_FULL_SKID = 1.0f;
+#else
 const float RUMBLE_LOCKUP_MIN_SLIP    = 3.0f;   // m/s of braking slip
 const float RUMBLE_LOCKUP_FULL_SLIP   = 15.0f;
 const float RUMBLE_SPIN_MIN_SLIP      = 3.0f;   // m/s of wheelspin
 const float RUMBLE_SPIN_FULL_SLIP     = 20.0f;
 const float RUMBLE_SLIDE_MIN_SKID     = 2.0f;   // m/s of lateral tyre speed
 const float RUMBLE_SLIDE_FULL_SKID    = 20.0f;
+#endif
 // measured collision speed change below this share of the contact-normal estimate means the body hadn't taken the hit yet
 const float RUMBLE_COLLISION_MIN_MEASURED = 0.25f;
 
@@ -825,6 +858,11 @@ class IFeedback {
     }
     float waveLeft, waveRight;
     mSkidWave.Sample(dt, waveLeft, waveRight);
+#ifdef GAME_PROSTREET
+    // Slip angles can be pi at rest. They are not a moving slide and must not
+    // create a native-wave buzz or an impulse-trigger effect while stationary.
+    if (!mHasVehicle || mVehicle.fSpeed < 0.5f) { skid = waveLeft = waveRight = 0.0f; }
+#endif
     float slide = Clamp01((skid - RUMBLE_SLIDE_MIN_SKID) / (RUMBLE_SLIDE_FULL_SKID - RUMBLE_SLIDE_MIN_SKID));
     mMixer.AddTexture(kRumbleTyres, mSlideTexture, waveLeft * RUMBLE_SKID_WAVE_SCALE, slide > 0.0f ? 0.05f + 0.15f * slide : 0.0f);
 
@@ -1033,10 +1071,13 @@ class IFeedback {
     AddSkid(mWheelArg < 2, surface, fabsf(skid));
   }
   virtual void UpdateSteering(float /*steering*/) {} // wheel force, not controller rumble
-  virtual void UpdateRoadNoise(unsigned int wheel, float speed, const SimSurface& surface) {
+  virtual void UpdateRoadNoise(unsigned int wheel, float /*nativeRoad*/, const SimSurface& surface) {
     mWheelArg = wheel < RUMBLE_MAX_WHEELS ? (int)wheel : RUMBLE_MAX_WHEELS;
     if (mWheelArg == RUMBLE_MAX_WHEELS) return;
-    mRoadWave.Add(&surface, ATTRIB_KEY_FFB_ROLL, fabsf(speed));
+    // The native callback's scalar is a road signal (observed 0..1.9), not
+    // speed. FFB_ROLL's captured input range is 5..50; use the latest live body
+    // speed, already sampled once per feedback tick, instead of that signal.
+    if (mHasVehicle) mRoadWave.Add(&surface, ATTRIB_KEY_FFB_ROLL, mVehicle.fSpeed);
     if (bRumbleTelemetry) RumbleTelemetry.iSurface[wheel] = RumbleTelemetrySurfaceId(&surface);
     if (RumbleTelemetry.nWheel < (int)wheel+1) RumbleTelemetry.nWheel = wheel+1;
   }

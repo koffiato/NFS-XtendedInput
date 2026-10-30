@@ -12,7 +12,7 @@ broader race/controller coverage and original console fidelity are pending.
 
 The game supplies road, skid, drift-skid, RPM, shift-potential, NOS,
 engine-damage and collision callbacks. The adapter additionally reads live
-player speed, velocity, pedals, wheel contact/slip/skid/angular velocity and
+player speed, velocity, pedals, wheel contact/slip/skid, the raw road signal and
 transmission state. It does not infer feedback from controller button presses.
 
 Surface waves are read through ProStreet's own `Attrib::Instance` accessor
@@ -54,7 +54,7 @@ diagnostic; it does not validate or change upstream input-hook compatibility.
 | Slip | Slot 8: surface reference and two floats |
 | Drift skid | Slot 16: surface reference and three floats |
 | Steering force | Slot 17, consumed without a controller effect |
-| Road | Slot 18: wheel index, angular speed, surface reference |
+| Road | Slot 18: wheel index, native road scalar, surface reference |
 | Collision | Slot 19: info reference, bool, 12-byte velocity vector by value |
 | Controller type | Slot 20: native PC default |
 
@@ -79,9 +79,12 @@ follows the native slots and remains called through the existing remapping hook.
 Set `[Rumble] Telemetry = 1` to write `scripts/NFS_XtendedInput_Rumble.log`.
 `S` rows record native surface waves; `T` rows include live vehicle/wheel and
 callback values; `P` rows record raw local-listener contact participants and
-`C` rows record the contacts routed into rumble. PS surface rows use `PS-live`
+`C` rows record the contacts routed into rumble. PS tick columns identify slip
+ratios, skid angles (radians) and the raw native road signal; that signal was
+incorrectly labelled `av` in the first logs. PS surface rows use `PS-live`
 instead of interpreting MW's surface-name/layout fields. Disable telemetry
-after capturing a short race to avoid an unnecessarily large log.
+after capturing a short race to avoid an unnecessarily large log. The log now
+permits simultaneous readers, so future captures do not require closing the game.
 
 From an x86 Visual Studio developer prompt:
 
@@ -95,11 +98,49 @@ through the actual compiled vtable, including stack cleanup for skid/drift/
 collision, live curve sampling, player-list transitions, vehicle accessors,
 interface registration/routing, pause, focus loss, missed ticks and malformed
 data. An assembly replay follows the native road call's push/getter sequence,
-including its angular-speed-before-surface ordering; telemetry is enabled and
+including its native-scalar-before-surface ordering; telemetry is enabled and
 written/read during that test. Collision fixtures include local car A/B,
 unrelated contacts, pause and original-handler forwarding. Actions runs it with runtime stack checks. Local validation also ran the
 signature checks against a read-only snapshot of the installed running game.
 These checks do not establish in-game stability or original console fidelity.
+
+## Gameplay log review (2026-10-31)
+
+The user confirmed the telemetry crash was gone and wall impacts worked with
+code revision `1b942a4`. The local capture contains 30,265 complete tick rows
+over 271.47 seconds, seven surface definitions, and 104 matched raw/delivered
+collision records. One final tick row is incomplete at shutdown and was excluded
+from the numeric review. Complete rows contain no faults or non-finite values.
+Speed reached 69.43 m/s; pedals stayed within 0..1; NOS and gear changes were recorded.
+
+Two non-sliding wall contacts produced impact strengths 1.00 and 0.05. The
+strong hit recorded 51.27 m/s normal closing speed and a measured 50.50 m/s
+velocity change. The other 102 contacts were sliding contacts, which feed the
+scrape texture rather than starting impact pulses. Every captured contact had
+the local car as A; participant-B handling remains covered by the harness.
+Tick gaps alone do not prove that the physical motors stopped during pause.
+
+The capture also exposed unit errors in the temporary MW adaptation:
+
+- Live `FFB_SLIP` input spans .05..1 (ratio), and `FFB_SKID` spans .1..1
+  (angle), unlike MW's slip/skid speed thresholds. PS now uses these native
+  ranges while retaining the shared mixer/envelopes.
+- Skid angles reached pi at rest. A motion gate prevents stationary skid-wave
+  and slide-trigger feedback; wheelspin from a standing burnout remains available.
+- Slot `0x7C`/the road callback scalar ranged from 0..1.9. Feeding that raw
+  value into `FFB_ROLL` never reached the captured 5..50 input range. The
+  adapter now samples road waves using the latest live body speed. The raw
+  scalar remains logged without calling it wheel angular velocity.
+
+A replay of the capture found 139 parked ticks that could falsely qualify as
+slides under the previous mapping, and zero of 8,371 applicable wheel samples
+reached a road curve's minimum with the old scalar. The updated unit/motion
+handling has harness coverage, including moderate spin/lockup and quiet parked
+tyres. Its revised feel still needs an in-game retest; the successful user
+retest above predates these unit corrections.
+
+The raw 6,981,620-byte log stays outside the repository. Capture SHA-256:
+`6798d54683f9a27f8f1269783626c9529dfdd75bd65c98004cf89cb8528927be`.
 
 Interface research references: [Xan's feedback investigation](https://github.com/xan1242/NFS-XtendedInput/issues/10),
 [NFSPluginSDK ProStreet types](https://github.com/berkayylmao/NFSPluginSDK/tree/master/NFSPluginSDK/Game.ProStreet/Types).
