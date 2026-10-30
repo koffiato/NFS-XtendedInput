@@ -23,7 +23,7 @@ BOOL APIENTRY DllMain(HMODULE, DWORD reason, LPVOID) {
 
     Init();
   }
-#ifdef GAME_MW
+#if defined(GAME_MW) || defined(GAME_PROSTREET)
   else if (reason == DLL_PROCESS_DETACH) {
     // don't leave the motors running after the game exits
     RumbleStopAllPads(true);

@@ -58,7 +58,7 @@ GAMES = {
         Game("UC", "UC", "fd0b42b2688de16917d360897c7da9baf25a7426f318b6ad57e79bc6e780ccc4",
              "Input support only. Rumble is not implemented."),
         Game("PS", "ProStreet", "15ad3e2996cb340aefcbd5c3eb43b7d3524c954657f17dd292fe9435efb9b01a",
-             "Input support only. Rumble is not implemented.", texture="GLOBAL/XtendedInputButtons.tpk", cursor=True),
+             "Experimental native PC rumble adapter, with live surface/vehicle data and temporary MW effect tuning. Xbox 360 curves and controller validation are pending.", texture="GLOBAL/XtendedInputButtons.tpk", cursor=True),
         Game("W", "World", "4556330af357bc1118043a9de9392db90d040db58bdb0eee331f458cadb473f7",
              "Experimental upstream input support. Rumble is not implemented."),
     )

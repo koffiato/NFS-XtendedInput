@@ -248,7 +248,7 @@ enum ShiftPotential {
   SHIFT_POTENTIAL_MISS    = 5,
 };
 
-#ifdef GAME_MW
+#if defined(GAME_MW) || defined(GAME_PROSTREET)
 #include "NFS_XtendedInput_Rumble.h"
 #endif
 
@@ -300,7 +300,7 @@ HRESULT UpdateControllerState() {
 #ifndef NO_FENG
           if (bUseDynamicFEngSwitching) bConsoleFEng = true;
 #endif
-#ifdef GAME_MW
+#if defined(GAME_MW) || defined(GAME_PROSTREET)
           RumbleLastActivePad = i;
 #endif
 
@@ -1099,7 +1099,7 @@ class InputDevice {
   float*        fCurrentValues;
   int           fDeviceIndex;
   float         fControllerCurve;
-#ifdef GAME_MW
+#if defined(GAME_MW) || defined(GAME_PROSTREET)
   IFeedback mFFB;  // +0x2C, same as the game's own device
 #endif
 #ifdef GAME_PROSTREET
@@ -1117,7 +1117,7 @@ class InputDevice {
     fPrevValues      = PrevValues[DeviceIndex];
     fCurrentValues   = CurrValues[DeviceIndex];
     fDeviceScalar    = new (std::nothrow) DeviceScalar[MAX_ACTIONID];
-#ifdef GAME_MW
+#if defined(GAME_MW) || defined(GAME_PROSTREET)
     mFFB.Init(&Padding1, DeviceIndex);
     if (bRumbleEnabled) UTL_Com_Object_IList_Add(&Padding1, (void*)IFEEDBACK_IHANDLE_ADDR, &mFFB);
 #endif
@@ -1132,7 +1132,7 @@ class InputDevice {
 #endif
   }
   virtual void* dtor(bool something) {
-#ifdef GAME_MW
+#if defined(GAME_MW) || defined(GAME_PROSTREET)
     if (bRumbleEnabled) mFFB.Stop();
 #endif
     delete (this);
@@ -1164,7 +1164,7 @@ class InputDevice {
 #endif
   }
   virtual void PollDevice() {
-#ifdef GAME_MW
+#if defined(GAME_MW) || defined(GAME_PROSTREET)
     mFFB.Watchdog();
 #endif
     if (!bGlobalDoPolling) return;
@@ -1347,21 +1347,33 @@ class InputDevice {
     }
   }
   virtual int  GetNumDeviceScalar() { return MAX_ACTIONID; }
+#ifdef GAME_PROSTREET
+  // Native slot 6 is a controller-capability query. Start/Stop are 7/8;
+  // GetInterfaces must be slot 9 (+0x24), as LocalPlayer::SetPort expects.
+  virtual bool PSControllerCapability() { return true; }
+#endif
   virtual void StartVibration() {
     // printf("Called InputDevice::StartVibration\n");
   }
   virtual void StopVibration() {
+#if defined(GAME_MW) || defined(GAME_PROSTREET)
+    if (bRumbleEnabled) mFFB.PauseEffects();
+#endif
     // this seems to be only called when the controller is unplugged...
     // printf("Called InputDevice::StopVibration\n");
   }
-#ifdef GAME_MW
+#if defined(GAME_MW) || defined(GAME_PROSTREET)
   virtual int GetInterfaces() { return bRumbleEnabled ? (int)&mFFB : 0; }
 #else
   virtual int GetInterfaces() { return 0; }
 #endif
   virtual int GetSecondaryDevice() { return 0; }
 #ifndef GAME_MW
+#ifdef GAME_PROSTREET
+  virtual int GetBatteryLife(unsigned int /*query*/) { return 0; }
+#else
   virtual int  GetBatteryLife() { return 0; }
+#endif
   virtual bool IsBatteryLow() { return false; }
   virtual int  GetControllerTypeMask() { return 0; }
 #endif
@@ -1370,9 +1382,14 @@ class InputDevice {
   virtual void* SaveCurrentState() { return NULL; }
   virtual void  RestoreToState(float* unk) { return; }
 #ifndef GAME_MW
+#ifdef GAME_PROSTREET
+  virtual float GetDeviceNoiseAllowance() { return 0.0f; }
+#else
   virtual int GetDeviceNoiseAllowance() { return 0; }
 #endif
+#endif
 #ifdef GAME_PROSTREET
+  virtual void ReservedPS19(unsigned int) {}
   virtual void GoRemapButton(uint32_t type, uint32_t button, uint32_t isPrimary, uint32_t unk) {
     bRemappingMode = true;
     RemapType      = type;
@@ -1381,7 +1398,7 @@ class InputDevice {
   }
 #endif
 };
-#ifdef GAME_MW
+#if defined(GAME_MW) || defined(GAME_PROSTREET)
 static_assert(offsetof(InputDevice, mFFB) == 0x2C, "IFeedback must sit at the same offset as in the game's device");
 #endif
 
@@ -1695,7 +1712,7 @@ LRESULT WINAPI CustomWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) 
 #endif
       return 0;
     case WM_SETFOCUS:
-#ifdef GAME_MW
+#if defined(GAME_MW) || defined(GAME_PROSTREET)
       bRumbleAppActive = true;
 #endif
       // confine mouse within the game window
@@ -1704,7 +1721,7 @@ LRESULT WINAPI CustomWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) 
         ClipCursor(&windowRect);
       }
       break;
-#ifdef GAME_MW
+#if defined(GAME_MW) || defined(GAME_PROSTREET)
     case WM_ACTIVATEAPP:
       bRumbleAppActive = wParam != FALSE;
       if (!bRumbleAppActive) RumbleStopAllPads();
@@ -1790,7 +1807,7 @@ void InitConfig() {
           static_cast<SHORT>(clampf(std::stof(ini[dzSection]["Percent_AnalogTriggerDigital"]), 0.0f, 1.0f) * std::numeric_limits<SHORT>::max());
   }
 
-#ifdef GAME_MW
+#if defined(GAME_MW) || defined(GAME_PROSTREET)
   RumbleLoadSettings([&](const char* key, float fallback) {
     if (!ini.has("Rumble") || !ini["Rumble"].has(key)) return fallback;
     try { return std::stof(ini["Rumble"][key]); }
@@ -1817,6 +1834,9 @@ void InitConfig() {
 int Init() {
   FixWorkingDirectory();
   InitConfig();
+#ifdef GAME_PROSTREET
+  RumbleInstallPatches(); // validate before any device can expose IFeedback
+#endif
 
   injector::WriteMemory<unsigned int>(INPUTDEVICE_FACTORY_INITIALIZER_ADDR, (unsigned int)&InputDeviceFactory, true);
   injector::MakeCALL(INPUTMAPPING_CONSTRUCTOR_CALL_ADDR, InputMapping_Constructor, true);

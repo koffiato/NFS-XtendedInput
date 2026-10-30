@@ -10,12 +10,12 @@
 // clang-format on
 */
 
-// Rumble (MW only, for now)
+// Shared MW / ProStreet feedback implementation.
 //
-// The game asks the input device for its IFeedback interface (InputDevice::GetInterfaces) and then feeds it
-// the console force feedback events every sim tick (LocalPlayer::DoFFB @ 0x6EE490) plus collisions
-// (LocalPlayer::OnCollision). PC ships those methods as empty stubs, so we provide our own implementation
-// and drive the XInput motors from it.
+// The game asks InputDevice::GetInterfaces for IFeedback, then supplies native
+// feedback events and collisions (MW DoFFB @ 0x6EE490; PS @ 0x4D0CF0).
+// PC controller effect methods are stubs. This implementation drives XInput
+// motors using live data and the fork's shared MW effect tuning.
 //
 // The game never stops effects on focus loss and keeps a raw pointer to the interface, so:
 // - the object is embedded in InputDevice (same place as the game's own device, +0x2C) and is never deleted
@@ -27,6 +27,9 @@
 #include <windows.gaming.input.h>
 
 #include "rumble/Settings.h"
+#ifdef GAME_PROSTREET
+#include "rumble/ProStreet.h"
+#endif
 
 // pad that last produced input (used in omni mode, where both game ports read every pad)
 int  RumbleLastActivePad = 0;
@@ -47,7 +50,16 @@ void RumbleStopAllPads(bool fromDllMain = false) {
 
 void RumbleInstallPatches() {
   if (!bRumbleEnabled) return;
-
+#ifdef GAME_PROSTREET
+  if (!RumbleValidateProStreet()) {
+    bRumbleEnabled = false;
+    OutputDebugStringA("[XtendedInput] ProStreet rumble disabled: unsupported feedback interface.\n");
+    return;
+  }
+  // Preserve the null-settings and pause checks; bypass only the hidden
+  // vibration byte in the save. The INI remains the feedback switch.
+  injector::MakeNOP(0x004D145E, 6, true);
+#else
   // DoFFB skips UpdateShifting for cars with IEngineDamage (jumps at 0x6EE7F0 / 0x6EE7FF to 0x6EE836), which includes
   // player cars. Point both at the shifting code (0x6EE801); it only uses locals valid on both paths.
   if (*(uint16_t*)0x006EE7F0 == 0x44EB && *(uint16_t*)0x006EE7FF == 0x35EB) {
@@ -58,6 +70,7 @@ void RumbleInstallPatches() {
   // LocalPlayer::OnCollision skips ReportCollision when the save's hidden Rumble byte is 0 (`je` at 0x6F23EA).
   // The ini is the only switch, so drop that jump; the null-settings check before it stays.
   if (*(uint16_t*)0x006F23EA == 0x2B74) injector::WriteMemory<uint16_t>(0x006F23EA, 0x9090, true);
+#endif
 }
 
 // --- player vehicle access ---
@@ -65,6 +78,11 @@ void RumbleInstallPatches() {
 void*(__thiscall* UTL_Com_Object_IList_Find)(void* thethis, void* handle) = (void*(__thiscall*)(void*, void*))UTL_ILIST_FIND_ADDR;
 const void*(__thiscall* Attrib_Instance_GetAttributePointer)(const void* thethis, unsigned int key, unsigned int index) =
     (const void*(__thiscall*)(const void*, unsigned int, unsigned int))ATTRIB_GETATTRIBPTR_ADDR;
+
+const void* RumbleGetAttributePointer(const void* surface, unsigned int key, unsigned int index) {
+  __try { return surface ? Attrib_Instance_GetAttributePointer(surface, key, index) : NULL; }
+  __except (EXCEPTION_EXECUTE_HANDLER) { return NULL; }
+}
 
 template <typename R, typename... Args>
 R RumbleVCall(void* obj, int offset, Args... args) {
@@ -91,11 +109,19 @@ struct RumbleVehicleState {
   float fAngVel[3];                       // world rad/s
 };
 
+uintptr_t RumbleGameAddress(uintptr_t address) {
+#ifdef GAME_PROSTREET
+  return RumblePSAddress(address);
+#else
+  return address;
+#endif
+}
+
 // the local player's ISimable, or NULL outside a race / while the player list is empty or being rebuilt
 void* RumbleGetPlayerSimable() {
-  if (*(int*)GAMEFLOWMANAGER_STATUS_ADDR != 6) return NULL;
-  void** players = *(void***)PLAYER_ILISTABLE_ADDR;
-  if (!players || *(int*)PLAYER_ILISTABLE_COUNT_ADDR <= 0 || !players[0]) return NULL;
+  if (*(int*)RumbleGameAddress(GAMEFLOWMANAGER_STATUS_ADDR) != 6) return NULL;
+  void** players = *(void***)RumbleGameAddress(PLAYER_ILISTABLE_ADDR);
+  if (!players || *(int*)RumbleGameAddress(PLAYER_ILISTABLE_COUNT_ADDR) <= 0 || !players[0]) return NULL;
   return RumbleVCall<void*>(players[0], 0x04);  // IPlayer::GetSimable
 }
 
@@ -105,8 +131,15 @@ bool RumbleReadVehicleUnsafe(RumbleVehicleState& s) {
 
   void* susp  = RumbleFindInterface(simable, ISUSPENSION_IHANDLE_ADDR);
   void* body  = RumbleFindInterface(simable, IRIGIDBODY_IHANDLE_ADDR);
-  void* veh   = RumbleFindInterface(simable, IVEHICLE_IHANDLE_ADDR);
   void* input = RumbleFindInterface(simable, IINPUT_IHANDLE_ADDR);
+#ifdef GAME_PROSTREET
+  if (!susp || !body || !input) return false;
+  s.fSpeed     = RumbleVCall<float>(body, 0x2C); // IRigidBody::GetSpeed
+  s.fGas       = RumbleVCall<float>(input, 0x0C);
+  s.fBrake     = RumbleVCall<float>(input, 0x08);
+  s.fHandBrake = RumbleVCall<float>(input, 0x20);
+#else
+  void* veh   = RumbleFindInterface(simable, IVEHICLE_IHANDLE_ADDR);
   if (!susp || !body || !veh || !input) return false;
 
   s.fSpeed           = RumbleVCall<float>(veh, 0x98);  // IVehicle::GetAbsoluteSpeed
@@ -114,19 +147,33 @@ bool RumbleReadVehicleUnsafe(RumbleVehicleState& s) {
   s.fGas             = *(const float*)(ctrl + 0x14);
   s.fBrake           = *(const float*)(ctrl + 0x18);
   s.fHandBrake       = *(const float*)(ctrl + 0x1C);
+#endif
   const float* lin   = RumbleVCall<const float*>(body, 0x24);  // IRigidBody::GetLinearVelocity
   const float* ang   = RumbleVCall<const float*>(body, 0x28);  // IRigidBody::GetAngularVelocity
   memcpy(s.fLinVel, lin, sizeof(s.fLinVel));
   memcpy(s.fAngVel, ang, sizeof(s.fAngVel));
 
+#ifdef GAME_PROSTREET
+  s.nWheels = RumbleVCall<int>(susp, 0x14); // same suspension interface used by PS DoFFB
+#else
   s.nWheels = RumbleVCall<int>(susp, 0x08);
+#endif
+  if (s.nWheels < 0) return false;
   if (s.nWheels > RUMBLE_MAX_WHEELS) s.nWheels = RUMBLE_MAX_WHEELS;
   for (unsigned int i = 0; i < (unsigned int)s.nWheels; i++) {
+#ifdef GAME_PROSTREET
+    s.bOnGround[i] = RumbleVCall<bool>(susp, 0x34, i);
+    s.fCompression[i] = 0.0f; // PS suspension layout differs; no guessed compression offset
+    s.fSlip[i] = RumbleVCall<float>(susp, 0x0C, i);
+    s.fSkid[i] = RumbleVCall<float>(susp, 0x08, i);
+    s.fWheelAV[i] = RumbleVCall<float>(susp, 0x7C, i);
+#else
     s.bOnGround[i]    = RumbleVCall<bool>(susp, 0x24, i);
     s.fCompression[i] = RumbleVCall<float>(susp, 0x28, i);
     s.fSlip[i]        = RumbleVCall<float>(susp, 0x30, i);
     s.fSkid[i]        = RumbleVCall<float>(susp, 0x38, i);
     s.fWheelAV[i]     = RumbleVCall<float>(susp, 0x50, i);
+#endif
   }
   return true;
 }
@@ -134,7 +181,11 @@ bool RumbleReadVehicleUnsafe(RumbleVehicleState& s) {
 // the vehicle path is reverse engineered, so a wrong guess must not take the game down
 bool RumbleReadVehicle(RumbleVehicleState& s) {
   __try {
-    return RumbleReadVehicleUnsafe(s);
+    if (!RumbleReadVehicleUnsafe(s)) return false;
+    if (!_finite(s.fSpeed) || !_finite(s.fGas) || !_finite(s.fBrake) || !_finite(s.fHandBrake)) return false;
+    for (int i = 0; i < s.nWheels; ++i)
+      if (!_finite(s.fSlip[i]) || !_finite(s.fSkid[i]) || !_finite(s.fWheelAV[i]) || !_finite(s.fCompression[i])) return false;
+    return true;
   } __except (EXCEPTION_EXECUTE_HANDLER) {
     return false;
   }
@@ -158,11 +209,24 @@ bool RumbleReadLinearVelocity(float* velocity) {
   }
 }
 
+#ifdef GAME_PROSTREET
+bool RumblePSIsShifting() {
+  __try {
+    void* simable = RumbleGetPlayerSimable();
+    void* transmission = simable ? RumbleFindInterface(simable, ITRANSMISSION_IHANDLE_ADDR) : NULL;
+    return transmission && RumbleVCall<bool>(transmission, 0x14); // IsGearChanging
+  } __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
+}
+#endif
+
 // simulation clock (Sim::GetTime), seconds; advances only when the physics steps
+#ifdef GAME_MW
 float RumbleGetSimTime() { return *(const float*)SIM_TIME_ADDR; }
+#endif
 
 // --- surfaces ---
 
+#ifdef GAME_MW
 const void*(__cdecl* Attrib_FindCollection)(unsigned int classKey, unsigned int collectionKey) =
     (const void*(__cdecl*)(unsigned int, unsigned int))ATTRIB_FINDCOLLECTION_ADDR;
 
@@ -175,6 +239,18 @@ const void* RumbleBlownTireCollection = NULL;
 bool RumbleIsBlownTireSurface(const void* surface) {
   if (!RumbleBlownTireCollection) RumbleBlownTireCollection = Attrib_FindCollection(ATTRIB_CLASS_SIMSURFACE, SIMSURFACE_KEY_BLOWN_TIRE);
   return RumbleBlownTireCollection && *(const void* const*)((const char*)surface + 4) == RumbleBlownTireCollection;
+}
+#else
+// PS damaged-tyre surfaces remain in Surface until their collection key is verified.
+bool RumbleIsBlownTireSurface(const void*) { return false; }
+#endif
+
+const void* RumbleSurfaceCollection(const void* surface) {
+#ifdef GAME_PROSTREET
+  return *(const void* const*)surface;
+#else
+  return *(const void* const*)((const char*)surface + 4);
+#endif
 }
 
 // --- telemetry: [Rumble] Telemetry = 1 logs what the game feeds us to scripts\NFS_XtendedInput_Rumble.log ---
@@ -194,7 +270,12 @@ void RumbleTelemetryPrintf(const char* fmt, ...) {
       bRumbleTelemetryDead = true;
       return;
     }
+#ifdef GAME_PROSTREET
+    fprintf(RumbleTelemetryFile, "# PS native PC data; effect envelopes/tuning temporarily shared with MW; Xbox 360 curves not decoded\n");
+    fprintf(RumbleTelemetryFile, "# S,id,collection,PS-live,FFB_ROLL/SKID/SLIP[4 x 8]; '-' means no native attribute\n");
+#else
     fprintf(RumbleTelemetryFile, "# S,id,collection,name,renderNoise[freq amp minSpeed maxSpeed],wheelEffect[freq intensity],friction[6],FFB_ROLL/SKID/SLIP[4 x 8]\n");
+#endif
     fprintf(RumbleTelemetryFile, "# T,time,speed,gas,brake,handbrake,powerband,throttle,nos,shifting,shiftPotential,{surf,ground,comp,slip,skid,av,fbSlip,fbSkid}x4,linVel[3],angVel[3]\n");
     fprintf(RumbleTelemetryFile, "# C,time,type,flags,closingVel,normalSpeed,slidingSpeed,speedChange,strength,measuredSpeedChange\n");
   }
@@ -210,7 +291,7 @@ void RumbleTelemetryFlush() {
 
 void RumbleTelemetryDumpFFBWave(const void* surface, unsigned int key) {
   for (unsigned int i = 0; i < 4; i++) {
-    const float* w = (const float*)Attrib_Instance_GetAttributePointer(surface, key, i);
+    const float* w = (const float*)RumbleGetAttributePointer(surface, key, i);
     if (w)
       RumbleTelemetryPrintf(",%g %g %g %g %g %g %g %g", w[0], w[1], w[2], w[3], w[4], w[5], w[6], w[7]);
     else
@@ -219,6 +300,10 @@ void RumbleTelemetryDumpFFBWave(const void* surface, unsigned int key) {
 }
 
 void RumbleTelemetryDumpSurfaceUnsafe(int id, const void* surface) {
+#ifdef GAME_PROSTREET
+  // PS collection/layout are at +0/+4; MW's layout field offsets do not apply.
+  RumbleTelemetryPrintf("S,%d,%p,PS-live", id, RumbleSurfaces[id]);
+#else
   const char* layout = *(const char* const*)((const char*)surface + 8);
   const char* name   = layout ? *(const char* const*)(layout + 0xDC) : NULL;
   RumbleTelemetryPrintf("S,%d,%p,%s", id, RumbleSurfaces[id], name ? name : "?");
@@ -228,6 +313,7 @@ void RumbleTelemetryDumpSurfaceUnsafe(int id, const void* surface) {
     RumbleTelemetryPrintf(",%g %g %g %g,%u %u,%g %g %g %g %g %g", rn[0], rn[1], rn[2], rn[3], *(const unsigned short*)(layout + 0xF8),
                           *(const unsigned char*)(layout + 0xFA), fr[0], fr[1], fr[2], fr[3], fr[4], fr[5]);
   }
+#endif
   RumbleTelemetryDumpFFBWave(surface, 0xBA1297DA);  // FFB_ROLL
   RumbleTelemetryDumpFFBWave(surface, 0x0C149044);  // FFB_SKID
   RumbleTelemetryDumpFFBWave(surface, 0x8FD11D27);  // FFB_SLIP
@@ -235,7 +321,7 @@ void RumbleTelemetryDumpSurfaceUnsafe(int id, const void* surface) {
 
 // returns the surface's id in the log, dumping its data the first time it is seen
 int RumbleTelemetrySurfaceId(const void* surface) {
-  const void* collection = *(const void* const*)((const char*)surface + 4);
+  const void* collection = RumbleSurfaceCollection(surface);
   for (int i = 0; i < RumbleSurfaceCount; i++)
     if (RumbleSurfaces[i] == collection) return i;
   if (RumbleSurfaceCount >= RUMBLE_MAX_SURFACES) return -1;
@@ -293,6 +379,23 @@ struct RumbleWaveRecord {
   float fFrequencyMax, fAmplitudeMax, fOffsetMax, fXMax;
 };
 
+// Copy the native record before mixing: missing/invalid PC attributes are
+// silent, and never become NaNs or invalid motor values. PS uses its own live
+// Attrib::Instance reader, not an MW collection/layout cast.
+bool RumbleReadWaveRecord(const void* surface, unsigned int key, unsigned int index, RumbleWaveRecord& out) {
+  __try {
+    const void* ptr = RumbleGetAttributePointer(surface, key, index);
+    if (!ptr) return false;
+    memcpy(&out, ptr, sizeof(out));
+    const float* values = (const float*)&out;
+    for (int i = 0; i < 8; ++i) if (!_finite(values[i])) return false;
+    return out.fFrequencyMin >= 0 && out.fFrequencyMin <= 1000 &&
+           out.fFrequencyMax >= 0 && out.fFrequencyMax <= 1000 &&
+           fabsf(out.fAmplitudeMin) <= 4 && fabsf(out.fAmplitudeMax) <= 4 &&
+           fabsf(out.fOffsetMin) <= 4 && fabsf(out.fOffsetMax) <= 4 && out.fXMin < out.fXMax;
+  } __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
+}
+
 // one surface wave effect (road roll or skid): each channel keeps the strongest wheel's parameters for the tick
 struct RumbleWave {
   float fPhase[4];
@@ -306,12 +409,15 @@ struct RumbleWave {
 
   // surface: the SimSurface passed by the game, key: FFB_ROLL / FFB_SKID / FFB_SLIP
   void Add(const void* surface, unsigned int key, float x) {
+    if (!_finite(x)) return;
     // a non-array attribute returns the same record for every index: it only describes channel 0
-    const void* first  = Attrib_Instance_GetAttributePointer(surface, key, 0);
-    bool        single = first && Attrib_Instance_GetAttributePointer(surface, key, 1) == first;
+    const void* first  = RumbleGetAttributePointer(surface, key, 0);
+    bool        single = first && RumbleGetAttributePointer(surface, key, 1) == first;
     for (unsigned int ch = 0; ch < (single ? 1u : 4u); ch++) {
-      const RumbleWaveRecord* w = (const RumbleWaveRecord*)(ch == 0 ? first : Attrib_Instance_GetAttributePointer(surface, key, ch));
-      if (!w || x < w->fXMin || !(w->fXMin < w->fXMax)) continue;
+      RumbleWaveRecord record;
+      if (!RumbleReadWaveRecord(surface, key, ch, record)) continue;
+      const RumbleWaveRecord* w = &record;
+      if (x < w->fXMin) continue;
       float t = (x - w->fXMin) / (w->fXMax - w->fXMin);
       if (t > 1.0f) t = 1.0f;
       float freq = w->fFrequencyMin + (w->fFrequencyMax - w->fFrequencyMin) * t;
@@ -384,7 +490,7 @@ struct COLLISION_INFO {
 };
 static_assert(sizeof(COLLISION_INFO) == 0x80, "COLLISION_INFO size mismatch");
 
-// vtable layout must match the game's IFeedback (15 slots, MW PC v1.3 vtable 0x8A7BD4)
+// Native IFeedback: MW has 15 slots (0x8A7BD4); PS has 21 (0x98BE6C).
 // packed to 4 so the double member doesn't push the object off +0x2C inside InputDevice
 #pragma pack(push, 4)
 #pragma warning(push)
@@ -623,6 +729,11 @@ class IFeedback {
   // kerbs and bumps: a sharp rise in a grounded wheel's compression knocks once per wheel (landings are collisions).
   // Measured over the sim clock, so frame rate doesn't matter.
   void UpdateBumps() {
+#ifdef GAME_PROSTREET
+    // Ground impacts still use native collision events. Compression-derived
+    // kerb impulses await a verified PS suspension accessor and sim clock.
+    return;
+#else
     if (!mHasVehicle) {
       mHasPrevVehicle = false;
       return;
@@ -647,6 +758,7 @@ class IFeedback {
     }
     mPrevSimTime    = simTime;
     mHasPrevVehicle = true;
+#endif
   }
 
   // lockup, wheelspin and slides; adds their textures to the mixer
@@ -801,9 +913,13 @@ class IFeedback {
     mLandingLeft.Advance(dt);
     mLandingRight.Advance(dt);
     mTriggerCue.Advance(dt);
-    UpdateCarEffects();
-
     mHasVehicle = !mPaused && RumbleReadVehicle(mVehicle);
+#ifdef GAME_PROSTREET
+    // PS skips UpdateShifting when IEngineDamage is present. Query the native
+    // transmission instead of patching its DoFFB control flow as MW does.
+    if (mHasVehicle) mShifting = RumblePSIsShifting();
+#endif
+    UpdateCarEffects();
     UpdateBumps();
 
     // scrape: sliding contacts keep it alive, it fades quickly once they stop
@@ -848,7 +964,16 @@ class IFeedback {
     Send(left, right, RumbleMixer::ToMotor(leftTrigger, 1.0f), RumbleMixer::ToMotor(rightTrigger, 1.0f));
   }
 
-  // DoFFB calls Slip, Skid, then RoadNoise for each wheel in turn
+  // MW reports Slip, Skid, Road; PS reports Road, Slip, Skid with different arguments.
+#ifdef GAME_PROSTREET
+  virtual void ReservedPS6(uintptr_t, uintptr_t, uintptr_t) {}
+  virtual void UpdateTireSkid(const SimSurface& surface, float skid, float /*load*/, float /*grip*/, float /*totalLoad*/) {
+    AddSkid(mWheelArg < 2, surface, fabsf(skid));
+  }
+  virtual void UpdateTireSlip(const SimSurface& /*surface*/, float slip, float /*grip*/) {
+    if (mWheelArg >= 0 && mWheelArg < RUMBLE_MAX_WHEELS) RumbleTelemetry.fSlip[mWheelArg] = slip;
+  }
+#else
   virtual void UpdateRoadNoise(bool /*front*/, const SimSurface& surface, float speed) {
     (RumbleIsBlownTireSurface(&surface) ? mBlownTireWave : mRoadWave).Add(&surface, ATTRIB_KEY_FFB_ROLL, speed);
     mWheelArg++;
@@ -856,12 +981,20 @@ class IFeedback {
     RumbleTelemetry.nWheel++;
   }
   virtual void UpdateTireSkid(bool front, const SimSurface& surface, float skid) {
-    mSkidWave.Add(&surface, ATTRIB_KEY_FFB_SKID, front ? skid * 0.25f : skid);  // PS2 damps the front wheels
-    if (mWheelArg < RUMBLE_MAX_WHEELS) mWheelSkid[mWheelArg] = skid;
-    if (RumbleTelemetry.nWheel < RUMBLE_MAX_WHEELS) RumbleTelemetry.fSkid[RumbleTelemetry.nWheel] = skid;
+    AddSkid(front, surface, skid);
   }
   virtual void UpdateTireSlip(bool /*front*/, const SimSurface& /*surface*/, float slip) {
     if (RumbleTelemetry.nWheel < RUMBLE_MAX_WHEELS) RumbleTelemetry.fSlip[RumbleTelemetry.nWheel] = slip;
+  }
+#endif
+
+  void AddSkid(bool front, const SimSurface& surface, float skid) {
+    if (!_finite(skid)) return;
+    mSkidWave.Add(&surface, ATTRIB_KEY_FFB_SKID, front ? skid * 0.25f : skid);  // PS2 damps the front wheels
+    if (mWheelArg >= 0 && mWheelArg < RUMBLE_MAX_WHEELS) {
+      mWheelSkid[mWheelArg] = skid;
+      RumbleTelemetry.fSkid[mWheelArg] = skid;
+    }
   }
   virtual void UpdateRPM(float powerband, float /*overrev*/, float throttle) {
     RumbleTelemetry.fPowerband = powerband;
@@ -871,6 +1004,22 @@ class IFeedback {
   virtual void UpdateNOS(bool engaged, float /*nosLevel*/) { mNOSEngaged = engaged; }
   virtual void UpdateEngineBlown(bool blown) { mEngineBlown = blown; }
   virtual void UpdateShifting(bool shifting) { mShifting = shifting; }
+
+#ifdef GAME_PROSTREET
+  virtual void ReservedPS14(uintptr_t) {}
+  virtual void ReservedPS15(uintptr_t, uintptr_t, uintptr_t) {}
+  virtual void UpdateDriftSkid(const SimSurface& surface, float skid, float /*load*/, float /*grip*/) {
+    AddSkid(mWheelArg < 2, surface, fabsf(skid));
+  }
+  virtual void UpdateSteering(float /*steering*/) {} // wheel force, not controller rumble
+  virtual void UpdateRoadNoise(unsigned int wheel, const SimSurface& surface, float speed) {
+    mWheelArg = wheel < RUMBLE_MAX_WHEELS ? (int)wheel : RUMBLE_MAX_WHEELS;
+    if (mWheelArg == RUMBLE_MAX_WHEELS) return;
+    mRoadWave.Add(&surface, ATTRIB_KEY_FFB_ROLL, fabsf(speed));
+    if (bRumbleTelemetry) RumbleTelemetry.iSurface[wheel] = RumbleTelemetrySurfaceId(&surface);
+    if (RumbleTelemetry.nWheel < (int)wheel+1) RumbleTelemetry.nWheel = wheel+1;
+  }
+#endif
 
   static float Length(const float* v) { return sqrtf(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]); }
   static float Clamp01(float v) { return v < 0.0f ? 0.0f : (v > 1.0f ? 1.0f : v); }
@@ -929,12 +1078,25 @@ class IFeedback {
     }
   }
 
+#ifdef GAME_PROSTREET
+  virtual void ReportCollision(const COLLISION_INFO& cinfo, bool iamA, RumblePSVector velocityChange) {
+#else
   virtual void ReportCollision(const COLLISION_INFO& cinfo, bool iamA) {
+#endif
     if (!bRumbleEnabled || mPaused) return;
 
     bool  sliding  = (cinfo.flags & 0x80) != 0;
     bool  measured = false;
     float dv       = sliding ? 0.0f : CollisionSpeedChange(cinfo, iamA, measured);
+#ifdef GAME_PROSTREET
+    // PS supplies its own post-contact delta. Prefer it to the shared reader
+    // when it has taken the hit; keep the MW contact-normal fallback otherwise.
+    if (!sliding && _finite(velocityChange.x) && _finite(velocityChange.y) && _finite(velocityChange.z)) {
+      float change = Length(&velocityChange.x);
+      float estimate = fabsf(cinfo.closingVel[0]*cinfo.normal[0] + cinfo.closingVel[1]*cinfo.normal[1] + cinfo.closingVel[2]*cinfo.normal[2]);
+      if (change >= estimate * RUMBLE_COLLISION_MIN_MEASURED) { dv = change; measured = true; }
+    }
+#endif
     float strength = sliding ? 0.0f : CollisionMagnitude(cinfo, iamA, dv);
     if (bRumbleTelemetry) {
       const float* n  = cinfo.normal;
@@ -966,6 +1128,9 @@ class IFeedback {
     OutputDebugStringA(buf);
 #endif
   }
+#ifdef GAME_PROSTREET
+  virtual int GetControllerType() { return 5; } // native PC default; no force-feedback wheel
+#endif
 };
 #pragma warning(pop)
 #pragma pack(pop)

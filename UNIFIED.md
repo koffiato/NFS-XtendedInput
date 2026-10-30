@@ -15,13 +15,13 @@ implementation and where its configuration data came from.
 | `src/rumble/Output.h` | Timing, motor quantization and Windows.Gaming.Input backend |
 | `src/rumble/Settings.h` | Shared bounded settings reader |
 | `src/rumble/Underground.h` | UG/UG2 native events, game-specific hooks, routing and lifecycle |
-| `src/NFS_XtendedInput_Rumble.h` | MW feedback interface and vehicle/surface access |
+| `src/NFS_XtendedInput_Rumble.h` | Shared MW/PS feedback engine with game-specific interface slots and vehicle/surface access |
+| `src/rumble/ProStreet.h` | ProStreet native interface signatures and collision argument layout |
 | `underground/NFSU_XtendedInput_Rumble.h` | Compatibility include for the shared Underground adapter |
 
 The two input engines remain separate because Underground's event scanners and
 the later games' ActionID interfaces differ. The existing feedback adapters
-share the core, settings and WGI backend. Carbon, Undercover, ProStreet and
-World do not yet have feedback adapters.
+share the core, settings and WGI backend. Carbon, Undercover and World do not yet have feedback adapters.
 
 ## Configuration provenance
 
@@ -39,7 +39,9 @@ mirror their canonical configurations.
 The upstream ZIPs contain input mappings and controller-icon assets, not
 authored feedback profiles. UG/UG2 read their native event curves from the
 running game. MW reads native surface attributes and retains the fork's
-console-derived effects. Console profiles have not been recovered or verified
+console-derived effects. ProStreet reads live PC surface and vehicle data,
+using MW effect tuning temporarily; see [ProStreet notes](docs/prostreet-rumble.md).
+Console profiles have not been recovered or verified
 for all seven games.
 
 ## Hook and interface differences
@@ -50,8 +52,9 @@ hook signatures before installing rumble patches.
 
 Later games also differ: Carbon's feedback interface has additional slots
 compared with MW, and Undercover changes callback argument sizes. Reusing the
-MW interface layout unchanged would therefore be unsafe. These adapters remain
-unfinished.
+MW interface layout unchanged would therefore be unsafe. The PS adapter
+implements its 21-slot interface, five-argument skid/collision callbacks and
+separate road callback. Carbon and Undercover adapters remain unfinished.
 
 Xan's [IFeedback investigation](https://github.com/xan1242/NFS-XtendedInput/issues/10#issuecomment-1181213340)
 explains the PC feedback stubs, interface registration and hidden vibration

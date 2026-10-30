@@ -1,7 +1,7 @@
 # NFS XtendedInput - unified feedback branch
 
 XInput controller support for seven Black Box Need for Speed games, with shared
-rumble code for Underground, Underground 2 and Most Wanted.
+rumble code for Underground, Underground 2, Most Wanted and ProStreet.
 
 This unofficial fork builds on [NFS-XtendedInput](https://github.com/xan1242/NFS-XtendedInput)
 and [NFSU-XtendedInput](https://github.com/xan1242/NFSU-XtendedInput).
@@ -19,11 +19,11 @@ input support; a passing build does not establish in-game compatibility.
 | Most Wanted (2005) | `MW` | [Config-MW](data/Config-MW) | PC 1.3 adapter retained from the rumble fork |
 | Carbon | `CB` | [Config-Carbon](data/Config-Carbon) | Not implemented |
 | Undercover | `UC` | [Config-UC](data/Config-UC) | Not implemented |
-| ProStreet | `PS` | [Config-ProStreet](data/Config-ProStreet) | Not implemented |
+| ProStreet | `PS` | [Config-ProStreet](data/Config-ProStreet) | Experimental native PC adapter; live data with temporary MW effect tuning |
 | World | `W` | [Config-World](data/Config-World) | Not implemented; upstream input support remains experimental |
 
 No new in-game or controller hardware validation has been completed for this
-branch. UG/UG2 check their added rumble hook signatures before patching; those
+branch. UG/UG2/PS check their added rumble hook signatures before patching; those
 checks do not validate the upstream input hooks.
 
 This branch targets **Windows 10/11 and 32-bit game executables**.
@@ -81,7 +81,7 @@ for UG's remapping limits.
 ## Rumble settings
 
 Edit `[Rumble]` in the main INI beside the ASI. These settings currently
-affect **UG, UG2 and MW only**. The supplied UG INI sets `Enabled = 0`
+affect **UG, UG2, MW and PS**. The supplied UG INI sets `Enabled = 0`
 because its adapter is experimental.
 
 | Setting | Default | Meaning |
@@ -101,6 +101,13 @@ UG/UG2 use their own native event curves for impacts, road texture, suspension,
 drift, wheel slip, NOS, shifts and drag RPM. UG2 additionally reads wheel data
 for wheelspin and brake lockup. MW retains the fork's surface, collision,
 suspension, tyre and car effects, including shift cues and blown tyres.
+
+ProStreet uses its native feedback callbacks, live vehicle/pedal/wheel data
+and valid live PC surface waves. Its envelopes and effect tuning temporarily
+reuse MW values; the original Xbox 360 curves have not been decoded.
+Compression-based kerb effects are still pending. See
+[ProStreet feedback details](docs/prostreet-rumble.md) for the supported
+interface, telemetry and remaining validation.
 
 Impulse triggers require compatible Xbox One/Series hardware and
 Windows.Gaming.Input. Automatic mode uses conservative controller detection;
@@ -192,7 +199,17 @@ The harness checks hook signatures, native curves, routing, lifecycle stops,
 pedal mappings, wheel fixtures, mixer behavior and shared settings. It mocks
 controller output and game callbacks; it does not launch the game.
 
-Carbon, Undercover, ProStreet and World still need feedback adapters.
+The ProStreet x86 callback/vehicle/lifecycle harness runs in Actions:
+
+```bat
+tests\prostreet.cmd
+```
+
+It mocks game callbacks and motor output. Local checks also verified the added
+signatures against a read-only snapshot of the installed running ProStreet.
+No game files are required by CI. Controller feel and gameplay still need testing.
+
+Carbon, Undercover and World still need feedback adapters.
 UG needs gameplay validation, and the shared refactor needs controller testing.
 See [UNIFIED.md](UNIFIED.md) for the code layout and data provenance.
 
