@@ -162,9 +162,9 @@ Report issues with this fork in
 
 ## Credits and license
 
-- Xan/Tenjoin (Lovro Plese) and Berkay Yigit - upstream XtendedInput projects.
-- Martin Penkava - the Most Wanted rumble implementation.
-- AeroWidescreen - controller button icons.
+- [xan1242 (Lovro Plese)(https://github.com/xan1242) and Berkay Yigit - upstream XtendedInput projects.
+- [Martin Penkava](https://github.com/shaneomac1337) - the Most Wanted rumble implementation.
+- [AeroWidescreen](https://github.com/AeroWidescreen) - controller button icons.
 - LINK/2012 - injector.
 - [NFSU2-SplitScreen research](https://github.com/mihaits/NFSU2-SplitScreen/blob/main/docs/input.md)
   - reference material for the UG2 adapter.
