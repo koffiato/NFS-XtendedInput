@@ -57,3 +57,31 @@ Xan's [IFeedback investigation](https://github.com/xan1242/NFS-XtendedInput/issu
 explains the PC feedback stubs, interface registration and hidden vibration
 setting. [UG2 research and validation notes](underground/RUMBLE.md) document
 the existing adapter in more detail.
+
+## Release packaging
+
+[`scripts/release.py`](scripts/release.py) defines the seven official archive
+names and their resource layouts. It verifies pinned upstream ZIP checksums,
+copies only the required loader/texture/cursor files, and adds the current ASI,
+canonical configuration, action reference, license and installation notes.
+Packaging rejects invalid or non-x86 DLLs and verifies the output archive.
+
+The [Actions workflow](.github/workflows/release.yml) tests the packager, builds
+each game on Windows, and collects all seven archives before generating checksums.
+Only a tag push can create a draft prerelease; branch/PR/manual runs produce
+downloadable artifacts. Packaging tests use synthetic fixtures and require no
+game executable or network access:
+
+```bat
+python -m unittest discover -s tests -v
+```
+
+To package an existing local build, pass the full source commit SHA:
+
+```bat
+python scripts/release.py package --game UG2 --repository koffiato/NFS-XtendedInput --commit <40-character-commit-sha>
+```
+
+The script caches official mod packs in `.cache/upstream` and writes packages
+to `dist`. After packaging all seven targets, run
+`python scripts/release.py checksums` to create `dist/SHA256SUMS.txt`.

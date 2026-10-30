@@ -32,19 +32,20 @@ The unified build does not produce Windows 7 variants.
 ## Installation
 
 1. Back up your existing XtendedInput ASI, INI and custom mappings.
-2. Install the matching upstream package to obtain its ASI loader, button
-   textures and cursor assets:
-   - [Version 2.7](https://github.com/xan1242/NFSU-XtendedInput/releases/tag/2.7)
-     for UG/UG2.
-   - [Version 1.22](https://github.com/xan1242/NFS-XtendedInput/releases/tag/1.22)
-     for MW/Carbon/Undercover/ProStreet/World.
-3. Replace the XtendedInput ASI in the game's `scripts` folder with the build
-   for that game:
-   - UG/UG2: `build/<target>/NFSU_XtendedInput.asi`
-   - Other games: `build/<target>/NFS_XtendedInput.asi`
-4. For a fresh configuration, copy the INIs from the corresponding
-   `data/Config-*` directory into `scripts`. To preserve existing bindings,
-   merge the settings you need instead of replacing your INIs.
+2. Download the matching `Release-<game>-Pack.zip` from this branch's Actions
+   artifacts or releases. Extract it into the game's directory. Packages
+   include the loader, plugin, configurations and game-specific resources,
+   using the official upstream directory layout.
+3. Keep your existing INIs to preserve bindings, and merge new settings as
+   needed. The packaged INIs are defaults for fresh installations.
+
+If you built only the ASI locally, install the matching upstream
+[2.7 package](https://github.com/xan1242/NFSU-XtendedInput/releases/tag/2.7)
+for UG/UG2 or [1.22 package](https://github.com/xan1242/NFS-XtendedInput/releases/tag/1.22)
+for later games to obtain its loader, textures and cursor. Then replace its
+plugin in `scripts` with `build/<target>/NFSU_XtendedInput.asi` for UG/UG2,
+or `build/<target>/NFS_XtendedInput.asi` for later games. Fresh configurations
+are available under `data/Config-*`.
 
 Use one XtendedInput ASI per game. If using Underground's dynamic button icons,
 disable the Widescreen Fix's button-icon replacement. The x86 Visual C++
@@ -138,6 +139,44 @@ build.cmd MW
 Outputs go to `build/<target>/`. The root build script is the supported build
 entry point for this branch; the older Visual Studio projects remain in the
 repository.
+
+## Actions and releases
+
+The [release workflow](.github/workflows/release.yml) tests packaging and builds
+all seven x86 targets on pushes to `master` or `unified-feedback`, pull
+requests, manual runs and tag pushes. Each successful run uploads a
+`release-packages` artifact containing:
+
+- `Release-UG-Pack.zip`
+- `Release-UG2-Pack.zip`
+- `Release-MW-Pack.zip`
+- `Release-Carbon-Pack.zip`
+- `Release-UC-Pack.zip`
+- `Release-ProStreet-Pack.zip`
+- `Release-World-Pack.zip`
+- `SHA256SUMS.txt`
+
+ZIP contents mirror the official releases: `dinput8.dll`, `README.md` and
+`EventReference.txt` at the root; the ASI and INIs under `scripts`; and the
+game's textures/cursor where applicable. A `LICENSE` file is also included.
+There is no enclosing game directory inside each ZIP and no Windows 7 variant.
+
+Pushing a tag creates a **draft prerelease** after all builds pass:
+
+```bat
+git tag unified-v0.2.0
+git push origin unified-v0.2.0
+```
+
+Review the draft's packages and support notes before publishing. Reruns can
+update the draft; the workflow refuses to replace assets of a published release.
+Creating releases needs only the workflow's built-in `GITHUB_TOKEN`, with
+write access limited to the release job.
+
+The packager reuses loader, texture and cursor assets from the pinned official
+1.22/2.7 ZIPs and verifies their SHA-256 hashes. It always packages the newly
+built ASI and this branch's configurations. No game files are downloaded or
+required by the workflow.
 
 ## Validation and development
 

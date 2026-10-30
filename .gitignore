@@ -371,5 +371,6 @@ FodyWeavers.xsd
 # Unified build outputs
 /build/
 /dist/
+/.cache/
 *.exp
 *.lib
