@@ -1,3 +1,5 @@
+> Development branch: see [UNIFIED.md](UNIFIED.md) for seven-game build instructions and the current feedback support matrix.
+
 # XtendedInput rumble fork
 
 This is an unofficial fork of [NFS-XtendedInput](https://github.com/xan1242/NFS-XtendedInput) by xan1242 (Lovro Pleše) and Berkay Yiğit. It adds controller rumble to Need for Speed: Most Wanted (2005), including Xbox One / Series impulse triggers. See [Rumble (MW only)](#rumble-mw-only) for what you feel and how to tune it.

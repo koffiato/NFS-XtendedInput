@@ -367,3 +367,9 @@ FodyWeavers.xsd
 
 .Release Packages/
 8A69054A.ini
+
+# Unified build outputs
+/build/
+/dist/
+*.exp
+*.lib

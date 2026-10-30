@@ -3,7 +3,6 @@
 // by Xan/Tenjoin
 
 // TODO: BACKPORT STUFF FROM NFS_XtendedInput! Lots of stuff had been developed since this code was last updated!
-// TODO: Underground 1 rumble (Underground 2 has a separate feedback adapter).
 // TODO: remapping? -- partially done, but only 1 event per key and 1 key per event
 // TODO: kill DInput enough so that it doesn't detect XInput controllers but still detects wheels
 // TODO: proper raw input for keyboard (and maybe non XInput gamepads?)
@@ -108,7 +107,7 @@ struct ScannerConfig
 WORD EventStates[2][MAX_JOY_EVENT];
 bool EventStatesKB[2][MAX_JOY_EVENT];
 
-#ifdef GAME_UG2
+#if defined(GAME_UG) || defined(GAME_UG2)
 #include "NFSU_XtendedInput_Rumble.h"
 #endif
 
@@ -116,7 +115,7 @@ unsigned int GameWndProcAddr = 0;
 LRESULT(WINAPI* GameWndProc)(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 LRESULT WINAPI CustomWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
-#ifdef GAME_UG2
+#if defined(GAME_UG) || defined(GAME_UG2)
 	if (msg == WM_KILLFOCUS || msg == WM_CLOSE || msg == WM_DESTROY ||
 		(msg == WM_ACTIVATEAPP && !wParam))
 		RumbleStopAllPads();
@@ -1982,7 +1981,7 @@ void __stdcall ReadControllerData()
 {
 	MSG outMSG;
 	UpdateControllerState();
-#ifdef GAME_UG2
+#if defined(GAME_UG) || defined(GAME_UG2)
 	RumblePoll();
 #endif
 	ReadXInput_Extra();
@@ -2092,7 +2091,7 @@ int Init()
 	ZeroMemory(g_Controllers, sizeof(CONTROLLER_STATE) * MAX_CONTROLLERS);
 
 	InitConfig();
-#ifdef GAME_UG2
+#if defined(GAME_UG) || defined(GAME_UG2)
 	RumbleInit();
 #endif
 
@@ -2108,7 +2107,7 @@ BOOL APIENTRY DllMain(HMODULE /*hModule*/, DWORD reason, LPVOID /*lpReserved*/)
 		freopen("CON", "w", stderr);
 		Init();
 	}
-#ifdef GAME_UG2
+#if defined(GAME_UG) || defined(GAME_UG2)
 	else if (reason == DLL_PROCESS_DETACH)
 	{
 		RumbleStopAllPads(true);

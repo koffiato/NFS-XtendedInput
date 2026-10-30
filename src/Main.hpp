@@ -1791,23 +1791,14 @@ void InitConfig() {
   }
 
 #ifdef GAME_MW
-  constexpr const char* rumbleSection = "Rumble";
-  if (ini.has(rumbleSection)) {
-    if (ini[rumbleSection].has("Enabled")) bRumbleEnabled = std::stol(ini[rumbleSection]["Enabled"]) != 0;
-    if (ini[rumbleSection].has("Intensity")) fRumbleIntensity = clampf(std::stof(ini[rumbleSection]["Intensity"]), 0.0f, 2.0f);
-    if (ini[rumbleSection].has("LeftMotorScale")) fRumbleLeftScale = clampf(std::stof(ini[rumbleSection]["LeftMotorScale"]), 0.0f, 2.0f);
-    if (ini[rumbleSection].has("RightMotorScale")) fRumbleRightScale = clampf(std::stof(ini[rumbleSection]["RightMotorScale"]), 0.0f, 2.0f);
-    if (ini[rumbleSection].has("SwapMotors")) bRumbleSwapMotors = std::stol(ini[rumbleSection]["SwapMotors"]) != 0;
-    if (ini[rumbleSection].has("GearShift")) RumbleShiftPreset = (int)clampf((float)std::stol(ini[rumbleSection]["GearShift"]), 0.0f, (float)(kShiftPresetCount - 1));
-    if (ini[rumbleSection].has("ImpulseTriggers")) RumbleTriggerMode = (int)clampf((float)std::stol(ini[rumbleSection]["ImpulseTriggers"]), 0.0f, (float)(kTriggerModeCount - 1));
-    if (ini[rumbleSection].has("TriggerIntensity")) fRumbleTriggerIntensity = clampf(std::stof(ini[rumbleSection]["TriggerIntensity"]), 0.0f, 2.0f);
-    if (ini[rumbleSection].has("TriggerPedalScaling")) bRumbleTriggerPedalScaling = std::stol(ini[rumbleSection]["TriggerPedalScaling"]) != 0;
-    if (ini[rumbleSection].has("Telemetry")) bRumbleTelemetry = std::stol(ini[rumbleSection]["Telemetry"]) != 0;
-
-    const char* categoryKeys[kRumbleCategoryCount] = {"Impacts", "Surface", "Tyres", "Car"};
-    for (int i = 0; i < kRumbleCategoryCount; i++) {
-      if (ini[rumbleSection].has(categoryKeys[i])) fRumbleCategoryScale[i] = clampf(std::stof(ini[rumbleSection][categoryKeys[i]]), 0.0f, 2.0f);
-    }
+  RumbleLoadSettings([&](const char* key, float fallback) {
+    if (!ini.has("Rumble") || !ini["Rumble"].has(key)) return fallback;
+    try { return std::stof(ini["Rumble"][key]); }
+    catch (const std::exception&) { return fallback; }
+  });
+  if (ini.has("Rumble") && ini["Rumble"].has("Telemetry")) {
+    try { bRumbleTelemetry = std::stoi(ini["Rumble"]["Telemetry"]) != 0; }
+    catch (const std::exception&) { bRumbleTelemetry = false; }
   }
 #endif
 

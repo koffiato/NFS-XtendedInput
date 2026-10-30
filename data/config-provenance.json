@@ -1,0 +1,78 @@
+{
+  "MW/EventReference.txt": {
+    "release": "1.22",
+    "sha256": "11b0dcbce2c92705c47651018423b0cd32ffd626f88a3ed121c817918a5da6d0"
+  },
+  "MW/NFS_XtendedInput.default.ini": {
+    "release": "1.22",
+    "sha256": "301be2b1bc76eef1324ca28c3dc7b23e350ccfc70092c74e7468b4c2a1186ceb"
+  },
+  "MW/NFS_XtendedInput.ini": {
+    "release": "1.22",
+    "sha256": "94b6961ea565e0195682be8d64ed308cf6178475c8fee27afb16a1b1b2eff4c6"
+  },
+  "CB/EventReference.txt": {
+    "release": "1.22",
+    "sha256": "48e65bbb992f793a11c7ead95991bf3e2d2cdbbae7e3ec9b9907a64743866c77"
+  },
+  "CB/NFS_XtendedInput.default.ini": {
+    "release": "1.22",
+    "sha256": "d689a2fb8e4dd033394db9396c1cfb8daa6293c6557adbddb9eb560742984af7"
+  },
+  "CB/NFS_XtendedInput.ini": {
+    "release": "1.22",
+    "sha256": "94b6961ea565e0195682be8d64ed308cf6178475c8fee27afb16a1b1b2eff4c6"
+  },
+  "PS/EventReference.txt": {
+    "release": "1.22",
+    "sha256": "db817b527597e5835e72751d3d98195a059d90b06a5f5f7d1c91a0fc72b049fb"
+  },
+  "PS/NFS_XtendedInput.default.ini": {
+    "release": "1.22",
+    "sha256": "5bf0d9a45ba35995608acd37304015953eecf98a1c454a08ae26d6be494bc454"
+  },
+  "PS/NFS_XtendedInput.ini": {
+    "release": "1.22",
+    "sha256": "94b6961ea565e0195682be8d64ed308cf6178475c8fee27afb16a1b1b2eff4c6"
+  },
+  "UC/EventReference.txt": {
+    "release": "1.22",
+    "sha256": "68ba83c37b788373899622e1ae12d318f6be102d5a1753f38d42ede27c10882a"
+  },
+  "UC/NFS_XtendedInput.default.ini": {
+    "release": "1.22",
+    "sha256": "23c01569387a453bb4ba6707687b7041ab78f8e6ba733e824e923efd3510405c"
+  },
+  "UC/NFS_XtendedInput.ini": {
+    "release": "1.22",
+    "sha256": "e4d2502771c8f5aa6a584da929b726cd9a3856b9a2b7bbf7aa1f6dd40ca6636a"
+  },
+  "W/EventReference.txt": {
+    "release": "1.22",
+    "sha256": "cf80533455d3911fbb62d8ff9f0a02f2a1c85b2c382c788575f443e027659ff0"
+  },
+  "W/NFS_XtendedInput.default.ini": {
+    "release": "1.22",
+    "sha256": "b334a390922f352bccc496ea794a363b4978be44aedf44eece44f1913c02eb7e"
+  },
+  "W/NFS_XtendedInput.ini": {
+    "release": "1.22",
+    "sha256": "e4d2502771c8f5aa6a584da929b726cd9a3856b9a2b7bbf7aa1f6dd40ca6636a"
+  },
+  "UG/EventReference.txt": {
+    "release": "2.7",
+    "sha256": "2616dc9da7de02bae896608cba5c26968197a9dce9c162eef1da6ff8fb221ea1"
+  },
+  "UG/NFSU_XtendedInput.ini": {
+    "release": "2.7",
+    "sha256": "a1c314122380ae313629f7256740a1ea6ebeb57179f9c2f2a1ff6f0cb5b1dd20"
+  },
+  "UG2/EventReference.txt": {
+    "release": "2.7",
+    "sha256": "ef3c153ac4988a30fbcca06dfa7d5a49643a1ad35230f79b3e43a03fc4839385"
+  },
+  "UG2/NFSU_XtendedInput.ini": {
+    "release": "2.7",
+    "sha256": "ea33669b658605bf80f4826f0525832bb49740c7b23e9fdb487701a3b39cef81"
+  }
+}

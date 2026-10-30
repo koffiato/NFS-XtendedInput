@@ -47,7 +47,11 @@ struct CIniReader {
     if (!strcmp(key,"ImpulseTriggers")) return 0;
     return fallback;
   }
-  float ReadFloat(const char*, const char*, float fallback) { return fallback; }
+  float ReadFloat(const char*, const char* key, float fallback) {
+    if (!strcmp(key,"Enabled")) return enabled ? 1.0f : 0.0f;
+    if (!strcmp(key,"ImpulseTriggers")) return 0;
+    return fallback;
+  }
   const char* GetIniPath() { return "rumble-tests.ini"; }
 };
 #define GetForegroundWindow TestForeground
@@ -98,6 +102,17 @@ void LoadImage(const char* path) {
 
 int main(int argc, char** argv) {
   assert(argc == 2);
+  // Both adapters use this same parser, including finite bounds and presets.
+  RumbleLoadSettings([](const char* key, float fallback) {
+    if (!strcmp(key,"Intensity")) return INFINITY;
+    if (!strcmp(key,"Car")) return -5.0f;
+    if (!strcmp(key,"GearShift")) return 999.0f;
+    if (!strcmp(key,"ImpulseTriggers")) return -1.0f;
+    return fallback;
+  });
+  assert(fRumbleIntensity == 0 && fRumbleCategoryScale[kRumbleCar] == 0);
+  assert(RumbleShiftPreset == kShiftMax && RumbleTriggerMode == kTriggersOff);
+  RumbleLoadSettings([](const char*, float fallback) { return fallback; });
   LoadImage(argv[1]);
   assert(RumbleValidateHooks());
   unsigned char original = *(unsigned char*)RUMBLE_UPDATE_CALL;
