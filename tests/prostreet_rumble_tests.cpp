@@ -155,21 +155,42 @@ void TestPSTyreUnits(IFeedback& f, void* surface) {
   f.ClearEffects(); f.mHasVehicle = true; memset(&f.mVehicle,0,sizeof(f.mVehicle));
   f.mVehicle.nWheels = 4; f.mVehicle.fSpeed = 30; f.mVehicle.fGas = 1;
   for (int i=0;i<4;++i) { f.mVehicle.bOnGround[i] = true; f.mVehicle.fSlip[i] = 0.2f; }
-  f.mMixer.Begin(0.016f); f.MixTyres(0.016f);
+  f.mMixer.Begin(); f.MixTyres(0.016f);
   assert(f.mSpinLevel > 0); // .2 ratio is real wheelspin; MW's 3 m/s gate would miss it
   f.mVehicle.fGas = 0; f.mVehicle.fBrake = 1;
   for (int i=0;i<4;++i) f.mVehicle.fSlip[i] = -0.2f;
-  f.mMixer.Begin(0.016f); f.MixTyres(0.016f); assert(f.mLockupLevel > 0);
+  f.mMixer.Begin(); f.MixTyres(0.016f); assert(f.mLockupLevel > 0);
   f.mVehicle.fBrake = 0;
   for (int i=0;i<4;++i) f.mVehicle.fSlip[i] = 0;
   f.mWheelSkid[2] = 0.2f;
-  f.mMixer.Begin(0.016f); f.MixTyres(0.016f); assert(f.mSlideLevel > 0);
+  f.mMixer.Begin(); f.MixTyres(0.016f); assert(f.mSlideLevel > 0);
   f.mVehicle.fSpeed = 0;
   for (int i=0;i<4;++i) f.mWheelSkid[i] = 3.14159f;
   f.mSkidWave.Begin(); f.mSkidWave.Add(surface,ATTRIB_KEY_FFB_SKID,3.14f);
-  f.mMixer.Begin(0.016f); f.MixTyres(0.016f);
+  f.mMixer.Begin(); f.MixTyres(0.016f);
   int left,right; f.mMixer.Resolve(left,right);
   assert(f.mSlideLevel == 0 && left == 0 && right == 0); // pi at rest must not buzz
+  f.ClearEffects();
+}
+
+void TestCarEffects(IFeedback& f) {
+  f.ClearEffects();
+  f.mPrevNOSEngaged = f.mPrevShifting = f.mPrevEngineBlown = false;
+  f.mShiftPotential = SHIFT_POTENTIAL_PERFECT;
+  f.UpdateCarEffects();
+  assert(f.mShiftTick.GetValue() == 0); // potential alone adds no fabricated cue
+  f.mShifting = true; f.mNOSEngaged = true;
+  f.UpdateCarEffects();
+  f.mShiftTick.Advance(0.25f); f.mNOSKick.Advance(1.0f);
+  assert(fabsf(f.mShiftTick.GetValue()-0.4f) < 0.00001f);
+  assert(fabsf(f.mNOSKick.GetValue()-0.75f) < 0.00001f);
+  f.UpdateCarEffects(); // held inputs must not restart either ramp
+  f.mShiftTick.Advance(0.25f); f.mNOSKick.Advance(1.0f);
+  assert(f.mShiftTick.GetValue() == 0 && f.mNOSKick.GetValue() == 0);
+  f.mShifting = false; f.mNOSEngaged = false; f.UpdateCarEffects();
+  bRumbleGearShift = false;
+  f.mShifting = true; f.UpdateCarEffects(); assert(f.mShiftTick.GetValue() == 0);
+  bRumbleGearShift = true;
   f.ClearEffects();
 }
 
@@ -232,6 +253,14 @@ int main(int argc, char** argv) {
   RumbleVCall<void>(&f, 0x1C, (void*)surface, 15.0f, 1.0f, 1.0f, 4.0f); // five arguments
   assert(f.mWheelSkid[2] == 15 && f.mWheelSkid[0] == 0);
   assert(RumbleTelemetry.fSlip[2] == 12);
+  assert(f.mSlipWave.fFrequency[0] > 0); // body slip uses the live surface record
+  RumbleWave expectedSlip = f.mSlipWave;
+  f.mSkidWave.Begin();
+  float nativeLeft, nativeRight;
+  expectedSlip.Sample(0.016f, nativeLeft, nativeRight);
+  f.mMixer.Begin(); f.MixTyres(0.016f);
+  int actualLeft, actualRight; f.mMixer.Resolve(actualLeft, actualRight);
+  assert(actualLeft == RumbleMixer::ToMotor(nativeLeft,1) && actualRight == RumbleMixer::ToMotor(nativeRight,1));
   assert(f.mRoadWave.fFrequency[0] == 7.5f); // live speed=50; native road signal=.5 is not speed
   RumbleVCall<void>(&f, 0x40, (void*)surface, 18.0f, 1.0f, 1.0f); // drift skid
   assert(f.mWheelSkid[2] == 18);
@@ -250,6 +279,7 @@ int main(int argc, char** argv) {
   assert(RumbleVCall<int>(&f, 0x50) == 5); // final slot returns an int
   TestCollisionListener(f);
   TestPSTyreUnits(f,surface);
+  TestCarEffects(f);
   f.ResumeEffects();
   f.Send(30000, 20000);
   bRumbleAppActive = false; f.Watchdog();

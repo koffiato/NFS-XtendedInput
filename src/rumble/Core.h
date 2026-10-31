@@ -30,39 +30,7 @@ float fRumbleLeftScale                           = 1.0f;  // low frequency (heav
 float fRumbleRightScale                          = 1.0f;  // high frequency (light) motor
 float fRumbleCategoryScale[kRumbleCategoryCount] = {1.0f, 1.0f, 1.0f, 1.0f};
 
-// ducking: textures drop to this level while an impact pulse is playing
-const float RUMBLE_DUCK_LEVEL     = 0.3f;
-const float RUMBLE_DUCK_THRESHOLD = 0.05f;
-// fatigue fade: a texture running longer than FATIGUE_START seconds fades to FATIGUE_FLOOR over FATIGUE_RAMP seconds,
-// and recovers once it has been quiet for FATIGUE_RESET seconds. Pulses never fade.
-const float RUMBLE_FATIGUE_START = 3.0f;
-const float RUMBLE_FATIGUE_RAMP  = 5.0f;
-const float RUMBLE_FATIGUE_FLOOR = 0.6f;
-const float RUMBLE_FATIGUE_RESET = 2.5f;
-
-enum RumbleShiftPreset {
-  kShiftOff,
-  kShiftLow,
-  kShiftMedium,
-  kShiftStrong,
-  kShiftMax,  // everything at full power
-  kShiftPresetCount,
-};
-struct RumbleShiftFeel {
-  float fLeft;
-  float fRight;
-  float fTrigger;
-  float fTime;
-  float fFloor;  // where the knock has decayed to when it cuts off
-};
-const RumbleShiftFeel RumbleShiftFeels[kShiftPresetCount] = {
-    {0.0f, 0.0f, 0.0f, 0.0f, 0.0f},      // off
-    {0.3f, 0.0f, 0.3f, 0.1f, 0.6f},      // low
-    {0.55f, 0.15f, 0.6f, 0.12f, 0.6f},   // medium
-    {0.9f, 0.45f, 0.9f, 0.16f, 0.6f},    // strong
-    {1.0f, 1.0f, 1.0f, 0.22f, 0.8f},     // max
-};
-int RumbleShiftPreset = kShiftMedium;
+bool bRumbleGearShift = true;
 
 // envelopes from the console Rumble.cpp (time in seconds, value 0-255)
 struct RumbleEnvelopePoint {
@@ -72,14 +40,7 @@ struct RumbleEnvelopePoint {
 
 const RumbleEnvelopePoint SmallRumblePoints[] = {{0.0f, 255.0f}, {0.05f, 200.0f}, {0.07f, 80.0f}, {0.8f, 0.0f}};
 const RumbleEnvelopePoint BigRumblePoints[]   = {{0.0f, 255.0f}, {0.15f, 255.0f}, {0.2f, 120.0f}, {1.2f, 0.0f}};
-// shift timing cues (not from the console code): Perfect = light double tap, Miss = rough buzz
-const RumbleEnvelopePoint PerfectShiftPoints[] = {{0.0f, 255.0f}, {0.07f, 255.0f}, {0.07f, 0.0f}, {0.13f, 0.0f}, {0.13f, 255.0f}, {0.2f, 255.0f}, {0.2f, 0.0f}};
-const RumbleEnvelopePoint MissShiftPoints[]    = {{0.0f, 255.0f}, {0.15f, 180.0f}, {0.15f, 0.0f}};
-// the same cues on the right trigger: Perfect = one crisp tick, Miss = two
-const RumbleEnvelopePoint TriggerPerfectPoints[] = {{0.0f, 255.0f}, {0.03f, 255.0f}, {0.03f, 0.0f}};
-const RumbleEnvelopePoint TriggerMissPoints[]    = {{0.0f, 255.0f}, {0.025f, 255.0f}, {0.025f, 0.0f}, {0.085f, 0.0f}, {0.085f, 255.0f}, {0.11f, 255.0f}, {0.11f, 0.0f}};
-// kerb / bump thump (not from the console code): one sharp knock per wheel, so crossing a kerb gives the natural front-rear double knock
-const RumbleEnvelopePoint BumpPoints[] = {{0.0f, 255.0f}, {0.04f, 255.0f}, {0.12f, 0.0f}};
+const RumbleEnvelopePoint SingleRoadBumpPoints[] = {{0.0f, 140.0f}, {0.07f, 0.0f}};
 
 struct RumbleRamp {
   float fTime;
@@ -138,52 +99,16 @@ struct RumblePulse {
   }
 };
 
-// running time of a texture, for the fatigue fade
-struct RumbleTextureState {
-  float fActiveTime;
-  float fQuietTime;
-
-  float Update(bool active, float dt) {
-    if (active) {
-      fActiveTime += dt;
-      fQuietTime = 0.0f;
-    } else {
-      fQuietTime += dt;
-      if (fQuietTime >= RUMBLE_FATIGUE_RESET) fActiveTime = 0.0f;
-    }
-    if (fActiveTime <= RUMBLE_FATIGUE_START) return 1.0f;
-    float t = (fActiveTime - RUMBLE_FATIGUE_START) / RUMBLE_FATIGUE_RAMP;
-    if (t > 1.0f) t = 1.0f;
-    return 1.0f - (1.0f - RUMBLE_FATIGUE_FLOOR) * t;
-  }
-};
-
-// collects every effect's motor values for one tick and resolves them to the final motor output
+// Strongest effect per motor. No additional envelope shaping in the mixer.
 struct RumbleMixer {
-  float fDt;
-  float fPulse[2];
-  float fTexture[2];
-  bool  bImpactPlaying;
+  float fMotor[2];
 
-  void Begin(float dt) {
-    fDt            = dt;
-    fPulse[0]      = fPulse[1] = 0.0f;
-    fTexture[0]    = fTexture[1] = 0.0f;
-    bImpactPlaying = false;
-  }
+  void Begin() { fMotor[0] = fMotor[1] = 0.0f; }
 
-  void AddPulse(RumbleCategory category, float left, float right) {
+  void Add(RumbleCategory category, float left, float right) {
     float scale = fRumbleCategoryScale[category];
-    if (category == kRumbleImpacts && (left > RUMBLE_DUCK_THRESHOLD || right > RUMBLE_DUCK_THRESHOLD) && scale > 0.0f) bImpactPlaying = true;
-    if (left * scale > fPulse[0]) fPulse[0] = left * scale;
-    if (right * scale > fPulse[1]) fPulse[1] = right * scale;
-  }
-
-  void AddTexture(RumbleCategory category, RumbleTextureState& state, float left, float right) {
-    float fatigue = state.Update(left > 0.0f || right > 0.0f, fDt);
-    float scale   = fRumbleCategoryScale[category] * fatigue;
-    if (left * scale > fTexture[0]) fTexture[0] = left * scale;
-    if (right * scale > fTexture[1]) fTexture[1] = right * scale;
+    if (left * scale > fMotor[0]) fMotor[0] = left * scale;
+    if (right * scale > fMotor[1]) fMotor[1] = right * scale;
   }
 
   static int ToMotor(float value, float scale) {
@@ -194,11 +119,8 @@ struct RumbleMixer {
   }
 
   void Resolve(int& leftMotor, int& rightMotor) const {
-    float duck  = bImpactPlaying ? RUMBLE_DUCK_LEVEL : 1.0f;
-    float left  = fPulse[0] > fTexture[0] * duck ? fPulse[0] : fTexture[0] * duck;
-    float right = fPulse[1] > fTexture[1] * duck ? fPulse[1] : fTexture[1] * duck;
-    leftMotor   = ToMotor(left, fRumbleLeftScale);
-    rightMotor  = ToMotor(right, fRumbleRightScale);
+    leftMotor   = ToMotor(fMotor[0], fRumbleLeftScale);
+    rightMotor  = ToMotor(fMotor[1], fRumbleRightScale);
     if (bRumbleSwapMotors) {
       int tmp    = leftMotor;
       leftMotor  = rightMotor;

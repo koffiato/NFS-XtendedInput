@@ -1,8 +1,8 @@
 # Underground 2 rumble research
 
-The shared adapter reads the native PC event table and applies its own mixer,
-including impact ducking, fatigue and trigger effects. UG1 uses different hooks
-and wheel data. The PS2 comparison below covers UG2 only.
+The shared adapter reads the native PC event table, including event 7's authored
+envelope. UG1 uses different hooks and wheel data. The PS2 comparison below
+covers UG2 only.
 
 The UG2 harness in `tests/ug2.cmd` validates hook signatures, curves, routing
 and lifecycle with mocked controller output. Gameplay and hardware behavior
@@ -125,11 +125,16 @@ the arrays listed above.
 
 ## What this does not verify
 
-The current [adapter](../src/rumble/Underground.h) adapts those native values
-through shared category mixing, fatigue, ducking and motor scales. Its
-`GearShift` preset replaces the authored event 7 envelope. Xbox impulse-trigger
-effects are additional adapter behavior. Identical source tables therefore
-do not imply a bit-for-bit reproduction of PS2 controller commands.
+The [adapter](../src/rumble/Underground.h) preserves the native curve points,
+input ranges, gain ranges and disabled effects. Event 7 uses its native
+(0, 255), (0.075, 20), (0.2, 0) envelope; `GearShift` is now an on/off switch.
+The custom presets, fatigue, ducking and extra shift-quality cues are removed.
+
+Pending a motor trace, envelopes go directly to the variable-speed heavy motor
+and the strongest effect wins. This is a simple routing estimate, not a verified
+PS2 scheduler port. Xbox impulse triggers remain an optional extension using
+proportional pedal/slip signals and the same event 7 envelope. Identical source
+tables do not imply identical PS2 controller commands.
 
 A PCSX2 gameplay trace is still needed to verify native priority arbitration,
 event retriggering/overlap, time advancement and final per-motor quantization,

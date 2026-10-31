@@ -63,12 +63,6 @@ bool bRumbleLogTried = false;
 struct RumblePort {
   RumblePulse event[RUMBLE_EVENT_COUNT];
   RumbleEnvelopePoint points[RUMBLE_EVENT_COUNT][8];
-  RumbleTextureState texture[kRumbleCategoryCount];
-  RumbleTextureState triggerTexture[2];
-  RumbleRamp shift;
-  float lastShiftEvent;
-  float lastNOS;
-  float spin, lockup;
   int wanted[4];
   int sent[4];
 };
@@ -99,8 +93,6 @@ void RumbleTelemetry(const char* fmt, ...) {
 
 void RumbleResetPort(int port) {
   ZeroMemory(&RumblePorts[port], sizeof(RumblePorts[port]));
-  RumblePorts[port].lastShiftEvent = -100.0f;
-  RumblePorts[port].lastNOS = -100.0f;
 }
 
 void RumbleStopAllPads(bool fromDllMain = false) {
@@ -167,18 +159,10 @@ void __cdecl RumbleEvent(int type, int port, float amount) {
       !g_Controllers[port].bConnected || !RumbleCanPlay() || !_finite(amount)) return;
   const RumbleNativeEvent& native = ((const RumbleNativeEvent*)RUMBLE_EVENT_TABLE_ADDR)[type];
   // Preserve the game's disabled effects (notably types 4/5).
-  if (!native.enabled || amount <= native.params[0]) return;
+  if (!native.enabled || amount < native.params[0] || (type == 7 && !bRumbleGearShift)) return;
   float t = RumbleRampValue(amount, native.params[0], native.params[1]);
   float amplitude = native.params[2] + (native.params[3] - native.params[2]) * t;
   RumblePort& state = RumblePorts[port];
-  if (type == 7) {
-    const RumbleShiftFeel& feel = RumbleShiftFeels[RumbleShiftPreset];
-    if (RumbleSimClock - state.lastShiftEvent > 0.10f)
-      state.shift.Start(1.0f, feel.fFloor, feel.fTime);
-    state.lastShiftEvent = RumbleSimClock;
-    return;
-  }
-  if (type == 6) state.lastNOS = RumbleSimClock;
   RumblePulse& pulse = state.event[type];
   // Repeated physics samples sustain a curve without resetting its attack each tick.
   if (!pulse.pPoints || (RumbleEventIsPulse(type) && pulse.GetValue() < amplitude * native.curve->points[0].fValue / 255.0f)) {
@@ -297,47 +281,28 @@ void __cdecl RumbleFrame() {
     if (!g_Controllers[port].bConnected) { RumbleResetPort(port); continue; }
     RumblePort& state = RumblePorts[port];
     RumbleMixer mixer = {};
-    mixer.Begin(dt);
-    float textures[kRumbleCategoryCount][2] = {};
+    mixer.Begin();
+    float shift = state.event[7].GetValue();
     for (int type = 0; type < RUMBLE_EVENT_COUNT; ++type) {
       float level = state.event[type].GetValue();
       RumbleCategory category = RumbleEventCategory[type];
-      // U2 authored one large actuator; keep texture lighter than knocks.
-      float left = level * (category == kRumbleCar ? 0.25f : 0.65f);
-      float right = level * (category == kRumbleTyres ? 0.7f : 0.25f);
-      if (RumbleEventIsPulse(type)) mixer.AddPulse(category, left, right);
-      else {
-        textures[category][0] = (std::max)(textures[category][0], left);
-        textures[category][1] = (std::max)(textures[category][1], right);
-      }
+      // Until native motor arbitration is traced, route the authored envelope
+      // directly to the variable-speed heavy motor, without a guessed split.
+      mixer.Add(category, level, 0);
       state.event[type].Advance(dt);
     }
     float spin = 0, lockup = 0;
     if (!RumbleReadSlip(port, spin, lockup)) spin = lockup = 0;
     float gas = RumblePedal(port, JOY_EVENT_THROTTLE, JOY_EVENT_THROTTLE_ANALOG, JOY_EVENT_THROTTLE_ANALOG_ALTERNATE);
     float brake = RumblePedal(port, JOY_EVENT_BRAKE, JOY_EVENT_BRAKE_ANALOG, JOY_EVENT_BRAKE_ANALOG_ALTERNATE);
-    spin *= gas;
-    lockup *= brake;
-    textures[kRumbleTyres][0] = (std::max)(textures[kRumbleTyres][0], spin*0.25f);
-    textures[kRumbleTyres][1] = (std::max)(textures[kRumbleTyres][1], lockup*0.6f);
-    for (int c = 0; c < kRumbleCategoryCount; ++c)
-      mixer.AddTexture((RumbleCategory)c, state.texture[c], textures[c][0], textures[c][1]);
-    const RumbleShiftFeel& feel = RumbleShiftFeels[RumbleShiftPreset];
-    float shift = state.shift.GetValue();
-    mixer.AddPulse(kRumbleCar, shift*feel.fLeft, shift*feel.fRight);
-    state.shift.Advance(dt);
     mixer.Resolve(state.wanted[0], state.wanted[1]);
     float pedalL = bRumbleTriggerPedalScaling ? brake : (brake > 0 ? 1.0f : 0.0f);
     float pedalR = bRumbleTriggerPedalScaling ? gas : (gas > 0 ? 1.0f : 0.0f);
-    float rawSpin = gas > 0 ? spin/gas : 0;
-    float rawLockup = brake > 0 ? lockup/brake : 0;
-    float triggerL = rawLockup*pedalL*0.6f*fRumbleCategoryScale[kRumbleTyres];
-    float triggerR = rawSpin*pedalR*0.5f*fRumbleCategoryScale[kRumbleTyres];
-    if (RumbleSimClock - state.lastNOS < 0.1f)
-      triggerR = (std::max)(triggerR, 0.25f*pedalR*fRumbleCategoryScale[kRumbleCar]);
-    triggerL *= state.triggerTexture[0].Update(triggerL > 0, dt);
-    triggerR *= state.triggerTexture[1].Update(triggerR > 0, dt);
-    triggerR = (std::max)(triggerR, shift*feel.fTrigger*fRumbleCategoryScale[kRumbleCar]);
+    // Optional hardware extension: proportional pedal/slip feedback, plus the
+    // same shift envelope. No synthesized ABS pulses or additional NOS effect.
+    float triggerL = lockup*pedalL*fRumbleCategoryScale[kRumbleTyres];
+    float triggerR = spin*pedalR*fRumbleCategoryScale[kRumbleTyres];
+    triggerR = (std::max)(triggerR, shift*fRumbleCategoryScale[kRumbleCar]);
     state.wanted[2] = RumbleMixer::ToMotor(triggerL, fRumbleTriggerIntensity);
     state.wanted[3] = RumbleMixer::ToMotor(triggerR, fRumbleTriggerIntensity);
     for (int m = 0; m < 4; ++m) state.wanted[m] = RumbleRoundToPercent(state.wanted[m]);

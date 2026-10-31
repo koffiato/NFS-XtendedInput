@@ -12,7 +12,8 @@ void RumbleLoadSettings(Reader read) {
   const char* keys[] = {"Impacts", "Surface", "Tyres", "Car"};
   for (int i = 0; i < kRumbleCategoryCount; ++i)
     fRumbleCategoryScale[i] = RumbleClamp(read(keys[i], 1), 0, 2);
-  RumbleShiftPreset = (int)RumbleClamp(read("GearShift", kShiftMedium), 0, kShiftPresetCount-1);
+  // Older INIs used 1..4 for custom presets; any positive value now enables the game effect.
+  bRumbleGearShift = RumbleClamp(read("GearShift", 1), 0, 1) > 0;
   RumbleTriggerMode = (int)RumbleClamp(read("ImpulseTriggers", kTriggersAuto), 0, kTriggerModeCount-1);
   fRumbleTriggerIntensity = RumbleClamp(read("TriggerIntensity", 1), 0, 2);
   bRumbleTriggerPedalScaling = read("TriggerPedalScaling", 1) != 0;

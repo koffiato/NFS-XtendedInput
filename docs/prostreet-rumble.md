@@ -16,14 +16,19 @@ player speed, velocity, pedals, wheel contact/slip/skid, the raw road signal and
 transmission state. It does not infer feedback from controller button presses.
 
 Surface waves are read through ProStreet's own `Attrib::Instance` accessor
-(`0x52B950`), for `FFB_ROLL`, `FFB_SKID` and telemetry's `FFB_SLIP`. Missing,
+(`0x52B950`), for `FFB_ROLL`, `FFB_SKID` and `FFB_SLIP`. Missing,
 unreadable, non-finite or invalid records are silent. A valid native PC curve
 takes priority; an absent curve is not presented as recovered console data.
-The shared MW tyre textures still provide slip/lockup/slide feedback.
+Body tyre feedback uses these native waves without synthesized lockup pulses,
+wheelspin oscillation or an added skid hiss. Signed live slip distinguishes
+braking and throttle for the optional proportional trigger extension.
 
-Impacts, landings, NOS, shifts, shift cues and tyre texture tuning temporarily
-reuse the existing MW implementation. These are **not ProStreet Xbox 360
-curves**. Xbox 360 decoding remains pending. No game files were downloaded,
+Impacts and landings use the shared MW collision math and console envelopes.
+NOS, shifts and engine damage reuse the MW port's baseline car ramps; the
+shortened NOS kick, custom shift presets, perfect/missed-shift cues, fatigue
+and impact ducking are removed. Scrape strength remains a linear contact-speed
+estimate. These fallbacks are **not ProStreet Xbox 360 curves**. Xbox 360
+decoding remains pending. No game files were downloaded,
 and no executable, memory snapshot or game data is shipped in this repository.
 
 Compression-derived kerb/bumps and the damaged-tyre surface's separate impact

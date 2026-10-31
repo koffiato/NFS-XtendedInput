@@ -102,7 +102,7 @@ void LoadImage(const char* path) {
 
 int main(int argc, char** argv) {
   assert(argc == 2);
-  // Both adapters use this same parser, including finite bounds and presets.
+  // Both adapters use this same parser, including finite bounds and legacy GearShift values.
   RumbleLoadSettings([](const char* key, float fallback) {
     if (!strcmp(key,"Intensity")) return INFINITY;
     if (!strcmp(key,"Car")) return -5.0f;
@@ -111,7 +111,7 @@ int main(int argc, char** argv) {
     return fallback;
   });
   assert(fRumbleIntensity == 0 && fRumbleCategoryScale[kRumbleCar] == 0);
-  assert(RumbleShiftPreset == kShiftMax && RumbleTriggerMode == kTriggersOff);
+  assert(bRumbleGearShift && RumbleTriggerMode == kTriggersOff);
   RumbleLoadSettings([](const char*, float fallback) { return fallback; });
   LoadImage(argv[1]);
   assert(RumbleValidateHooks());
@@ -149,6 +149,21 @@ int main(int argc, char** argv) {
   RumbleEvent(-1,0,1); RumbleEvent(12,0,1); RumbleEvent(0,-1,1); RumbleEvent(0,2,1);
   RumbleEvent(4,0,1); // disabled native tyre event stays disabled
   assert(!RumblePorts[0].event[4].pPoints);
+  // Event 7 must use the PS2-matching curve, including its minimum input.
+  RumbleEvent(7,0,0);
+  RumblePulse& shift = RumblePorts[0].event[7];
+  assert(shift.pPoints && shift.nPoints == 3);
+  assert(fabsf(shift.GetValue()-0.3f) < 0.00001f);
+  shift.Advance(0.075f);
+  assert(fabsf(shift.GetValue()-0.3f*20/255) < 0.00001f);
+  shift.Advance(0.125f);
+  assert(!shift.pPoints && shift.GetValue() == 0);
+  bRumbleGearShift = false;
+  RumbleEvent(7,0,1); assert(!shift.pPoints);
+  bRumbleGearShift = true;
+  RumbleEvent(7,0,1); RumbleFrame();
+  assert(motors[0].wLeftMotorSpeed == 65535 && !motors[0].wRightMotorSpeed);
+  RumbleStopAllPads();
   RumbleEvent(0,0,11); RumbleFrame();
   assert(motors[0].wLeftMotorSpeed > 0);
   focused = false;
@@ -201,14 +216,15 @@ int main(int argc, char** argv) {
   assert(RumbleReadSlip(0,spin,brake) && spin < 0.01f && brake < 0.01f);
   *(char**)(car+0x34) = (char*)1;
   assert(!RumbleReadSlip(0,spin,brake));
-  // Fatigue leaves pulses intact, and category muting/swap/clamp work in the shared mixer.
-  RumbleMixer mix = {}; RumbleTextureState texture = {};
-  for (int i = 0; i < 100; ++i) { mix.Begin(0.1f); mix.AddTexture(kRumbleTyres,texture,1,0); }
-  int l, r; mix.Resolve(l,r); assert(l > 39000 && l < 40000);
-  mix.AddPulse(kRumbleImpacts,1,0); mix.Resolve(l,r); assert(l == 65535);
+  // Sustained native levels never acquire a fade; impacts do not duck other motors.
+  RumbleMixer mix = {};
+  for (int i = 0; i < 100; ++i) { mix.Begin(); mix.Add(kRumbleTyres,1,0.8f); }
+  int l, r; mix.Resolve(l,r); assert(l == 65535 && r > 52000);
+  mix.Add(kRumbleImpacts,0.5f,0); mix.Resolve(l,r); assert(l == 65535 && r > 52000);
+  mix.Begin(); mix.Add(kRumbleImpacts,1,0);
   bRumbleSwapMotors = true; mix.Resolve(l,r); assert(!l && r == 65535);
   bRumbleSwapMotors = false;
-  fRumbleCategoryScale[kRumbleImpacts] = 0; mix.Begin(0.01f); mix.AddPulse(kRumbleImpacts,1,1);
+  fRumbleCategoryScale[kRumbleImpacts] = 0; mix.Begin(); mix.Add(kRumbleImpacts,1,1);
   mix.Resolve(l,r); assert(!l && !r);
   assert(RumbleMixer::ToMotor(100,2) == 65535 && RumbleClamp(INFINITY,0,2) == 0);
   puts("PASS: hooks, native curves, routing, lifecycle, pedal maps, U2 telemetry, mixer");

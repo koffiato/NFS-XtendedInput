@@ -15,7 +15,7 @@
 // The game asks InputDevice::GetInterfaces for IFeedback, then supplies native
 // feedback events and collisions (MW DoFFB @ 0x6EE490; PS @ 0x4D0CF0).
 // PC controller effect methods are stubs. This implementation drives XInput
-// motors using live data and the fork's shared MW effect tuning.
+// motors using live surface waves, console envelopes and small MW fallbacks.
 //
 // The game never stops effects on focus loss and keeps a raw pointer to the interface, so:
 // - the object is embedded in InputDevice (same place as the game's own device, +0x2C) and is never deleted
@@ -82,10 +82,9 @@ const float RUMBLE_BUMP_MIN_VELOCITY  = 4.0f;   // m/s of suspension compression
 const float RUMBLE_BUMP_FULL_VELOCITY = 14.0f;
 const float RUMBLE_BUMP_MIN_SPEED     = 2.0f;   // m/s car speed
 const float RUMBLE_BUMP_MAX_SIM_STEP  = 0.1f;   // s; longer gaps (loading, restarts) aren't one physics step
-const float RUMBLE_SURFACE_WAVE_SCALE = 0.4f;   // console wave data is authored for a single big motor
-const float RUMBLE_SKID_WAVE_SCALE    = 0.35f;
 #ifdef GAME_PROSTREET
-// PC surface records and the gameplay log use ratios/angles, not MW's m/s:
+// Trigger normalization estimates from PC records/logs, not recovered console curves.
+// PS uses ratios/angles, not MW's m/s:
 // FFB_SLIP spans .05..1 and FFB_SKID spans .1..1 on the captured tarmac surface.
 const float RUMBLE_LOCKUP_MIN_SLIP = 0.05f;
 const float RUMBLE_LOCKUP_FULL_SLIP = 1.0f;
@@ -152,7 +151,6 @@ class IFeedback {
   RumblePulse  mPulseLeft;   // collisions
   RumblePulse  mPulseRight;  // collisions
   bool         mOnWGI;       // last output went through Windows.Gaming.Input (else XInput)
-  RumbleTextureState mNOSTexture;
   RumbleMixer  mMixer;
 
   // inputs for this tick, reset in BeginUpdate (the game only calls some of these when they apply)
@@ -164,15 +162,11 @@ class IFeedback {
   bool           mPrevNOSEngaged;
   bool           mPrevShifting;
   bool           mPrevEngineBlown;
-  ShiftPotential mPrevShiftPotential;
 
   RumbleRamp         mNOSKick;
   RumbleRamp         mShiftTick;
   RumbleRamp         mEngineBlownRamp;
-  RumblePulse        mShiftCueLeft;
-  RumblePulse        mShiftCueRight;
   float              mScrapeLevel;
-  RumbleTextureState mScrapeTexture;
 
   // surface and tyres
   RumbleVehicleState mVehicle;
@@ -182,31 +176,18 @@ class IFeedback {
   float              mPrevCompression[RUMBLE_MAX_WHEELS];
   bool               mPrevOnGround[RUMBLE_MAX_WHEELS];
   RumblePulse        mBumpLeft;
-  RumblePulse        mBumpRight;
   RumbleWave         mRoadWave;
   RumbleWave         mSkidWave;
+  RumbleWave         mSlipWave;
   RumbleWave         mBlownTireWave;  // the spiked surface's road wave, an Impacts effect
   RumblePulse        mLandingLeft;    // GROUND collisions, a Surface effect
   RumblePulse        mLandingRight;
   float              mWheelSkid[RUMBLE_MAX_WHEELS];  // from DoFFB, |lateral m/s|
   int                mWheelArg;                      // wheel DoFFB is reporting
-  RumbleTextureState mRoadTexture;
-  RumbleTextureState mBlownTireTexture;
-  RumbleTextureState mSlideTexture;
-  RumbleTextureState mLockupTexture;
-  RumbleTextureState mSpinTexture;
-  // impulse triggers (Forza layout: LT = braking slip, RT = throttle slip, plus the shift knock and cues on RT)
+  // Optional trigger extension: proportional braking/throttle slip and car ramps.
   float              mLockupLevel;  // 0-1, this tick
   float              mSpinLevel;
   float              mSlideLevel;
-  float              mSpinPhase;
-  RumblePulse        mTriggerCue;
-  RumbleTextureState mTriggerLockupTexture;
-  RumbleTextureState mTriggerSpinTexture;
-  RumbleTextureState mTriggerSlideTexture;
-  RumbleTextureState mTriggerNOSTexture;
-  float              mLockupPhase;         // main motor stutter
-  float              mTriggerLockupPhase;  // LT pulses
 
   // impulse triggers (0-65535 like the motors), last sent values
   int mLastTriggerLeft;
@@ -230,13 +211,18 @@ class IFeedback {
     mOnWGI          = false;
     memset(&mPulseLeft, 0, sizeof(RumblePulse));
     memset(&mPulseRight, 0, sizeof(RumblePulse));
-    memset(&mNOSTexture, 0, sizeof(RumbleTextureState));
     memset(&mMixer, 0, sizeof(RumbleMixer));
-    memset(&mScrapeTexture, 0, (char*)(&mTriggerLockupPhase + 1) - (char*)&mScrapeTexture);  // everything from the scrape texture on
     mPrevNOSEngaged     = false;
     mPrevShifting       = false;
     mPrevEngineBlown    = false;
-    mPrevShiftPotential = SHIFT_POTENTIAL_NONE;
+    mVehicle = {};
+    mPrevSimTime = 0;
+    memset(mPrevCompression, 0, sizeof(mPrevCompression));
+    memset(mPrevOnGround, 0, sizeof(mPrevOnGround));
+    mRoadWave = {};
+    mSkidWave = {};
+    mSlipWave = {};
+    mBlownTireWave = {};
     ClearEffects();
   }
 
@@ -251,19 +237,19 @@ class IFeedback {
   void ClearEffects() {
     mPulseLeft.pPoints     = NULL;
     mPulseRight.pPoints    = NULL;
-    mShiftCueLeft.pPoints  = NULL;
-    mShiftCueRight.pPoints = NULL;
     mBumpLeft.pPoints      = NULL;
-    mBumpRight.pPoints     = NULL;
     mLandingLeft.pPoints   = NULL;
     mLandingRight.pPoints  = NULL;
-    mTriggerCue.pPoints    = NULL;
     mLockupLevel           = 0.0f;
     mSpinLevel             = 0.0f;
     mSlideLevel            = 0.0f;
+    mHasVehicle            = false;
     mHasPrevVehicle        = false;
+    mWheelArg = 0;
+    memset(mWheelSkid, 0, sizeof(mWheelSkid));
     mRoadWave.Begin();
     mSkidWave.Begin();
+    mSlipWave.Begin();
     mBlownTireWave.Begin();
     mNOSKick.Stop();
     mShiftTick.Stop();
@@ -375,6 +361,7 @@ class IFeedback {
     for (int i = 0; i < RUMBLE_MAX_WHEELS; i++) mWheelSkid[i] = 0.0f;
     mRoadWave.Begin();
     mSkidWave.Begin();
+    mSlipWave.Begin();
     mBlownTireWave.Begin();
     RumbleTelemetry.nWheel = 0;
   }
@@ -400,9 +387,9 @@ class IFeedback {
         float velocity = (mVehicle.fCompression[i] - mPrevCompression[i]) / simDt;
         if (!(velocity >= RUMBLE_BUMP_MIN_VELOCITY)) continue;
         float strength = Clamp01((velocity - RUMBLE_BUMP_MIN_VELOCITY) / (RUMBLE_BUMP_FULL_VELOCITY - RUMBLE_BUMP_MIN_VELOCITY));
-        strength       = 0.35f + 0.65f * strength;
-        mBumpLeft.Start(BumpPoints, _countof(BumpPoints), strength * 0.8f);
-        mBumpRight.Start(BumpPoints, _countof(BumpPoints), strength * 0.5f);
+        // Compression thresholds are measured MW estimates; shape the impulse
+        // with the console's single-road-bump envelope.
+        mBumpLeft.Start(SingleRoadBumpPoints, _countof(SingleRoadBumpPoints), strength);
       }
     }
     for (int i = 0; i < mVehicle.nWheels; i++) {
@@ -414,7 +401,7 @@ class IFeedback {
 #endif
   }
 
-  // lockup, wheelspin and slides; adds their textures to the mixer
+  // Native tyre waves for body rumble; signed slip estimates for optional triggers.
   void MixTyres(float dt) {
     float lockup = 0.0f, spin = 0.0f;
     if (mHasVehicle && mVehicle.fSpeed > 3.0f) {
@@ -439,115 +426,58 @@ class IFeedback {
       }
     }
 
-    // lockup: a tyre juddering against the road, light motor buzz with a ~7 Hz heavy motor stutter (the heavy motor
-    // can't spin up and down fast enough for more)
-    mLockupPhase += dt * 7.0f;
-    mLockupPhase -= floorf(mLockupPhase);
-    float stutter = mLockupPhase < 0.5f ? 1.0f : 0.3f;
-    mMixer.AddTexture(kRumbleTyres, mLockupTexture, lockup > 0.0f ? (0.15f + 0.25f * lockup) * stutter : 0.0f, lockup > 0.0f ? 0.25f + 0.35f * lockup : 0.0f);
-    // wheelspin: smooth light-motor whirr with a bit of weight
-    mMixer.AddTexture(kRumbleTyres, mSpinTexture, spin > 0.0f ? 0.1f * spin : 0.0f, spin > 0.0f ? 0.15f + 0.3f * spin : 0.0f);
-
-    // slides: the console's per-surface skid wave on the heavy motor (front wheels x0.25 like the PS2), plus a light
-    // hiss on the light motor; skids already have the sign stripped by DoFFB
-    float skid = 0.0f;
-    for (int i = 0; i < RUMBLE_MAX_WHEELS; i++) {
-      float s = mWheelSkid[i] * (i < 2 ? 0.25f : 1.0f);
-      if (s > skid) skid = s;
-    }
-    float waveLeft, waveRight;
-    mSkidWave.Sample(dt, waveLeft, waveRight);
+    // Use the game's FFB_SLIP / FFB_SKID waves for body rumble. The signed
+    // live slip above only distinguishes brake/throttle effects on triggers.
+    float slipLeft, slipRight, skidLeft, skidRight;
+    mSlipWave.Sample(dt, slipLeft, slipRight);
+    mSkidWave.Sample(dt, skidLeft, skidRight);
+    float skid = 0;
+    for (int i = 0; i < RUMBLE_MAX_WHEELS; ++i)
+      skid = (std::max)(skid, mWheelSkid[i] * (i < 2 ? 0.25f : 1.0f));
 #ifdef GAME_PROSTREET
-    // Slip angles can be pi at rest. They are not a moving slide and must not
-    // create a native-wave buzz or an impulse-trigger effect while stationary.
-    if (!mHasVehicle || mVehicle.fSpeed < 0.5f) { skid = waveLeft = waveRight = 0.0f; }
+    // PS slip angles can be pi at rest; this is not a moving slide.
+    if (!mHasVehicle || mVehicle.fSpeed < 0.5f) skid = skidLeft = skidRight = 0;
 #endif
-    float slide = Clamp01((skid - RUMBLE_SLIDE_MIN_SKID) / (RUMBLE_SLIDE_FULL_SKID - RUMBLE_SLIDE_MIN_SKID));
-    mMixer.AddTexture(kRumbleTyres, mSlideTexture, waveLeft * RUMBLE_SKID_WAVE_SCALE, slide > 0.0f ? 0.05f + 0.15f * slide : 0.0f);
+    float slide = RumbleRampValue(skid, RUMBLE_SLIDE_MIN_SKID, RUMBLE_SLIDE_FULL_SKID);
+    mMixer.Add(kRumbleTyres, (std::max)(slipLeft, skidLeft), (std::max)(slipRight, skidRight));
 
     mLockupLevel = lockup;
     mSpinLevel   = spin;
     mSlideLevel  = slide;
   }
 
-  // pedal coupling: off with the pedal (nearly) released, so a resting finger feels no phantom buzz
-  static float PedalGain(float pedal, float gate) {
-    if (pedal < gate) return 0.0f;
-    if (!bRumbleTriggerPedalScaling) return 1.0f;
-    return 0.35f + 0.65f * powf(pedal, 0.7f);
+  // Trigger motors are an extension, not a recovered console effect. Use
+  // proportional live signals and the body car ramps without added oscillators.
+  static float PedalGain(float pedal) {
+    pedal = RumbleClamp(pedal);
+    return bRumbleTriggerPedalScaling ? pedal : (pedal > 0 ? 1.0f : 0.0f);
   }
 
-  // continuous trigger textures get the same fatigue fade as the motor textures
-  float TriggerTexture(RumbleTextureState& state, float value, float dt) { return value * state.Update(value > 0.0f, dt); }
-
-  // each trigger takes the strongest effect, never the sum
-  void MixTriggers(float dt, float& leftTrigger, float& rightTrigger) {
-    float gas   = mHasVehicle ? mVehicle.fGas : 0.0f;
-    float brake = mHasVehicle ? mVehicle.fBrake : 0.0f;
+  void MixTriggers(float& leftTrigger, float& rightTrigger) {
+    float gas = mHasVehicle ? PedalGain(mVehicle.fGas) : 0;
+    float brake = mHasVehicle ? PedalGain(mVehicle.fBrake) : 0;
     float tyres = fRumbleCategoryScale[kRumbleTyres];
-    float car   = fRumbleCategoryScale[kRumbleCar];
-
-    // LT: lockup, ABS-style ~12 Hz on/off pulses (the trigger motors are quick enough), steady with a stutter when severe
-    mTriggerLockupPhase += dt * 12.0f;
-    mTriggerLockupPhase -= floorf(mTriggerLockupPhase);
-    float lockup = 0.0f;
-    if (mLockupLevel > 0.0f) {
-      bool  on    = mTriggerLockupPhase < 0.5f;
-      float pulse = mLockupLevel > 0.8f ? (on ? 1.0f : 0.8f) : (on ? 1.0f : 0.0f);
-      lockup      = (0.2f + 0.4f * mLockupLevel) * pulse * PedalGain(brake, 0.05f);
-    }
-    float lockupFatigue = mTriggerLockupTexture.Update(mLockupLevel > 0.0f && brake >= 0.05f, dt);
-    leftTrigger         = lockup * lockupFatigue * tyres;
-
-    // RT: wheelspin with an ~11 Hz grain so it reads differently from the lockup pulses
-    mSpinPhase += dt * 11.0f;
-    mSpinPhase -= floorf(mSpinPhase);
-    float throttle = PedalGain(gas, 0.1f);
-    float spin     = mSpinLevel > 0.0f ? (0.15f + 0.35f * mSpinLevel) * (1.0f + 0.2f * sinf(6.2831853f * mSpinPhase)) * throttle : 0.0f;
-    float slide    = mSlideLevel > 0.0f ? (0.1f + 0.2f * mSlideLevel) * throttle : 0.0f;  // power-on slides only
-    float nos      = mNOSEngaged ? 0.12f * throttle : 0.0f;
-
-    float right = TriggerTexture(mTriggerSpinTexture, spin, dt) * tyres;
-    float v     = TriggerTexture(mTriggerSlideTexture, slide, dt) * tyres;
-    if (v > right) right = v;
-    v = TriggerTexture(mTriggerNOSTexture, nos, dt) * car;
-    if (v > right) right = v;
-    v = mShiftTick.GetValue() * RumbleShiftFeels[RumbleShiftPreset].fTrigger * car;
-    if (v > right) right = v;
-    v = mTriggerCue.GetValue() * car;
-    if (v > right) right = v;
-    rightTrigger = right;
-
+    float car = fRumbleCategoryScale[kRumbleCar];
+    leftTrigger = mLockupLevel * brake * tyres;
+    rightTrigger = (std::max)(mSpinLevel, mSlideLevel) * gas * tyres;
+    rightTrigger = (std::max)(rightTrigger, mNOSKick.GetValue() * gas * car);
+    rightTrigger = (std::max)(rightTrigger, mShiftTick.GetValue() * car);
     leftTrigger *= fRumbleTriggerIntensity;
     rightTrigger *= fRumbleTriggerIntensity;
   }
 
-  // edge-triggered car effects (PS2 InputEffectState values unless noted)
+  // Console baseline recorded by the MW port; also the temporary PS fallback.
+  // Exact console scheduling remains unverified. No extra shift-quality cues.
   void UpdateCarEffects() {
-    if (mNOSEngaged && !mPrevNOSEngaged) mNOSKick.Start(1.0f, 0.5f, 0.5f);  // PS2: 2 s, shortened
+    if (mNOSEngaged && !mPrevNOSEngaged) mNOSKick.Start(1.0f, 0.5f, 2.0f);
     if (!mNOSEngaged) mNOSKick.Stop();
-
     if (mEngineBlown && !mPrevEngineBlown) mEngineBlownRamp.Start(1.0f, 0.6f, 1.0f);
     if (!mEngineBlown) mEngineBlownRamp.Stop();
-
-    if (mShifting && !mPrevShifting && RumbleShiftFeels[RumbleShiftPreset].fTime > 0.0f)
-      mShiftTick.Start(1.0f, RumbleShiftFeels[RumbleShiftPreset].fFloor, RumbleShiftFeels[RumbleShiftPreset].fTime);  // PS2 uses 0.4 for 0.5 s
-
-    if (mShiftPotential != mPrevShiftPotential) {
-      if (mShiftPotential == SHIFT_POTENTIAL_PERFECT) {
-        mShiftCueRight.Start(PerfectShiftPoints, _countof(PerfectShiftPoints), 0.4f);
-        mTriggerCue.Start(TriggerPerfectPoints, _countof(TriggerPerfectPoints), 0.35f);
-      } else if (mShiftPotential == SHIFT_POTENTIAL_MISS) {
-        mShiftCueLeft.Start(MissShiftPoints, _countof(MissShiftPoints), 0.35f);
-        mShiftCueRight.Start(MissShiftPoints, _countof(MissShiftPoints), 0.5f);
-        mTriggerCue.Start(TriggerMissPoints, _countof(TriggerMissPoints), 0.25f);
-      }
-    }
-
-    mPrevNOSEngaged     = mNOSEngaged;
-    mPrevEngineBlown    = mEngineBlown;
-    mPrevShifting       = mShifting;
-    mPrevShiftPotential = mShiftPotential;
+    if (mShifting && !mPrevShifting && bRumbleGearShift) mShiftTick.Start(0.4f, 0.4f, 0.5f);
+    if (!bRumbleGearShift) mShiftTick.Stop();
+    mPrevNOSEngaged = mNOSEngaged;
+    mPrevEngineBlown = mEngineBlown;
+    mPrevShifting = mShifting;
   }
 
   virtual void EndUpdate() {
@@ -561,16 +491,12 @@ class IFeedback {
 
     mPulseLeft.Advance(dt);
     mPulseRight.Advance(dt);
-    mShiftCueLeft.Advance(dt);
-    mShiftCueRight.Advance(dt);
     mNOSKick.Advance(dt);
     mShiftTick.Advance(dt);
     mEngineBlownRamp.Advance(dt);
     mBumpLeft.Advance(dt);
-    mBumpRight.Advance(dt);
     mLandingLeft.Advance(dt);
     mLandingRight.Advance(dt);
-    mTriggerCue.Advance(dt);
     mHasVehicle = !mPaused && RumbleReadVehicle(mVehicle);
 #ifdef GAME_PROSTREET
     // PS skips UpdateShifting when IEngineDamage is present. Query the native
@@ -580,12 +506,9 @@ class IFeedback {
     UpdateCarEffects();
     UpdateBumps();
 
-    // scrape: sliding contacts keep it alive, it fades quickly once they stop
-    float scrapeTarget = mScrapeSpeed > 1.0f ? (mScrapeSpeed - 1.0f) / 20.0f : 0.0f;
-    if (scrapeTarget > 1.0f) scrapeTarget = 1.0f;
-    mScrapeLevel = scrapeTarget > mScrapeLevel ? scrapeTarget : mScrapeLevel - dt / 0.15f;
-    if (mScrapeLevel < 0.0f) mScrapeLevel = 0.0f;
-    mScrapeSpeed = 0.0f;
+    // Contact-speed fallback until a native scrape effect is verified.
+    mScrapeLevel = RumbleRampValue(mScrapeSpeed, 1.0f, 21.0f);
+    mScrapeSpeed = 0;
 
     if (bRumbleTelemetry && !mPaused) RumbleTelemetryWriteTick(now, mHasVehicle ? &mVehicle : NULL, mNOSEngaged, mShifting, mShiftPotential);
 
@@ -594,31 +517,29 @@ class IFeedback {
       return;
     }
 
-    mMixer.Begin(dt);
-    mMixer.AddPulse(kRumbleImpacts, mPulseLeft.GetValue(), mPulseRight.GetValue());
-    mMixer.AddTexture(kRumbleImpacts, mScrapeTexture, mScrapeLevel * 0.1f, mScrapeLevel * 0.4f);
+    mMixer.Begin();
+    mMixer.Add(kRumbleImpacts, mPulseLeft.GetValue(), mPulseRight.GetValue());
+    mMixer.Add(kRumbleImpacts, 0, mScrapeLevel);
     float blownLeft, blownRight;  // spiked / blown tyre wobble
     mBlownTireWave.Sample(dt, blownLeft, blownRight);
-    mMixer.AddTexture(kRumbleImpacts, mBlownTireTexture, blownLeft * RUMBLE_SURFACE_WAVE_SCALE, blownRight * RUMBLE_SURFACE_WAVE_SCALE);
+    mMixer.Add(kRumbleImpacts, blownLeft, blownRight);
 
-    mMixer.AddPulse(kRumbleSurface, mBumpLeft.GetValue(), mBumpRight.GetValue());
-    mMixer.AddPulse(kRumbleSurface, mLandingLeft.GetValue(), mLandingRight.GetValue());
+    mMixer.Add(kRumbleSurface, mBumpLeft.GetValue(), 0);
+    mMixer.Add(kRumbleSurface, mLandingLeft.GetValue(), mLandingRight.GetValue());
     float roadLeft, roadRight;
     mRoadWave.Sample(dt, roadLeft, roadRight);
-    mMixer.AddTexture(kRumbleSurface, mRoadTexture, roadLeft * RUMBLE_SURFACE_WAVE_SCALE, roadRight * RUMBLE_SURFACE_WAVE_SCALE);
+    mMixer.Add(kRumbleSurface, roadLeft, roadRight);
 
     MixTyres(dt);
 
-    mMixer.AddPulse(kRumbleCar, mNOSKick.GetValue(), mNOSKick.GetValue() * 0.3f);
-    mMixer.AddTexture(kRumbleCar, mNOSTexture, mNOSEngaged ? 0.15f : 0.0f, mNOSEngaged ? 0.30f : 0.0f);
-    mMixer.AddPulse(kRumbleCar, mShiftTick.GetValue() * RumbleShiftFeels[RumbleShiftPreset].fLeft, mShiftTick.GetValue() * RumbleShiftFeels[RumbleShiftPreset].fRight);
-    mMixer.AddPulse(kRumbleCar, mEngineBlownRamp.GetValue(), mEngineBlownRamp.GetValue());
-    mMixer.AddPulse(kRumbleCar, mShiftCueLeft.GetValue(), mShiftCueRight.GetValue());
+    mMixer.Add(kRumbleCar, mNOSKick.GetValue(), 0);
+    mMixer.Add(kRumbleCar, mShiftTick.GetValue(), 0);
+    mMixer.Add(kRumbleCar, mEngineBlownRamp.GetValue(), mEngineBlownRamp.GetValue());
 
     int left, right;
     mMixer.Resolve(left, right);
     float leftTrigger = 0.0f, rightTrigger = 0.0f;
-    if (mOnWGI) MixTriggers(dt, leftTrigger, rightTrigger);
+    if (mOnWGI) MixTriggers(leftTrigger, rightTrigger);
     Send(left, right, RumbleMixer::ToMotor(leftTrigger, 1.0f), RumbleMixer::ToMotor(rightTrigger, 1.0f));
   }
 
@@ -628,8 +549,8 @@ class IFeedback {
   virtual void UpdateTireSkid(const SimSurface& surface, float skid, float /*load*/, float /*grip*/, float /*totalLoad*/) {
     AddSkid(mWheelArg < 2, surface, fabsf(skid));
   }
-  virtual void UpdateTireSlip(const SimSurface& /*surface*/, float slip, float /*grip*/) {
-    if (mWheelArg >= 0 && mWheelArg < RUMBLE_MAX_WHEELS) RumbleTelemetry.fSlip[mWheelArg] = slip;
+  virtual void UpdateTireSlip(const SimSurface& surface, float slip, float /*grip*/) {
+    AddSlip(surface, slip);
   }
 #else
   virtual void UpdateRoadNoise(bool /*front*/, const SimSurface& surface, float speed) {
@@ -641,10 +562,16 @@ class IFeedback {
   virtual void UpdateTireSkid(bool front, const SimSurface& surface, float skid) {
     AddSkid(front, surface, skid);
   }
-  virtual void UpdateTireSlip(bool /*front*/, const SimSurface& /*surface*/, float slip) {
-    if (RumbleTelemetry.nWheel < RUMBLE_MAX_WHEELS) RumbleTelemetry.fSlip[RumbleTelemetry.nWheel] = slip;
+  virtual void UpdateTireSlip(bool /*front*/, const SimSurface& surface, float slip) {
+    AddSlip(surface, slip);
   }
 #endif
+
+  void AddSlip(const SimSurface& surface, float slip) {
+    if (!_finite(slip)) return;
+    mSlipWave.Add(&surface, ATTRIB_KEY_FFB_SLIP, fabsf(slip));
+    if (mWheelArg >= 0 && mWheelArg < RUMBLE_MAX_WHEELS) RumbleTelemetry.fSlip[mWheelArg] = slip;
+  }
 
   void AddSkid(bool front, const SimSurface& surface, float skid) {
     if (!_finite(skid)) return;

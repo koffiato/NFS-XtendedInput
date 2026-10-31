@@ -92,23 +92,23 @@ because its adapter is experimental.
 | `LeftMotorScale` / `RightMotorScale` | 1.0 | Heavy/light motor strength, 0-2 |
 | `SwapMotors` | 0 | Swap the main motors |
 | `Impacts` / `Surface` / `Tyres` / `Car` | 1.0 | Category strength, 0-2; zero mutes a category |
-| `GearShift` | 2 | Shift knock: 0 off, 1 low, 2 medium, 3 strong, 4 maximum |
+| `GearShift` | 1 | 0 off, positive values enable the game effect; older preset values remain accepted |
 | `ImpulseTriggers` | 2 | Trigger rumble: 0 off, 1 broadcast, 2 automatic |
 | `TriggerIntensity` | 1.0 | Trigger strength, 0-2 |
 | `TriggerPedalScaling` | 1 | Scale trigger effects with pedal input |
 | `Telemetry` | 0 | Write diagnostic feedback logs beside the plugin |
 
-UG/UG2 use their own native event curves for impacts, road texture, suspension,
-drift, wheel slip, NOS, shifts and drag RPM. UG2 additionally reads wheel data
-for wheelspin and brake lockup. MW retains the fork's surface, collision,
-suspension, tyre and car effects, including shift cues and blown tyres.
+UG/UG2 read their native PC event envelopes, including event 7 instead of a
+custom shift preset. All 12 UG2 records match the inspected PS2 USA version.
+The authored curve drives the heavy motor directly; exact console arbitration
+and motor commands remain unverified.
 
-ProStreet uses its native feedback callbacks, live vehicle/pedal/wheel data
-and valid live PC surface waves. Its envelopes and effect tuning temporarily
-reuse MW values; the original Xbox 360 curves have not been decoded.
-Compression-based kerb effects are still pending. See
-[ProStreet feedback details](docs/prostreet-rumble.md) for the supported
-interface, telemetry and remaining validation.
+MW/ProStreet use live `FFB_ROLL`, `FFB_SKID` and `FFB_SLIP` surface waves,
+console collision/bump envelopes and the MW port's baseline car ramps.
+ProStreet temporarily shares MW's impact and car fallback values; its Xbox 360
+curves remain undecoded. MW compression thresholds and scrape strength are
+simple estimates. ProStreet compression-based kerb effects remain pending.
+See [ProStreet feedback details](docs/prostreet-rumble.md).
 
 Impulse triggers require compatible Xbox One/Series hardware and
 Windows.Gaming.Input. Automatic mode uses conservative controller detection;
@@ -116,10 +116,11 @@ UG2 additionally requires a single XInput controller on port 0. When automatic
 mode is unavailable, ordinary XInput rumble remains available.
 Broadcast mode sends combined output to all detected WGI pads.
 
-Continuous effects fade during sustained use, and impacts reduce background
-textures. The adapters include stops for pause, focus loss, disconnect and
-shutdown. See [UG2 feedback details](docs/ug2-rumble.md) for its lifecycle
-checks and diagnostics.
+The mixer takes the strongest effect per motor without fatigue, ducking or
+extra shift-quality cues. Impulse triggers use proportional pedal/slip signals
+and existing car effects; they are an optional extension, not console behavior.
+The adapters stop output on pause, focus loss, disconnect and shutdown. See
+[UG2 feedback details](docs/ug2-rumble.md) for lifecycle checks and diagnostics.
 
 ## Build
 
