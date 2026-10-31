@@ -199,8 +199,16 @@ int main(int argc, char** argv) {
   RumblePoll();assert(!motors[0].wLeftMotorSpeed);*((unsigned char*)RUMBLE_PACKAGE_ACTIVE_ADDR+1)=0;
   event(7,0,1);RumbleFrame();*(float*)RUMBLE_SIM_DT_ADDR=0;
   RumbleFrame();assert(!motors[0].wLeftMotorSpeed);*(float*)RUMBLE_SIM_DT_ADDR=.075f;
-  event(7,0,1);RumbleFrame();g_Controllers[0].bConnected=false;
-  RumblePoll();assert(!motors[0].wLeftMotorSpeed);g_Controllers[0].bConnected=true;
+  event(7,0,1);event(7,1,1);RumbleFrame();g_Controllers[0].bConnected=false;
+  int beforeStop = calls[0], otherCalls = calls[1];
+  RumblePoll();assert(!motors[0].wLeftMotorSpeed && !motors[0].wRightMotorSpeed);
+  assert(calls[0] == beforeStop + 1);
+  event(7,0,1); // Clear queued native effects even when no stop call is needed.
+  for(int i=0;i<8;++i) RumblePoll();
+  assert(calls[0] == beforeStop + 1 && !RumbleChannels(0)->curve[0]);
+  assert(calls[1] == otherCalls && motors[1].wLeftMotorSpeed);
+  g_Controllers[0].bConnected=true;
+  RumbleStopAllPads();
   event(7,0,1);RumbleFrame();RumbleLastFrame-=1;RumblePoll();assert(!motors[0].wLeftMotorSpeed);
   event(7,0,1);RumbleFrame();*(int*)GAMEFLOWMANAGER_STATUS_ADDR=3;
   RumblePoll();assert(!motors[0].wLeftMotorSpeed);*(int*)GAMEFLOWMANAGER_STATUS_ADDR=6;

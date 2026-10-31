@@ -176,8 +176,11 @@ void RumblePoll() {
         || !RumbleFeedbackEnabled(port)
 #endif
     ) {
-      XINPUT_VIBRATION off = {};
-      XInputSetState(port, &off);
+      // Stop previously sent output once; idle/disabled ports need no device call.
+      if (RumblePorts[port].sent[0] || RumblePorts[port].sent[1]) {
+        XINPUT_VIBRATION off = {};
+        XInputSetState(port, &off);
+      }
       RumbleResetPort(port);
     }
   }

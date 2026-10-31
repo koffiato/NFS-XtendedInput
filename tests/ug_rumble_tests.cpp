@@ -309,6 +309,24 @@ int main(int argc, char** argv) {
     NativeEvent(7,port,1); NativeFrame(); assert(motors[port].wLeftMotorSpeed);
     RumbleStopAllPads();
   }
+  // Idle disconnected and vibration-disabled ports must not receive repeated
+  // stop commands. An active port gets one stop; queued slots still clear.
+  for (int reason = 0; reason < 2; ++reason) {
+    NativeEvent(7, 0, 1); NativeEvent(7, 1, 1); NativeFrame();
+    assert(motors[0].wLeftMotorSpeed && motors[1].wLeftMotorSpeed);
+    int beforeStop = calls[0], otherCalls = calls[1];
+    if (reason == 0) g_Controllers[0].bConnected = false;
+    else NativeVibrationToggle(0);
+    RumblePoll();
+    assert(calls[0] == beforeStop + 1 && !motors[0].wLeftMotorSpeed && !motors[0].wRightMotorSpeed);
+    NativeEvent(7, 0, 1); // Direct dispatch bypasses the producer's setting guard.
+    for (int i = 0; i < 8; ++i) RumblePoll();
+    assert(calls[0] == beforeStop + 1 && !RumbleChannels(0)->curve[0]);
+    assert(calls[1] == otherCalls && motors[1].wLeftMotorSpeed);
+    if (reason == 0) g_Controllers[0].bConnected = true;
+    else NativeVibrationToggle(0);
+    RumbleStopAllPads();
+  }
   ((unsigned char**)0x7361B4)[0]=NULL;
   RumblePoll(); assert(!RumbleFeedbackEnabled(0));
   puts("PASS UG1 native dispatch, admission, frame timing, output mapping and lifecycle");
