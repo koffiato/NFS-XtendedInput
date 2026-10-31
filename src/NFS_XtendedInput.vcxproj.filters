@@ -3,10 +3,22 @@
   <ItemGroup>
     <ClInclude Include="NFS_XtendedInput.h" />
     <ClInclude Include="NFS_XtendedInputButtons.h" />
-    <ClInclude Include="NFS_XtendedInput_VKHash.h" />
+    <ClInclude Include="input\StringHash.h" />
+    <ClInclude Include="input\Keyboard.h" />
+    <ClInclude Include="input\Bindings.h" />
+    <ClInclude Include="input\Analog.h" />
     <ClInclude Include="NFS_XtendedInput_XInputConfig.h" />
     <ClInclude Include="NFS_XtendedInput_FEng.h" />
     <ClInclude Include="NFS_XtendedInput_Rumble.h" />
+    <ClInclude Include="rumble\Core.h" />
+    <ClInclude Include="rumble\Output.h" />
+    <ClInclude Include="rumble\Settings.h" />
+    <ClInclude Include="rumble\Log.h" />
+    <ClInclude Include="rumble\Vehicle.h" />
+    <ClInclude Include="rumble\Surface.h" />
+    <ClInclude Include="rumble\Telemetry.h" />
+    <ClInclude Include="rumble\ProStreet.h" />
+    <ClInclude Include="rumble\Underground.h" />
     <ClInclude Include="NFS_XtentedInput_ActionID.h" />
     <ClInclude Include="_vs\stdafx.h">
       <Filter>_vs</Filter>

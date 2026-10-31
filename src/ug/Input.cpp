@@ -41,7 +41,12 @@
 #endif
 
 #include "NFSU_XtendedInput_XInputConfig.h"
-#include "NFSU_XtendedInput_VKHash.h"
+#include "../input/Keyboard.h"
+#include "../input/Analog.h"
+
+unsigned char ConvertVKNameToValue(const char* name) {
+  return InputVirtualKey(name, false);
+}
 
 #define MAX_CONTROLLERS 4  // XInput handles up to 4 controllers 
 
@@ -440,115 +445,16 @@ void __stdcall SetConfigButtonText(int JoyMapIndex, int Secondary)
 #pragma runtime_checks( "", restore )
 #endif
 
-int bStringHash(char* a1)
-{
-	char* v1; // edx@1
-	char v2; // cl@1
-	int result; // eax@1
-
-	v1 = a1;
-	v2 = *a1;
-	for (result = -1; v2; ++v1)
-	{
-		result = v2 + 33 * result;
-		v2 = v1[1];
-	}
-	return result;
-}
-
 bool bIsAnyAnalogActive()
 {
 	return (g_Controllers[0].state.Gamepad.sThumbLX || g_Controllers[0].state.Gamepad.sThumbLY || g_Controllers[0].state.Gamepad.sThumbRX || g_Controllers[0].state.Gamepad.sThumbRY || g_Controllers[0].state.Gamepad.bRightTrigger || g_Controllers[0].state.Gamepad.bLeftTrigger);
 }
 
-float GetAnalogStickValue(int index, WORD bind)
-{
-	float result = 0.0f;
-	int rdi = index;
-	switch (bind)
-	{
-	case XINPUT_GAMEPAD_LT_CONFIGDEF:
-		result = g_Controllers[rdi].state.Gamepad.bLeftTrigger / 255.0f;
-		break;
-	case XINPUT_GAMEPAD_RT_CONFIGDEF:
-		result = g_Controllers[rdi].state.Gamepad.bRightTrigger / 255.0f;
-		break;
-	case XINPUT_GAMEPAD_LS_X_CONFIGDEF:
-		result = g_Controllers[rdi].state.Gamepad.sThumbLX / (float)(0x7FFF);
-		break;
-	case XINPUT_GAMEPAD_RS_X_CONFIGDEF:
-		result = g_Controllers[rdi].state.Gamepad.sThumbRX / (float)(0x7FFF);
-		break;
-	case XINPUT_GAMEPAD_LS_Y_CONFIGDEF:
-		result = g_Controllers[rdi].state.Gamepad.sThumbLY / (float)(0x7FFF);
-		break;
-	case XINPUT_GAMEPAD_RS_Y_CONFIGDEF:
-		result = g_Controllers[rdi].state.Gamepad.sThumbRY / (float)(0x7FFF);
-		break;
-	case XINPUT_GAMEPAD_LS_UP_CONFIGDEF:
-		if (g_Controllers[rdi].state.Gamepad.sThumbLY > 0)
-			result = g_Controllers[rdi].state.Gamepad.sThumbLY / (float)(0x7FFF);
-		break;
-	case XINPUT_GAMEPAD_LS_DOWN_CONFIGDEF:
-		if (g_Controllers[rdi].state.Gamepad.sThumbLY < 0)
-			result = -g_Controllers[rdi].state.Gamepad.sThumbLY / (float)(0x7FFF);
-		break;
-	case XINPUT_GAMEPAD_LS_LEFT_CONFIGDEF:
-		if (g_Controllers[rdi].state.Gamepad.sThumbLX < 0)
-			result = -g_Controllers[rdi].state.Gamepad.sThumbLX / (float)(0x7FFF);
-		break;
-	case XINPUT_GAMEPAD_LS_RIGHT_CONFIGDEF:
-		if (g_Controllers[rdi].state.Gamepad.sThumbLX > 0)
-			result = g_Controllers[rdi].state.Gamepad.sThumbLX / (float)(0x7FFF);
-		break;
-	case XINPUT_GAMEPAD_RS_UP_CONFIGDEF:
-		if (g_Controllers[rdi].state.Gamepad.sThumbRY > 0)
-			result = g_Controllers[rdi].state.Gamepad.sThumbRY / (float)(0x7FFF);
-		break;
-	case XINPUT_GAMEPAD_RS_DOWN_CONFIGDEF:
-		if (g_Controllers[rdi].state.Gamepad.sThumbRY < 0)
-			result = -g_Controllers[rdi].state.Gamepad.sThumbRY / (float)(0x7FFF);
-		break;
-	case XINPUT_GAMEPAD_RS_LEFT_CONFIGDEF:
-		if (g_Controllers[rdi].state.Gamepad.sThumbRX < 0)
-			result = -g_Controllers[rdi].state.Gamepad.sThumbRX / (float)(0x7FFF);
-		break;
-	case XINPUT_GAMEPAD_RS_RIGHT_CONFIGDEF:
-		if (g_Controllers[rdi].state.Gamepad.sThumbRX > 0)
-			result = g_Controllers[rdi].state.Gamepad.sThumbRX / (float)(0x7FFF);
-		break;
-	default:
-		break;
-	}
-	return result;
+float GetAnalogStickValue(int index, WORD bind) {
+  return InputAnalogValue(g_Controllers[index].state.Gamepad, bind);
 }
 
-uint16_t GetAnalogActivity()
-{
-	if (GetAnalogStickValue(0, XINPUT_GAMEPAD_LT_CONFIGDEF) >= 1.0f)
-		return XINPUT_GAMEPAD_LT_CONFIGDEF;
-	if (GetAnalogStickValue(0, XINPUT_GAMEPAD_RT_CONFIGDEF) >= 1.0f)
-		return XINPUT_GAMEPAD_RT_CONFIGDEF;
-	if (GetAnalogStickValue(0, XINPUT_GAMEPAD_LS_UP_CONFIGDEF) >= 1.0f)
-		return XINPUT_GAMEPAD_LS_UP_CONFIGDEF;
-	if (GetAnalogStickValue(0, XINPUT_GAMEPAD_LS_DOWN_CONFIGDEF) >= 1.0f)
-		return XINPUT_GAMEPAD_LS_DOWN_CONFIGDEF;
-	if (GetAnalogStickValue(0, XINPUT_GAMEPAD_LS_LEFT_CONFIGDEF) >= 1.0f)
-		return XINPUT_GAMEPAD_LS_LEFT_CONFIGDEF;
-	if (GetAnalogStickValue(0, XINPUT_GAMEPAD_LS_RIGHT_CONFIGDEF) >= 1.0f)
-		return XINPUT_GAMEPAD_LS_RIGHT_CONFIGDEF;
-	if (GetAnalogStickValue(0, XINPUT_GAMEPAD_RS_UP_CONFIGDEF) >= 1.0f)
-		return XINPUT_GAMEPAD_RS_UP_CONFIGDEF;
-	if (GetAnalogStickValue(0, XINPUT_GAMEPAD_RS_DOWN_CONFIGDEF) >= 1.0f)
-		return XINPUT_GAMEPAD_RS_DOWN_CONFIGDEF;
-	if (GetAnalogStickValue(0, XINPUT_GAMEPAD_RS_LEFT_CONFIGDEF) >= 1.0f)
-		return XINPUT_GAMEPAD_RS_LEFT_CONFIGDEF;
-	if (GetAnalogStickValue(0, XINPUT_GAMEPAD_RS_RIGHT_CONFIGDEF) >= 1.0f)
-		return XINPUT_GAMEPAD_RS_RIGHT_CONFIGDEF;
-	return 0;
-}
-
-
+uint16_t GetAnalogActivity() { return InputAnalogActivity(g_Controllers[0].state.Gamepad); }
 
 //////////////////////////////////////////////////////////////////
 // Scanner functions
@@ -1188,7 +1094,6 @@ int Scanner_DigitalDownAnalog_XInput(void* EventNode, unsigned int* unk1, unsign
 	return 0;
 }
 
-
 int Scanner_DigitalAnalog(void* EventNode, unsigned int* unk1, unsigned int unk2, ScannerConfig* inScannerConfig, void* Joystick)
 {
 	return Scanner_DigitalAnalog_XInput(EventNode, unk1, unk2, inScannerConfig, Joystick) | Scanner_DigitalUpOrDown_KB(EventNode, unk1, unk2, inScannerConfig, Joystick);
@@ -1615,7 +1520,6 @@ void ReadXInput_Extra()
 			bQuitButtonOldState = (wButtons & XINPUT_GAMEPAD_BACK);
 		}
 #endif
-
 
 	}
 }
@@ -2097,7 +2001,6 @@ int Init()
 
 	return 0;
 }
-
 
 BOOL APIENTRY DllMain(HMODULE /*hModule*/, DWORD reason, LPVOID /*lpReserved*/)
 {

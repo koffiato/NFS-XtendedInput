@@ -12,165 +12,17 @@
 */
 
 #pragma once
+#include <string>
 #ifdef GAME_PROSTREET
 #include <vector>
-//using namespace std;
-#include <string>
 #include <algorithm>
 #endif
 
-int bStringHash(char* a1);
+#include "input/Bindings.h"
 
-//
-// Constants for gamepad buttons -- from XInput.h
-//
-#define XINPUT_GAMEPAD_DPAD_UP        0x0001
-#define XINPUT_GAMEPAD_DPAD_DOWN      0x0002
-#define XINPUT_GAMEPAD_DPAD_LEFT      0x0004
-#define XINPUT_GAMEPAD_DPAD_RIGHT     0x0008
-#define XINPUT_GAMEPAD_START          0x0010
-#define XINPUT_GAMEPAD_BACK           0x0020
-#define XINPUT_GAMEPAD_LEFT_THUMB     0x0040
-#define XINPUT_GAMEPAD_RIGHT_THUMB    0x0080
-#define XINPUT_GAMEPAD_LEFT_SHOULDER  0x0100
-#define XINPUT_GAMEPAD_RIGHT_SHOULDER 0x0200
-#define XINPUT_GAMEPAD_A              0x1000
-#define XINPUT_GAMEPAD_B              0x2000
-#define XINPUT_GAMEPAD_X              0x4000
-#define XINPUT_GAMEPAD_Y              0x8000
-
-// other gamepad stuff -- sticks & triggers
-#define XINPUT_GAMEPAD_LT_CONFIGDEF       0xABC0
-#define XINPUT_GAMEPAD_RT_CONFIGDEF       0xABC1
-#define XINPUT_GAMEPAD_LS_X_CONFIGDEF     0xABC2
-#define XINPUT_GAMEPAD_LS_Y_CONFIGDEF     0xABC3
-#define XINPUT_GAMEPAD_RS_X_CONFIGDEF     0xABC4
-#define XINPUT_GAMEPAD_RS_Y_CONFIGDEF     0xABC5
-#define XINPUT_GAMEPAD_LS_UP_CONFIGDEF    0xABC7
-#define XINPUT_GAMEPAD_LS_DOWN_CONFIGDEF  0xABC8
-#define XINPUT_GAMEPAD_LS_LEFT_CONFIGDEF  0xABC9
-#define XINPUT_GAMEPAD_LS_RIGHT_CONFIGDEF 0xABCA
-#define XINPUT_GAMEPAD_RS_UP_CONFIGDEF    0xABCB
-#define XINPUT_GAMEPAD_RS_DOWN_CONFIGDEF  0xABCC
-#define XINPUT_GAMEPAD_RS_LEFT_CONFIGDEF  0xABCD
-#define XINPUT_GAMEPAD_RS_RIGHT_CONFIGDEF 0xABCE
-
-#define XINPUT_GAMEPAD_DPAD_CONFIGDEF 0xDAD0  // only for internal use
-#define XINPUT_GAMEPAD_LS_CONFIGDEF   0xDAD1  // only for internal use
-#define XINPUT_GAMEPAD_RS_CONFIGDEF   0xDAD2  // only for internal use
-
-#define XINPUT_GAMEPAD_DPAD_UPDOWN_CONFIGDEF    0xDAD3  // only for internal use
-#define XINPUT_GAMEPAD_DPAD_LEFTRIGHT_CONFIGDEF 0xDAD4  // only for internal use
-
-// comparing strings by hash
-#define XINPUT_GAMEPAD_DPAD_UP_HASH        NFS_HASH("XINPUT_GAMEPAD_DPAD_UP")
-#define XINPUT_GAMEPAD_DPAD_DOWN_HASH      NFS_HASH("XINPUT_GAMEPAD_DPAD_DOWN")
-#define XINPUT_GAMEPAD_DPAD_LEFT_HASH      NFS_HASH("XINPUT_GAMEPAD_DPAD_LEFT")
-#define XINPUT_GAMEPAD_DPAD_RIGHT_HASH     NFS_HASH("XINPUT_GAMEPAD_DPAD_RIGHT")
-#define XINPUT_GAMEPAD_START_HASH          NFS_HASH("XINPUT_GAMEPAD_START")
-#define XINPUT_GAMEPAD_BACK_HASH           NFS_HASH("XINPUT_GAMEPAD_BACK")
-#define XINPUT_GAMEPAD_LEFT_THUMB_HASH     NFS_HASH("XINPUT_GAMEPAD_LEFT_THUMB")
-#define XINPUT_GAMEPAD_RIGHT_THUMB_HASH    NFS_HASH("XINPUT_GAMEPAD_RIGHT_THUMB")
-#define XINPUT_GAMEPAD_LEFT_SHOULDER_HASH  NFS_HASH("XINPUT_GAMEPAD_LEFT_SHOULDER")
-#define XINPUT_GAMEPAD_RIGHT_SHOULDER_HASH NFS_HASH("XINPUT_GAMEPAD_RIGHT_SHOULDER")
-#define XINPUT_GAMEPAD_LB_HASH             NFS_HASH("XINPUT_GAMEPAD_LB")
-#define XINPUT_GAMEPAD_RB_HASH             NFS_HASH("XINPUT_GAMEPAD_RB")
-#define XINPUT_GAMEPAD_A_HASH              NFS_HASH("XINPUT_GAMEPAD_A")
-#define XINPUT_GAMEPAD_B_HASH              NFS_HASH("XINPUT_GAMEPAD_B")
-#define XINPUT_GAMEPAD_X_HASH              NFS_HASH("XINPUT_GAMEPAD_X")
-#define XINPUT_GAMEPAD_Y_HASH              NFS_HASH("XINPUT_GAMEPAD_Y")
-#define XINPUT_GAMEPAD_LT_HASH             NFS_HASH("XINPUT_GAMEPAD_LT")
-#define XINPUT_GAMEPAD_RT_HASH             NFS_HASH("XINPUT_GAMEPAD_RT")
-#define XINPUT_GAMEPAD_LS_X_HASH           NFS_HASH("XINPUT_GAMEPAD_LS_X")
-#define XINPUT_GAMEPAD_LS_Y_HASH           NFS_HASH("XINPUT_GAMEPAD_LS_Y")
-#define XINPUT_GAMEPAD_RS_X_HASH           NFS_HASH("XINPUT_GAMEPAD_RS_X")
-#define XINPUT_GAMEPAD_RS_Y_HASH           NFS_HASH("XINPUT_GAMEPAD_RS_Y")
-#define XINPUT_GAMEPAD_DPAD_HASH           NFS_HASH("XINPUT_GAMEPAD_DPAD")
-#define XINPUT_GAMEPAD_LS_UP_HASH          NFS_HASH("XINPUT_GAMEPAD_LS_UP")
-#define XINPUT_GAMEPAD_LS_DOWN_HASH        NFS_HASH("XINPUT_GAMEPAD_LS_DOWN")
-#define XINPUT_GAMEPAD_LS_LEFT_HASH        NFS_HASH("XINPUT_GAMEPAD_LS_LEFT")
-#define XINPUT_GAMEPAD_LS_RIGHT_HASH       NFS_HASH("XINPUT_GAMEPAD_LS_RIGHT")
-#define XINPUT_GAMEPAD_RS_UP_HASH          NFS_HASH("XINPUT_GAMEPAD_RS_UP")
-#define XINPUT_GAMEPAD_RS_DOWN_HASH        NFS_HASH("XINPUT_GAMEPAD_RS_DOWN")
-#define XINPUT_GAMEPAD_RS_LEFT_HASH        NFS_HASH("XINPUT_GAMEPAD_RS_LEFT")
-#define XINPUT_GAMEPAD_RS_RIGHT_HASH       NFS_HASH("XINPUT_GAMEPAD_RS_RIGHT")
-
-WORD ConvertXInputNameToBitmask(std::string name) {
-  std::transform(name.begin(), name.end(), name.begin(), ::toupper);
-
-  switch (bStringHash((char*)name.c_str())) {
-    case XINPUT_GAMEPAD_DPAD_UP_HASH:
-      return XINPUT_GAMEPAD_DPAD_UP;
-    case XINPUT_GAMEPAD_DPAD_DOWN_HASH:
-      return XINPUT_GAMEPAD_DPAD_DOWN;
-    case XINPUT_GAMEPAD_DPAD_LEFT_HASH:
-      return XINPUT_GAMEPAD_DPAD_LEFT;
-    case XINPUT_GAMEPAD_DPAD_RIGHT_HASH:
-      return XINPUT_GAMEPAD_DPAD_RIGHT;
-    case XINPUT_GAMEPAD_START_HASH:
-      return XINPUT_GAMEPAD_START;
-    case XINPUT_GAMEPAD_BACK_HASH:
-      return XINPUT_GAMEPAD_BACK;
-    case XINPUT_GAMEPAD_LEFT_THUMB_HASH:
-      return XINPUT_GAMEPAD_LEFT_THUMB;
-    case XINPUT_GAMEPAD_RIGHT_THUMB_HASH:
-      return XINPUT_GAMEPAD_RIGHT_THUMB;
-    case XINPUT_GAMEPAD_LB_HASH:
-    case XINPUT_GAMEPAD_LEFT_SHOULDER_HASH:
-      return XINPUT_GAMEPAD_LEFT_SHOULDER;
-    case XINPUT_GAMEPAD_RB_HASH:
-    case XINPUT_GAMEPAD_RIGHT_SHOULDER_HASH:
-      return XINPUT_GAMEPAD_RIGHT_SHOULDER;
-    case XINPUT_GAMEPAD_A_HASH:
-      return XINPUT_GAMEPAD_A;
-    case XINPUT_GAMEPAD_B_HASH:
-      return XINPUT_GAMEPAD_B;
-    case XINPUT_GAMEPAD_X_HASH:
-      return XINPUT_GAMEPAD_X;
-    case XINPUT_GAMEPAD_Y_HASH:
-      return XINPUT_GAMEPAD_Y;
-
-    default:
-      break;
-  }
-  return 0;
-}
-
-int ConvertXInputOtherConfigDef(std::string name) {
-  std::transform(name.begin(), name.end(), name.begin(), ::toupper);
-
-  switch (bStringHash((char*)name.c_str())) {
-    case XINPUT_GAMEPAD_LT_HASH:
-      return XINPUT_GAMEPAD_LT_CONFIGDEF;
-    case XINPUT_GAMEPAD_RT_HASH:
-      return XINPUT_GAMEPAD_RT_CONFIGDEF;
-    case XINPUT_GAMEPAD_LS_X_HASH:
-      return XINPUT_GAMEPAD_LS_X_CONFIGDEF;
-    case XINPUT_GAMEPAD_LS_Y_HASH:
-      return XINPUT_GAMEPAD_LS_Y_CONFIGDEF;
-    case XINPUT_GAMEPAD_RS_X_HASH:
-      return XINPUT_GAMEPAD_RS_X_CONFIGDEF;
-    case XINPUT_GAMEPAD_RS_Y_HASH:
-      return XINPUT_GAMEPAD_RS_Y_CONFIGDEF;
-    case XINPUT_GAMEPAD_LS_UP_HASH:
-      return XINPUT_GAMEPAD_LS_UP_CONFIGDEF;
-    case XINPUT_GAMEPAD_LS_DOWN_HASH:
-      return XINPUT_GAMEPAD_LS_DOWN_CONFIGDEF;
-    case XINPUT_GAMEPAD_LS_LEFT_HASH:
-      return XINPUT_GAMEPAD_LS_LEFT_CONFIGDEF;
-    case XINPUT_GAMEPAD_LS_RIGHT_HASH:
-      return XINPUT_GAMEPAD_LS_RIGHT_CONFIGDEF;
-    case XINPUT_GAMEPAD_RS_UP_HASH:
-      return XINPUT_GAMEPAD_RS_UP_CONFIGDEF;
-    case XINPUT_GAMEPAD_RS_DOWN_HASH:
-      return XINPUT_GAMEPAD_RS_DOWN_CONFIGDEF;
-    case XINPUT_GAMEPAD_RS_LEFT_HASH:
-      return XINPUT_GAMEPAD_RS_LEFT_CONFIGDEF;
-    case XINPUT_GAMEPAD_RS_RIGHT_HASH:
-      return XINPUT_GAMEPAD_RS_RIGHT_CONFIGDEF;
-  }
-  return 0;
-}
+// Later-game INI names are case-insensitive; combined D-pad is not a user binding.
+WORD ConvertXInputNameToBitmask(const std::string& name) { return InputBindings::ParseButton(name.c_str(), true); }
+int ConvertXInputOtherConfigDef(const std::string& name) { return InputBindings::ParseAnalog(name.c_str(), true); }
 
 bool bIsBindingAnalog(WORD in) {
   if (((in >> 4) & 0xFFF) == 0xABC) return true;
@@ -207,68 +59,7 @@ int IsBindingNavigation(WORD in) {
 }
 
 #ifdef GAME_PROSTREET
-const char* ConvertXInputBitmaskToName(uint16_t in) {
-  switch (in) {
-    case XINPUT_GAMEPAD_DPAD_UP:
-      return "XINPUT_GAMEPAD_DPAD_UP";
-    case XINPUT_GAMEPAD_DPAD_DOWN:
-      return "XINPUT_GAMEPAD_DPAD_DOWN";
-    case XINPUT_GAMEPAD_DPAD_LEFT:
-      return "XINPUT_GAMEPAD_DPAD_LEFT";
-    case XINPUT_GAMEPAD_DPAD_RIGHT:
-      return "XINPUT_GAMEPAD_DPAD_RIGHT";
-    case XINPUT_GAMEPAD_START:
-      return "XINPUT_GAMEPAD_START";
-    case XINPUT_GAMEPAD_BACK:
-      return "XINPUT_GAMEPAD_BACK";
-    case XINPUT_GAMEPAD_LEFT_THUMB:
-      return "XINPUT_GAMEPAD_LEFT_THUMB";
-    case XINPUT_GAMEPAD_RIGHT_THUMB:
-      return "XINPUT_GAMEPAD_RIGHT_THUMB";
-    case XINPUT_GAMEPAD_LEFT_SHOULDER:
-      return "XINPUT_GAMEPAD_LEFT_SHOULDER";
-    case XINPUT_GAMEPAD_RIGHT_SHOULDER:
-      return "XINPUT_GAMEPAD_RIGHT_SHOULDER";
-    case XINPUT_GAMEPAD_A:
-      return "XINPUT_GAMEPAD_A";
-    case XINPUT_GAMEPAD_B:
-      return "XINPUT_GAMEPAD_B";
-    case XINPUT_GAMEPAD_X:
-      return "XINPUT_GAMEPAD_X";
-    case XINPUT_GAMEPAD_Y:
-      return "XINPUT_GAMEPAD_Y";
-    case XINPUT_GAMEPAD_LT_CONFIGDEF:
-      return "XINPUT_GAMEPAD_LT";
-    case XINPUT_GAMEPAD_RT_CONFIGDEF:
-      return "XINPUT_GAMEPAD_RT";
-    case XINPUT_GAMEPAD_LS_X_CONFIGDEF:
-      return "XINPUT_GAMEPAD_LS_X";
-    case XINPUT_GAMEPAD_LS_Y_CONFIGDEF:
-      return "XINPUT_GAMEPAD_LS_Y";
-    case XINPUT_GAMEPAD_RS_X_CONFIGDEF:
-      return "XINPUT_GAMEPAD_RS_X";
-    case XINPUT_GAMEPAD_RS_Y_CONFIGDEF:
-      return "XINPUT_GAMEPAD_RS_Y";
-    case XINPUT_GAMEPAD_LS_UP_CONFIGDEF:
-      return "XINPUT_GAMEPAD_LS_UP";
-    case XINPUT_GAMEPAD_LS_DOWN_CONFIGDEF:
-      return "XINPUT_GAMEPAD_LS_DOWN";
-    case XINPUT_GAMEPAD_LS_LEFT_CONFIGDEF:
-      return "XINPUT_GAMEPAD_LS_LEFT";
-    case XINPUT_GAMEPAD_LS_RIGHT_CONFIGDEF:
-      return "XINPUT_GAMEPAD_LS_RIGHT";
-    case XINPUT_GAMEPAD_RS_UP_CONFIGDEF:
-      return "XINPUT_GAMEPAD_RS_UP";
-    case XINPUT_GAMEPAD_RS_DOWN_CONFIGDEF:
-      return "XINPUT_GAMEPAD_RS_DOWN";
-    case XINPUT_GAMEPAD_RS_LEFT_CONFIGDEF:
-      return "XINPUT_GAMEPAD_RS_LEFT";
-    case XINPUT_GAMEPAD_RS_RIGHT_CONFIGDEF:
-      return "XINPUT_GAMEPAD_RS_RIGHT";
-    default:
-      return "-1";
-  }
-}
+const char* ConvertXInputBitmaskToName(uint16_t value) { return InputBindings::Name(value); }
 
 const char* unboundstr = "---";
 
@@ -897,216 +688,19 @@ const char* VKeyStrings[] = {"VK_NULL",
                              "VK_PA1",
                              "VK_OEM_CLEAR"};
 
-const char* __stdcall ConvertBitmaskToControlString_XBOX(uint16_t in) {
-  switch (in) {
-    case XINPUT_GAMEPAD_DPAD_UP:
-      return ControlsTextsXBOX[10];
-    case XINPUT_GAMEPAD_DPAD_DOWN:
-      return ControlsTextsXBOX[11];
-    case XINPUT_GAMEPAD_DPAD_LEFT:
-      return ControlsTextsXBOX[12];
-    case XINPUT_GAMEPAD_DPAD_RIGHT:
-      return ControlsTextsXBOX[13];
-    case XINPUT_GAMEPAD_START:
-      return ControlsTextsXBOX[7];
-    case XINPUT_GAMEPAD_BACK:
-      return ControlsTextsXBOX[6];
-    case XINPUT_GAMEPAD_LEFT_THUMB:
-      return ControlsTextsXBOX[8];
-    case XINPUT_GAMEPAD_RIGHT_THUMB:
-      return ControlsTextsXBOX[9];
-    case XINPUT_GAMEPAD_LEFT_SHOULDER:
-      return ControlsTextsXBOX[4];
-    case XINPUT_GAMEPAD_RIGHT_SHOULDER:
-      return ControlsTextsXBOX[5];
-    case XINPUT_GAMEPAD_A:
-      return ControlsTextsXBOX[0];
-    case XINPUT_GAMEPAD_B:
-      return ControlsTextsXBOX[1];
-    case XINPUT_GAMEPAD_X:
-      return ControlsTextsXBOX[2];
-    case XINPUT_GAMEPAD_Y:
-      return ControlsTextsXBOX[3];
-    case XINPUT_GAMEPAD_LT_CONFIGDEF:
-      return ControlsTextsXBOX[26];
-    case XINPUT_GAMEPAD_RT_CONFIGDEF:
-      return ControlsTextsXBOX[27];
-    case XINPUT_GAMEPAD_LS_X_CONFIGDEF:
-      return ControlsTextsXBOX[20];
-    case XINPUT_GAMEPAD_LS_Y_CONFIGDEF:
-      return ControlsTextsXBOX[21];
-    case XINPUT_GAMEPAD_RS_X_CONFIGDEF:
-      return ControlsTextsXBOX[14];
-    case XINPUT_GAMEPAD_RS_Y_CONFIGDEF:
-      return ControlsTextsXBOX[15];
-    case XINPUT_GAMEPAD_LS_UP_CONFIGDEF:
-      return ControlsTextsXBOX[24];
-    case XINPUT_GAMEPAD_LS_DOWN_CONFIGDEF:
-      return ControlsTextsXBOX[25];
-    case XINPUT_GAMEPAD_LS_LEFT_CONFIGDEF:
-      return ControlsTextsXBOX[22];
-    case XINPUT_GAMEPAD_LS_RIGHT_CONFIGDEF:
-      return ControlsTextsXBOX[23];
-    case XINPUT_GAMEPAD_RS_UP_CONFIGDEF:
-      return ControlsTextsXBOX[18];
-    case XINPUT_GAMEPAD_RS_DOWN_CONFIGDEF:
-      return ControlsTextsXBOX[19];
-    case XINPUT_GAMEPAD_RS_LEFT_CONFIGDEF:
-      return ControlsTextsXBOX[16];
-    case XINPUT_GAMEPAD_RS_RIGHT_CONFIGDEF:
-      return ControlsTextsXBOX[17];
-
-    default:
-      break;
-  }
-  return unboundstr;
-}
-
-const char* __stdcall ConvertBitmaskToControlString_PS(uint16_t in) {
-  switch (in) {
-    case XINPUT_GAMEPAD_DPAD_UP:
-      return ControlsTextsPS[10];
-    case XINPUT_GAMEPAD_DPAD_DOWN:
-      return ControlsTextsPS[11];
-    case XINPUT_GAMEPAD_DPAD_LEFT:
-      return ControlsTextsPS[12];
-    case XINPUT_GAMEPAD_DPAD_RIGHT:
-      return ControlsTextsPS[13];
-    case XINPUT_GAMEPAD_START:
-      return ControlsTextsPS[7];
-    case XINPUT_GAMEPAD_BACK:
-      return ControlsTextsPS[6];
-    case XINPUT_GAMEPAD_LEFT_THUMB:
-      return ControlsTextsPS[8];
-    case XINPUT_GAMEPAD_RIGHT_THUMB:
-      return ControlsTextsPS[9];
-    case XINPUT_GAMEPAD_LEFT_SHOULDER:
-      return ControlsTextsPS[4];
-    case XINPUT_GAMEPAD_RIGHT_SHOULDER:
-      return ControlsTextsPS[5];
-    case XINPUT_GAMEPAD_A:
-      return ControlsTextsPS[0];
-    case XINPUT_GAMEPAD_B:
-      return ControlsTextsPS[1];
-    case XINPUT_GAMEPAD_X:
-      return ControlsTextsPS[2];
-    case XINPUT_GAMEPAD_Y:
-      return ControlsTextsPS[3];
-    case XINPUT_GAMEPAD_LT_CONFIGDEF:
-      return ControlsTextsPS[26];
-    case XINPUT_GAMEPAD_RT_CONFIGDEF:
-      return ControlsTextsPS[27];
-    case XINPUT_GAMEPAD_LS_X_CONFIGDEF:
-      return ControlsTextsPS[20];
-    case XINPUT_GAMEPAD_LS_Y_CONFIGDEF:
-      return ControlsTextsPS[21];
-    case XINPUT_GAMEPAD_RS_X_CONFIGDEF:
-      return ControlsTextsPS[14];
-    case XINPUT_GAMEPAD_RS_Y_CONFIGDEF:
-      return ControlsTextsPS[15];
-    case XINPUT_GAMEPAD_LS_UP_CONFIGDEF:
-      return ControlsTextsPS[24];
-    case XINPUT_GAMEPAD_LS_DOWN_CONFIGDEF:
-      return ControlsTextsPS[25];
-    case XINPUT_GAMEPAD_LS_LEFT_CONFIGDEF:
-      return ControlsTextsPS[22];
-    case XINPUT_GAMEPAD_LS_RIGHT_CONFIGDEF:
-      return ControlsTextsPS[23];
-    case XINPUT_GAMEPAD_RS_UP_CONFIGDEF:
-      return ControlsTextsPS[18];
-    case XINPUT_GAMEPAD_RS_DOWN_CONFIGDEF:
-      return ControlsTextsPS[19];
-    case XINPUT_GAMEPAD_RS_LEFT_CONFIGDEF:
-      return ControlsTextsPS[16];
-    case XINPUT_GAMEPAD_RS_RIGHT_CONFIGDEF:
-      return ControlsTextsPS[17];
-
-    default:
-      break;
-  }
-  return unboundstr;
-}
-
-const char* __stdcall ConvertBitmaskToControlString_Step2(uint16_t in, const char** strs) {
-  switch (in) {
-    case XINPUT_GAMEPAD_DPAD_UP:
-      return strs[10];
-    case XINPUT_GAMEPAD_DPAD_DOWN:
-      return strs[11];
-    case XINPUT_GAMEPAD_DPAD_LEFT:
-      return strs[12];
-    case XINPUT_GAMEPAD_DPAD_RIGHT:
-      return strs[13];
-    case XINPUT_GAMEPAD_START:
-      return strs[7];
-    case XINPUT_GAMEPAD_BACK:
-      return strs[6];
-    case XINPUT_GAMEPAD_LEFT_THUMB:
-      return strs[8];
-    case XINPUT_GAMEPAD_RIGHT_THUMB:
-      return strs[9];
-    case XINPUT_GAMEPAD_LEFT_SHOULDER:
-      return strs[4];
-    case XINPUT_GAMEPAD_RIGHT_SHOULDER:
-      return strs[5];
-    case XINPUT_GAMEPAD_A:
-      return strs[0];
-    case XINPUT_GAMEPAD_B:
-      return strs[1];
-    case XINPUT_GAMEPAD_X:
-      return strs[2];
-    case XINPUT_GAMEPAD_Y:
-      return strs[3];
-    case XINPUT_GAMEPAD_LT_CONFIGDEF:
-      return strs[26];
-    case XINPUT_GAMEPAD_RT_CONFIGDEF:
-      return strs[27];
-    case XINPUT_GAMEPAD_LS_X_CONFIGDEF:
-      return strs[20];
-    case XINPUT_GAMEPAD_LS_Y_CONFIGDEF:
-      return strs[21];
-    case XINPUT_GAMEPAD_RS_X_CONFIGDEF:
-      return strs[14];
-    case XINPUT_GAMEPAD_RS_Y_CONFIGDEF:
-      return strs[15];
-    case XINPUT_GAMEPAD_LS_UP_CONFIGDEF:
-      return strs[24];
-    case XINPUT_GAMEPAD_LS_DOWN_CONFIGDEF:
-      return strs[25];
-    case XINPUT_GAMEPAD_LS_LEFT_CONFIGDEF:
-      return strs[22];
-    case XINPUT_GAMEPAD_LS_RIGHT_CONFIGDEF:
-      return strs[23];
-    case XINPUT_GAMEPAD_RS_UP_CONFIGDEF:
-      return strs[18];
-    case XINPUT_GAMEPAD_RS_DOWN_CONFIGDEF:
-      return strs[19];
-    case XINPUT_GAMEPAD_RS_LEFT_CONFIGDEF:
-      return strs[16];
-    case XINPUT_GAMEPAD_RS_RIGHT_CONFIGDEF:
-      return strs[17];
-
-    default:
-      break;
-  }
-  return unboundstr;
-}
-
 const char* __stdcall ConvertBitmaskToControlString(int mode, uint16_t in) {
   switch (mode) {
     case CONTROLLERICON_PS4:
-      return ConvertBitmaskToControlString_Step2(in, ControlsTextsPS);
-      // return ConvertBitmaskToControlString_PS(in);
+      return InputBindings::ControlText(in, ControlsTextsPS, unboundstr);
     case CONTROLLERICON_PS3:
-      return ConvertBitmaskToControlString_Step2(in, ControlsTextsPS3);
+      return InputBindings::ControlText(in, ControlsTextsPS3, unboundstr);
     case CONTROLLERICON_SWITCH:
-      return ConvertBitmaskToControlString_Step2(in, ControlsTextsNSW);
+      return InputBindings::ControlText(in, ControlsTextsNSW, unboundstr);
     case CONTROLLERICON_XB360MW:
     case CONTROLLERICON_XBOX360:
     case CONTROLLERICON_XBOXONE:
     default:
-      return ConvertBitmaskToControlString_Step2(in, ControlsTextsXBOX);
-      // return ConvertBitmaskToControlString_XBOX(in);
+      return InputBindings::ControlText(in, ControlsTextsXBOX, unboundstr);
   }
 }
 
@@ -1138,7 +732,7 @@ std::vector<ActionID> PCRemapActionList = {GAMEACTION_GAS,
                                       HUDACTION_PAUSEREQUEST};
 
 ActionID FindPCRemapActionID(uint32_t idx) {
-  if (idx > PCRemapActionList.size()) return NULL_ACTION;
+  if (idx >= PCRemapActionList.size()) return NULL_ACTION;
   return PCRemapActionList.at(idx);
 }
 

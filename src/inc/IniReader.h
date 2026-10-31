@@ -89,7 +89,7 @@ public:
 		_snprintf(szValue, 255, "%s%s", " ", bolValue ? "True" : "False");
 		WritePrivateProfileString(szSection, szKey, szValue, m_szFileName);
 	}
-	void WriteString(char* szSection, char* szKey, char* szValue)
+	void WriteString(const char* szSection, const char* szKey, const char* szValue)
 	{
 		WritePrivateProfileString(szSection, szKey, szValue, m_szFileName);
 	}

@@ -4,6 +4,16 @@
 #include <float.h>
 #include <algorithm>
 
+// Bounded values shared by settings and native Underground events.
+float RumbleClamp(float value, float lo = 0.0f, float hi = 1.0f) {
+  if (!_finite(value)) return lo;
+  return value < lo ? lo : value > hi ? hi : value;
+}
+
+float RumbleRampValue(float value, float lo, float hi) {
+  return RumbleClamp((value - lo) / (hi - lo));
+}
+
 enum RumbleCategory {
   kRumbleImpacts,  // hits, scrapes, spike strips, blown tyres
   kRumbleSurface,  // kerbs, bumps, landings, road texture

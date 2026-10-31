@@ -2,14 +2,9 @@
 // Original rumble: Copyright (c) 2026 Martin Penkava.
 // U2 adapter uses native feedback events and wheel data; no MW addresses.
 #pragma once
-#include <cmath>
 #include <cstdarg>
-#include <float.h>
-#include <algorithm>
-#include <roapi.h>
-#include <windows.gaming.input.h>
-
 #include "Settings.h"
+#include "Log.h"
 
 // Underground 2 US 1.2. These sites are validated together before any rumble write.
 // Event dispatcher: cdecl(type, port, amount). The original only queues console
@@ -65,14 +60,6 @@ float RumbleSimClock = 1.0f;
 FILE* RumbleLog = NULL;
 bool bRumbleLogTried = false;
 
-float RumbleClamp(float value, float lo = 0.0f, float hi = 1.0f) {
-  if (!_finite(value)) return lo;
-  return value < lo ? lo : value > hi ? hi : value;
-}
-float RumbleRampValue(float value, float lo, float hi) {
-  return RumbleClamp((value - lo) / (hi - lo));
-}
-
 struct RumblePort {
   RumblePulse event[RUMBLE_EVENT_COUNT];
   RumbleEnvelopePoint points[RUMBLE_EVENT_COUNT][8];
@@ -100,7 +87,7 @@ void RumbleTelemetry(const char* fmt, ...) {
     char* ext = strrchr(path, '.');
     if (ext) *ext = '\0';
     strcat_s(path, "_Rumble.log");
-    RumbleLog = fopen(path, "w");
+    RumbleLog = RumbleOpenLog(path);
     if (RumbleLog) setvbuf(RumbleLog, NULL, _IONBF, 0);
   }
   if (!RumbleLog) return;

@@ -206,6 +206,15 @@ The ProStreet x86 callback/vehicle/lifecycle harness runs in Actions:
 tests\prostreet.cmd
 ```
 
+The shared keyboard/controller helpers are checked for both input engines:
+
+```bat
+tests\input.cmd
+```
+
+These checks also run in Actions. They preserve each engine's INI conventions,
+button labels, analog endpoints and remapping behavior.
+
 It mocks game callbacks and motor output. Local checks also verified the added
 signatures against a read-only snapshot of the installed running ProStreet.
 No game files are required by CI. Controller feel and gameplay still need testing.

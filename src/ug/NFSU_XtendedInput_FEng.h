@@ -76,7 +76,7 @@ unsigned int FEngFindObject_Addr = 0x004FFB70;
 unsigned int FEngSendMessageToPackage_Addr = 0x004C96C0;
 unsigned int FEPrintf_Addr = 0x004F68A0;
 #pragma runtime_checks( "", off )
-int __stdcall FEPrintf(void* FEString, char* format)
+int __stdcall FEPrintf(void* FEString, const char* format)
 {
 	_asm
 	{
