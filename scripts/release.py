@@ -48,7 +48,7 @@ GAMES = {
              "Experimental US 1.4 rumble adapter; disabled in the supplied INI. Gameplay validation is pending.",
              underground=True, texture="Global/UG_ConsoleButtons.tpk"),
         Game("UG2", "UG2", "1b80e9fa339bd24b4190eaafa4fa3fcf8438dfecc88fad82e8e40a590b8f5bc7",
-             "US 1.2 rumble adapter. Executable integration checks pass; gameplay and controller validation remain pending.",
+             "US 1.2 native feedback and tuned impulse triggers, validated in local gameplay. Executable integration and runtime checks pass.",
              underground=True),
         Game("MW", "MW", "a78fbf5a2ba672557b23d7633175f391563a264c064762b2b50df88fb1a57fd0",
              "PC 1.3 rumble adapter retained from the fork. The shared refactor needs in-game controller testing.",

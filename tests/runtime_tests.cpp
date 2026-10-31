@@ -52,12 +52,27 @@ void CheckSettings() {
   config.WriteString("Test", "Empty", "bad");
   assert(config.ReadFloat("Test", "Invalid", 7) == 7);
   assert(config.ReadFloat("Test", "Empty", 9) == 9);
+#ifdef GAME_UG2
+  assert(config.EnsureDefault());
+  assert(config.ReadInteger("Rumble","Enabled",1)==0); // existing customization survives
+#endif
   InitConfig();
   assert(INPUT_DEADZONE_LS == (WORD)(0.25f * 32767));
   assert(INPUT_DEADZONE_LS_P2 == (WORD)(0.75f * 32767));
   assert(TRIGGER_ACTIVATION_THRESHOLD == 51);
   assert(ConvertVKNameToValue("a") == 'A');
   assert(DeleteFileA(config.GetIniPath()));
+#ifdef GAME_UG2
+  assert(!config.EnsureDefault(999)); // absent resource must not create an empty INI
+  assert(GetFileAttributesA(config.GetIniPath()) == INVALID_FILE_ATTRIBUTES);
+  assert(config.EnsureDefault());
+  assert(config.ReadFloat("Rumble","LeftMotorScale",0)==1.0f);
+  assert(!strcmp(config.ReadString("Events","JOY_EVENT_THROTTLE_ANALOG",""),"XINPUT_GAMEPAD_RT"));
+  assert(*config.ReadString("EventsKB","JOY_EVENT_THROTTLE",""));
+  config.WriteString("Rumble","LeftMotorScale","0.7");
+  assert(config.EnsureDefault() && config.ReadFloat("Rumble","LeftMotorScale",0)==0.7f);
+  assert(DeleteFileA(config.GetIniPath()));
+#endif
 }
 
 void CheckPolling() {

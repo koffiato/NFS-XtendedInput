@@ -23,6 +23,23 @@ public:
     }
   }
   const char* GetIniPath() const { return path; }
+  bool EnsureDefault(int resourceId = 101) {
+    // Preserve even an empty/custom INI. Only a missing file gets fresh defaults.
+    if (GetFileAttributesA(path) != INVALID_FILE_ATTRIBUTES) return true;
+    HMODULE module = (HMODULE)&__ImageBase;
+    HRSRC resource = FindResourceA(module, MAKEINTRESOURCEA(resourceId), RT_RCDATA);
+    if (!resource) return false;
+    DWORD size = SizeofResource(module, resource);
+    const void* bytes = LockResource(LoadResource(module, resource));
+    if (!bytes || !size) return false;
+    HANDLE file = CreateFileA(path, GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (file == INVALID_HANDLE_VALUE) return GetLastError() == ERROR_FILE_EXISTS;
+    DWORD written = 0;
+    bool ok = WriteFile(file, bytes, size, &written, NULL) && written == size;
+    CloseHandle(file);
+    if (!ok) DeleteFileA(path);
+    return ok;
+  }
   const char* ReadString(const char* section, const char* key, const char* fallback) {
     GetPrivateProfileStringA(section, key, fallback, value, sizeof(value), path);
     return value;

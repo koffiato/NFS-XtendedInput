@@ -1,0 +1,3 @@
+#ifdef GAME_UG2
+101 RCDATA "data/Config-UG2/NFSU_XtendedInput.ini"
+#endif

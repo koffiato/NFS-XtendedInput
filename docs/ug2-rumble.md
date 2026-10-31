@@ -5,37 +5,96 @@ Research for the local PC US 1.2 executable and PS2 USA/NTSC build, checked on
 motor writer is an empty stub. All 12 initialized event records match PS2,
 including curve points, thresholds, gains, priorities and enabled flags.
 
-The lightweight native-output adapter is planned and has not been implemented.
-The current plugin still uses its own playback and mixer.
+UG2 now keeps the original PC dispatcher, three-slot scheduler, gain-scaled
+curve timing and suppression. Its frame-output and explicit-stop call sites
+are redirected to the adapter. Native output levels drive a variable heavy motor and a binary light
+motor above 128; master/motor scales and swapping apply afterward. Pause,
+focus loss, disconnect and missed updates stop output and clear queued slots.
+The hidden producer/collision vibration guards are bypassed without changing
+the profile byte.
 
 ## Current plugin configuration
 
-These describe the existing adapters for UG/UG2/MW/PS, not the planned native
-UG2 output adapter. Edit `[Rumble]` in the main INI beside the ASI.
+Edit `[Rumble]` in `scripts/NFSU_XtendedInput.ini`. These are the UG2 settings.
 
 | Setting | Default | Meaning |
 | --- | --- | --- |
-| `Enabled` | 1; supplied UG INI: 0 | Master switch |
+| `Enabled` | 1 | Master switch |
 | `Intensity` | 1.0 | Overall strength, 0-2 |
-| `LeftMotorScale` / `RightMotorScale` | 1.0 | Heavy/light strength, 0-2 |
+| `LeftMotorScale` / `RightMotorScale` | 1.0 / 1.0 | Heavy/light strength, 0-2 |
 | `SwapMotors` | 0 | Swap main motors |
-| `Impacts` / `Surface` / `Tyres` / `Car` | 1.0 | Category strength, 0-2 |
-| `GearShift` | 1 | 0 off; positive values enable event playback; old preset values are accepted |
 | `ImpulseTriggers` | 2 | 0 off, 1 broadcast, 2 automatic |
 | `TriggerIntensity` | 1.0 | Trigger strength, 0-2 |
 | `TriggerPedalScaling` | 1 | Scale trigger effects with pedal input |
 | `Telemetry` | 0 | Diagnostic log beside the plugin |
 
-UG/UG2 use native curve data with simplified playback and heavy-motor routing.
-The custom presets, shift-quality cues, fatigue and ducking have been removed.
-MW/PS retain live surface waves, console envelopes and temporary MW fallbacks.
-These are not recovered ProStreet Xbox 360 curves.
+Legacy category gains and `GearShift` are not used by UG2's aggregate native
+output hook and are omitted from its supplied INI. Other games keep their
+existing settings. Envelopes, event selection and timing are owned by the game.
+
+## Impulse trigger support
 
 Impulse triggers use Windows.Gaming.Input on compatible Xbox One/Series pads.
-UG2 automatic mode additionally requires a single XInput pad on port 0;
-broadcast mode targets all detected WGI pads. The current trigger mapping is
-provisional and is not console behavior. Pause/focus/disconnect stops have
-mocked coverage.
+Automatic mode requires one XInput pad on port 0; broadcast mode targets all
+WGI pads. This is a tuned extension, not PS2 trigger behavior.
+
+Both triggers share pedal gating, optional pedal scaling and the response
+`demand * (0.75 + 0.25 * demand)`. Exponential smoothing uses a 150 ms rise
+and 60 ms fall time constant. Pedal release, invalid data and lifecycle stops
+clear the response immediately. Master intensity and trigger intensity apply.
+
+- **Brake:** longitudinal traction utilization rises from 25% to 100% through
+  a squared curve. The cue blends 75% of the strongest tyre with 25% of the
+  load-weighted average. Rotational lockup rises from a 50% speed deficit to
+  full response at 80%, and can override the traction cue. Left-trigger output
+  can use the full range, without an additional strength limit.
+- **Throttle:** powered-tyre utilization rises from 50% to 100% through a squared
+  curve, multiplied by each tyre's longitudinal force share and averaged by
+  powered tyre load. The normalized cue is lifted with `pow(cue, 0.85)`, then
+  shaped by `cue * (1.40 - 0.50 * cue) / 0.90` to normalize its peak to 1. Individual
+  rotational wheelspin rises from 4% to 50% excess speed, is shaped by
+  `slip * (0.75 + 0.25 * slip)`. The stronger of the force
+  and rotational cues drives the right trigger, using the full output range.
+
+These thresholds and curves are deliberate tuning choices set through testing. Strong single-wheel
+spin is retained; load averaging applies only to force cues. There are no
+shift/NOS/impact trigger cues or synthesized oscillations. Disabling pedal
+scaling retains the pedal-on gate. Body rumble remains owned by the native engine.
+
+The supported executable supplies the following live tyre data:
+
+| Wheel offset | Use / evidence |
+| --- | --- |
+| `+0x14 -> +0x10` | Tyre radius; native torque equation at `0x0059D350` |
+| `+0x28` | Angular velocity |
+| `+0x70` | Orientation's forward X axis |
+| `+0xF0` | World contact-point velocity, stored at `0x0059CF32..49` |
+| `+0x108` | Drive torque, consumed at `0x0059D350`; must agree with rotation |
+| `+0x11C` | Contact flag, tested at `0x0059D76A` and `0x0059DC08` |
+| `+0x124 / +0x128` | Longitudinal/lateral force, clipped by `0x0059D600` |
+| `+0x164` | Wheel load |
+| `+0x170` | Force/capacity ratio, stored at `0x0059D733..74A` |
+
+Rolling speed is velocity projected onto the wheel's forward X axis. A gripping
+capture measured tyre speed 43.406 m/s, X projection 43.444 m/s and Z projection
+0.182 m/s, exposing the earlier wrong-axis detector. Contact is independent of
+the force ratio, so a locked tyre with low force remains detectable. Further
+captures showed braking could saturate tyre forces well before rotation stopped,
+and powered cornering could reach the grip limit without rotational wheelspin;
+these observations motivated the force cues above.
+
+## Rumble telemetry
+
+With `Telemetry = 1`, logs beside the ASI contain:
+
+- `T`: time, port, throttle cue, brake cue, throttle pedal, brake pedal.
+- `F`: time, port, requested heavy/light/left-trigger/right-trigger outputs.
+- `W`: time, port, wheel, radius, angular velocity, world velocity XYZ,
+  velocity projected onto all three orientation axes, native `+0x10C` flag,
+  force utilization, longitudinal force, lateral force, load and drive torque.
+
+Telemetry defaults to off. Game binaries and user captures stay outside the
+repository; tests use synthetic state and small numeric capture fixtures.
 
 From an x86 Visual Studio developer prompt at the repository root:
 
@@ -68,7 +127,9 @@ The inspected PC executable contains this complete controller-side sequence:
 | Curve sampler | `0x005722A0` | Interpolates authored points |
 | Channel update | `0x00572470` | Samples effects, chooses/clamps the integer maximum, advances ages by `dt / gain` |
 | Frame update | `0x00572610` | Updates two channels per port and calls the output seam when a level changes |
-| Motor-output seam | `0x004022C0` | A single `RET`; performs no controller/device operation |
+| Shared empty stub | `0x004022C0` | A single `RET`; also used by unrelated systems, so must remain untouched |
+| Frame motor-output call | `0x0057266E` | Redirected to the adapter with port and both motor levels |
+| Explicit motor-stop call | `0x005726C5` | Redirected to the adapter with port and zero levels |
 | Stop request | `0x005726A0` | Calls the same output seam with zeroes |
 | Suppression update | `0x00572520` | Maintains the native sustained-event timers |
 
@@ -79,10 +140,22 @@ supply separately mixed heavy/light values. The PC device-capability helper
 at `0x00570A60` simply returns true. Neither stub creates XInput vibration or
 DirectInput effects for this controller path.
 
+The empty function is shared by hundreds of direct calls throughout the PC
+executable, including calls without motor arguments at `0x00581470` and
+`0x00581475` in the main loop. The initial adapter incorrectly detoured the
+shared function itself: unrelated callers could supply stack values interpreted
+as motor commands. A native-code regression reproduced an unrelated zero-valued
+call stopping active rumble. Redirecting only `0x0057266E` and `0x005726C5`
+fixes that check and leaves all unrelated calls untouched. Synthetic strong
+collision/suspension events reach both motors, including a collision replacing
+three occupied road slots. This establishes the hook defect, not that it was
+the only cause of the gameplay difference. Subsequent user gameplay testing
+confirmed collision feedback works with the corrected call sites.
+
 The frame call at `0x005814AD` remains in the executable. Settings matter:
 the producer reads a hidden profile vibration byte (`0x005F6388`, tested at
 `0x005F6395`), and collision production queries it through `0x005EB420`.
-The current plugin bypasses these two false-setting guards. A final-output
+The adapter bypasses these two false-setting guards. A final-output
 hook alone does not guarantee events will be produced with every profile.
 Full event-producer parity with PS2 and stock gameplay activation remain
 unverified.
@@ -370,23 +443,23 @@ EE-specific instruction decoding was checked against PCSX2's
 and [float-to-integer conversion](https://github.com/PCSX2/pcsx2/blob/1517c1f52029346441d6a20f4b8b8c1bfdc2347c/pcsx2/FPU.cpp).
 Those sources establish instruction behavior, not UG2's game-specific logic.
 
-The current [adapter](../src/rumble/Underground.h) replaces native dispatch,
-plays one state per event ID and drives XInput/WGI itself. Calling the original
-frame update does not make its own playback native. It shares the authored
-data, but still differs from the PS2 path:
+The [adapter](../src/rumble/Underground.h) now calls the original native frame
+routine and hooks its two rumble-specific output calls plus the frame call. It preserves
+the PC dispatcher and curve descriptors. The executable harness maps and runs
+those original instructions: native slot admission, gain-scaled timing, routing,
+128/129 light-motor threshold, explicit stop, lifecycle clearing and trigger
+gates/strength are checked with mocked output. The PE runs at its fixed base
+inside a test child process, reserving that range before its runtime starts.
+ASLR address conflicts are retried before executing the checks; failures of the
+checks themselves are never retried. No installed game is modified or launched.
 
-| Behavior | Current adapter | Decoded PS2 path |
-| --- | --- | --- |
-| Active effects | One state per event ID | Three shared slots in channel 0 |
-| Admission/retriggering | Pulse/texture rules | Priority, stored gain and slot selection |
-| Curve age | `age += dt` | `age += dt / gain` |
-| Sample/output | Normalized float, percent-rounded device output | Integer sample, clamped to 0..255 |
-| Main motors | Heavy only | Heavy level plus binary small motor above 128 |
-| Sustained-event guard | No native lockout | Per-event 10-second accumulator / 4-second lockout |
-| Road first point | Clamped normalized input; copied at start | Raw input before gain clamp; live descriptor |
+The adapter additionally guards pause/focus/disconnect and clears queued slots
+on stop, scales motor output and offers conservative slip triggers. These are
+intentional extensions. The user validated the local PC controller feel;
+complete PC/PS2 event-producer parity remains unverified.
 
 Event 7 uses the matching authored envelope, but that alone does not make the
-adapter's `GearShift` behavior authentic. Its PS2 producer calls event 7 with
+game's gear-change feedback fully understood. Its PS2 producer calls event 7 with
 input 1 at `0x0036B944` while predicate `0x0036CA20` is true. That predicate
 checks object kind 1 and a positive float through `object+0x34 -> +0x4C ->
 +0x5C`; its gameplay meaning has not been independently established. This
@@ -400,12 +473,10 @@ requirement. For the first lightweight baseline, native scheduling and its
 eight-bit output are acceptable; more elaborate mixing is deferred. Trigger
 rumble is an extension with no PS2 reference and needs separate restrained tuning.
 
-The existing `tests/ug2.cmd` harness checks the current plugin's signatures,
-routing and lifecycle with mocked callbacks/output. Its success is not evidence
-that the proposed lightweight adapter is implemented or tested in gameplay.
+The `tests/ug2.cmd` harness checks native code and plugin integration with mocked
+controller output. It does not establish hardware behavior or gameplay stability.
 
 A PCSX2 gameplay trace remains necessary to confirm real event sequences,
 clock/pause transitions, controller initialization, submitted packets and
-hardware behavior. No game image, emulator setting or implementation was
-changed for this research. Results apply only to the identified USA PS2/PC
+hardware behavior. No game image or emulator setting was changed for this research. Results apply only to the identified USA PS2/PC
 builds; other games and revisions remain outside this check.

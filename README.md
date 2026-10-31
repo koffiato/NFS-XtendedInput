@@ -13,7 +13,7 @@ Other completed work is retained, but is not being expanded:
 | Game | Target / configuration | Existing feedback status |
 | --- | --- | --- |
 | Underground | `UG` / [Config-UG](data/Config-UG) | Experimental US 1.4; disabled by default |
-| Underground 2 | `UG2` / [Config-UG2](data/Config-UG2) | US 1.2 adapter; executable integration checks pass |
+| Underground 2 | `UG2` / [Config-UG2](data/Config-UG2) | US 1.2 native feedback and impulse triggers; locally tested |
 | Most Wanted (2005) | `MW` / [Config-MW](data/Config-MW) | PC 1.3 adapter retained from the rumble fork |
 | Carbon | `CB` / [Config-Carbon](data/Config-Carbon) | Input only |
 | Undercover | `UC` / [Config-UC](data/Config-UC) | Input only |
@@ -29,7 +29,7 @@ custom bindings, then extract the matching `Release-<game>-Pack.zip` into the
 game directory.
 
 * UG/UG2 settings and bindings reside in `scripts/NFSU_XtendedInput.ini`,
-  with bindings in `[Events]` and `[EventsKB]`.
+  with bindings in `[Events]` and `[EventsKB]` while rumble is under `[Rumble]`.
 * Later games use `scripts/NFS_XtendedInput.ini` for general settings
   and `scripts/XtendedInputMaps/<profile>/NFS_XtendedInput.usermap.ini` for bindings.
 * See `EventReference.txt` for the action list.
@@ -43,13 +43,6 @@ Canonical mappings come from the actual
 hashes. Control mappings are preserved; the branch adds `[Rumble]`, disables
 experimental UG rumble by default and removes a stray conflict marker from
 the upstream UG2 INI.
-
-## Feedback configuration
-
-Edit `[Rumble]` in the main INI beside the plugin. See the
-[UG2 documentation](docs/ug2-rumble.md) for settings and validation limits.
-The existing adapters for MW and ProStreet retain their earlier feedback work;
-[ProStreet research](docs/prostreet-rumble.md) is archived.
 
 ## Build and checks
 
