@@ -75,11 +75,9 @@ The supported executable supplies the following live tyre data:
 | `+0x164` | Wheel load |
 | `+0x170` | Force/capacity ratio, stored at `0x0059D733..74A` |
 
-Rolling speed is velocity projected onto the wheel's forward X axis. A gripping
-capture measured tyre speed 43.406 m/s, X projection 43.444 m/s and Z projection
-0.182 m/s, exposing the earlier wrong-axis detector. Contact is independent of
-the force ratio, so a locked tyre with low force remains detectable. Further
-captures showed braking could saturate tyre forces well before rotation stopped,
+Rolling speed is velocity projected onto the wheel's forward X axis. Contact is 
+independent of the force ratio, so a locked tyre with low force remains detectable. 
+Captures showed braking could saturate tire forces well before rotation stopped,
 and powered cornering could reach the grip limit without rotational wheelspin;
 these observations motivated the force cues above.
 
