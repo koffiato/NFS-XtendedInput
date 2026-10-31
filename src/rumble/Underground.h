@@ -81,7 +81,7 @@ void RumbleTelemetry(const char* fmt, ...) {
   if (!bRumbleTelemetry) return;
   if (!bRumbleLogTried) {
     bRumbleLogTried = true;
-    CIniReader ini("");
+    InputConfig ini("");
     char path[MAX_PATH];
     strncpy_s(path, ini.GetIniPath(), _TRUNCATE);
     char* ext = strrchr(path, '.');
@@ -402,7 +402,7 @@ bool RumbleValidateHooks() {
 }
 
 void RumbleInit() {
-  CIniReader ini("");
+  InputConfig ini("");
   RumbleLoadSettings([&](const char* key, float fallback) {
     return ini.ReadFloat("Rumble", const_cast<char*>(key), fallback);
   });

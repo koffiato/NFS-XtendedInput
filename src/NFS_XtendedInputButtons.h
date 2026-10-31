@@ -13,7 +13,7 @@
 
 #pragma once
 #include "NFS_XtendedInput.h"
-#include "NFS_XtendedInput_XInputConfig.h"
+#include "input/Controls.h"
 
 #define XBONE_A_HASH             NFS_HASH("XBONE_A")
 #define XBONE_B_HASH             NFS_HASH("XBONE_B")

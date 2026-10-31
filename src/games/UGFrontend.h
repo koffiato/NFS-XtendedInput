@@ -19,14 +19,7 @@ enum ResourceFileType
 	RESOURCE_FILE_REPLAY = 8,
 };
 
-#define LASTCONTROLLED_KB 0
-#define LASTCONTROLLED_CONTROLLER 1
-unsigned int LastControlledDevice = 0; // 0 = keyboard, 1 = controller
-unsigned int LastControlledDeviceOldState = 0;
 
-#define CONTROLLERICON_XBOXONE 0
-#define CONTROLLERICON_PS4 1
-unsigned int ControllerIconMode = 0; // 0 = Xbox (One and later only for now), 1 = PlayStation (4 only now) -- planned to add: Nintendo (Wii/U Classic Controller, Switch), PS3/PS2, Xbox 360
 
 bool bLoadedConsoleButtonTex = false;
 char LastFEngPackage[128];

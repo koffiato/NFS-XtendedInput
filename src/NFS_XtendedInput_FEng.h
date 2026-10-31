@@ -21,31 +21,6 @@
 #include <timeapi.h>
 #pragma comment(lib, "winmm.lib")
 
-// Win32 mouse API stuff
-RECT windowRect;
-bool bMousePressedDown         = false;
-bool bMousePressedDownOldState = false;
-
-bool bMouse2PressedDown         = false;
-bool bMouse2PressedDownOldState = false;
-
-bool bMouse3PressedDown         = false;
-bool bMouse3PressedDownOldState = false;
-
-int MouseWheelValue = 0;
-
-float fFEScale = 1.0f;
-
-bool    bConfineMouse              = false;
-int     TimeSinceLastMouseMovement = 0;
-bool    bUseWin32Cursor            = true;
-bool    bUseCustomCursor           = true;
-bool    bLastUsedVirtualMouse      = false;
-bool    bUseDynamicFEngSwitching   = true;
-bool    bEnableMouseHiding         = true;
-HCURSOR NFSCursor;
-#define MOUSEHIDE_TIME 5000
-
 // FE texture button re-mapping
 unsigned int ButtonTexHashes[FE_TEX_HASH_COUNT];
 bool         bLoadedConsoleButtonTex = false;

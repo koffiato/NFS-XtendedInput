@@ -40,8 +40,8 @@ DWORD WINAPI TestSetState(DWORD pad, XINPUT_VIBRATION* value) {
 DWORD WINAPI TestGetState(DWORD pad, XINPUT_STATE*) {
   return g_Controllers[pad].bConnected ? ERROR_SUCCESS : ERROR_DEVICE_NOT_CONNECTED;
 }
-struct CIniReader {
-  CIniReader(const char*) {}
+struct InputConfig {
+  InputConfig(const char*) {}
   int ReadInteger(const char*, const char* key, int fallback) {
     if (!strcmp(key,"Enabled")) return enabled;
     if (!strcmp(key,"ImpulseTriggers")) return 0;

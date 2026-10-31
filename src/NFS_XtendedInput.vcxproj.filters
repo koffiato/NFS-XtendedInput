@@ -7,7 +7,6 @@
     <ClInclude Include="input\Keyboard.h" />
     <ClInclude Include="input\Bindings.h" />
     <ClInclude Include="input\Analog.h" />
-    <ClInclude Include="NFS_XtendedInput_XInputConfig.h" />
     <ClInclude Include="NFS_XtendedInput_FEng.h" />
     <ClInclude Include="NFS_XtendedInput_Rumble.h" />
     <ClInclude Include="rumble\Core.h" />
@@ -24,6 +23,25 @@
       <Filter>_vs</Filter>
     </ClInclude>
     <ClInclude Include="Main.hpp" />
+    <ClInclude Include="input\Config.h" />
+    <ClInclude Include="input\Controls.h" />
+    <ClInclude Include="input\Events.h" />
+    <ClInclude Include="input\Frontend.h" />
+    <ClInclude Include="input\Hooks.h" />
+    <ClInclude Include="input\KeyboardState.h" />
+    <ClInclude Include="input\Mapping.h" />
+    <ClInclude Include="input\Poll.h" />
+    <ClInclude Include="input\Settings.h" />
+    <ClInclude Include="input\State.h" />
+    <ClInclude Include="input\Types.h" />
+    <ClInclude Include="input\Window.h" />
+    <ClInclude Include="games\UG.h" />
+    <ClInclude Include="games\UG2.h" />
+    <ClInclude Include="games\UG2Events.h" />
+    <ClInclude Include="games\UG2Frontend.h" />
+    <ClInclude Include="games\UGButtons.h" />
+    <ClInclude Include="games\UGEvents.h" />
+    <ClInclude Include="games\UGFrontend.h" />
     <ClInclude Include="_vs\macros.h">
       <Filter>_vs</Filter>
     </ClInclude>

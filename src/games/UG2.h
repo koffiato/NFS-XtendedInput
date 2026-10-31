@@ -35,10 +35,6 @@ void(*FESendKeystroke)(unsigned int key) = (void(*)(unsigned int))0x0055DBD0;
 
 #define FINDSCANNERCONFIG_ADDR 0x00572120
 
-#define LASTCONTROLLED_KB 0
-#define LASTCONTROLLED_CONTROLLER 1
-unsigned int LastControlledDevice = 0; // 0 = keyboard, 1 = controller
-unsigned int LastControlledDeviceOldState = 0;
 
 #define STEER_HANDLER_ADDR1 0x0041E083
 #define STEER_HANDLER_ADDR2 0x0041E09A

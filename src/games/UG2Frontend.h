@@ -5,21 +5,6 @@
 #pragma comment(lib,"winmm.lib")
 #define GAME_HWND_ADDR 0x00870990
 
-// Win32 mouse API stuff
-RECT windowRect;
-bool bMousePressedDown = false;
-bool bMousePressedDownOldState = false;
-
-bool bMouse2PressedDown = false;
-bool bMouse2PressedDownOldState = false;
-
-bool bMouse3PressedDown = false;
-bool bMouse3PressedDownOldState = false;
-
-bool bConfineMouse = false;
-int TimeSinceLastMouseMovement = 0;
-
-#define MOUSEHIDE_TIME 5000
 #define FEMOUSECURSOR_X_ADDR 0x008763D4
 #define FEMOUSECURSOR_Y_ADDR 0x008763D8
 #define FEMOUSECURSOR_BUTTONPRESS_ADDR 0x008763F1

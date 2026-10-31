@@ -2,6 +2,22 @@
 #pragma once
 #include "Bindings.h"
 
+inline bool InputAnalogPressed(const XINPUT_GAMEPAD& pad, WORD binding, int stickThreshold, int triggerThreshold) {
+  switch (binding) {
+    case XINPUT_GAMEPAD_LT_CONFIGDEF: return pad.bLeftTrigger > triggerThreshold;
+    case XINPUT_GAMEPAD_RT_CONFIGDEF: return pad.bRightTrigger > triggerThreshold;
+    case XINPUT_GAMEPAD_LS_UP_CONFIGDEF: return pad.sThumbLY > stickThreshold;
+    case XINPUT_GAMEPAD_LS_DOWN_CONFIGDEF: return pad.sThumbLY < -stickThreshold;
+    case XINPUT_GAMEPAD_LS_LEFT_CONFIGDEF: return pad.sThumbLX < -stickThreshold;
+    case XINPUT_GAMEPAD_LS_RIGHT_CONFIGDEF: return pad.sThumbLX > stickThreshold;
+    case XINPUT_GAMEPAD_RS_UP_CONFIGDEF: return pad.sThumbRY > stickThreshold;
+    case XINPUT_GAMEPAD_RS_DOWN_CONFIGDEF: return pad.sThumbRY < -stickThreshold;
+    case XINPUT_GAMEPAD_RS_LEFT_CONFIGDEF: return pad.sThumbRX < -stickThreshold;
+    case XINPUT_GAMEPAD_RS_RIGHT_CONFIGDEF: return pad.sThumbRX > stickThreshold;
+    default: return false;
+  }
+}
+
 // Preserve the games' 32767 divisor: the negative endpoint is slightly below -1.
 inline float InputAnalogValue(const XINPUT_GAMEPAD& pad, WORD bind) {
   float result = 0.0f;

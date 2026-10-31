@@ -15,9 +15,9 @@
 #ifdef GAME_PROSTREET
 #include "../src/NFS_XtendedInput.h"
 #include "../src/NFS_XtentedInput_ActionID.h"
-#include "../src/NFS_XtendedInput_XInputConfig.h"
+#include "../src/input/Controls.h"
 #else
-#include "../src/ug/NFSU_XtendedInput_XInputConfig.h"
+#include "../src/input/Controls.h"
 #endif
 
 int main() {

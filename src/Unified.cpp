@@ -1,6 +1,18 @@
-// One entry point and shared feedback implementation for all seven targets.
-#if defined(GAME_UG) || defined(GAME_UG2)
-#include "ug/Input.cpp"
-#else
-#include "_win32/dllmain.cpp"
+#include "Main.hpp"
+
+BOOL APIENTRY DllMain(HMODULE, DWORD reason, LPVOID) {
+  if (reason == DLL_PROCESS_ATTACH) {
+#ifdef GAME_WORLD
+    MainBase = (uintptr_t)GetModuleHandleA(NULL) - 0x400000;
 #endif
+    Init();
+  } else if (reason == DLL_PROCESS_DETACH) {
+#if INPUT_SCANNERS || defined(GAME_MW) || defined(GAME_PROSTREET)
+    RumbleStopAllPads(true);
+#endif
+#if INPUT_SCANNERS
+    if (RumbleLog) fclose(RumbleLog);
+#endif
+  }
+  return TRUE;
+}
