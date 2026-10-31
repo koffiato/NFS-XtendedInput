@@ -1,11 +1,15 @@
-# ProStreet feedback adapter
+# ProStreet feedback adapter (archived research)
+
+Development is currently limited to UG2. These earlier ProStreet findings are
+retained for reference; no new PS work or console-fidelity claim is implied.
 
 ProStreet now uses the same feedback engine, settings, mixer, envelopes and
 XInput/Windows.Gaming.Input output as Most Wanted. The supplied ProStreet INI
 enables it. The native interface was checked against the user's installed
-running game. User testing confirmed lockup/wheelspin feedback, then confirmed
-that the corrected road argument order and collision routing allow driving
-with telemetry enabled and wall-impact rumble. This remains experimental:
+running game. User testing at revision `1b942a4` confirmed lockup/wheelspin
+feedback and driving with telemetry enabled and wall-impact rumble after the
+road/collision fixes. That test predates subsequent unit and mixer changes.
+This remains experimental:
 broader race/controller coverage and original console fidelity are pending.
 
 ## Live data and temporary values
