@@ -45,7 +45,7 @@ class Game:
 GAMES = {
     g.target: g for g in (
         Game("UG", "UG", "c6858ff642209ad370a1aa3472337444080c841e8edc1aa9b19c95717a85d1fb",
-             "Experimental US 1.4 rumble adapter; disabled in the supplied INI. Gameplay validation is pending.",
+             "US 1.4 native rumble adapter; enabled in the supplied INI and respects the in-game Vibration option. Locally tested; no impulse triggers.",
              underground=True, texture="Global/UG_ConsoleButtons.tpk"),
         Game("UG2", "UG2", "1b80e9fa339bd24b4190eaafa4fa3fcf8438dfecc88fad82e8e40a590b8f5bc7",
              "US 1.2 native feedback and tuned impulse triggers, validated in local gameplay. Executable integration and runtime checks pass.",

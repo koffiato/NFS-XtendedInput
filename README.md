@@ -4,21 +4,21 @@ This unofficial branch combines [NFS-XtendedInput](https://github.com/xan1242/NF
 and [NFSU-XtendedInput](https://github.com/xan1242/NFSU-XtendedInput) and adds
 rumble support. It targets Windows 10/11 and 32-bit game executables.
 
-**Current development is focused on [Underground 2](docs/ug2-rumble.md).**
-The goal is console-grounded controller feedback through the game's existing
-event engine, a small output adapter and conservative impulse triggers.
+**Current development covers [Underground 1](docs/ug-rumble.md) and
+[Underground 2](docs/ug2-rumble.md).** Both use their native feedback engines
+with a small output adapter. UG2 also supports impulse triggers.
 
-Other completed work is retained, but is not being expanded:
+Current support:
 
 | Game | Target / configuration | Existing feedback status |
 | --- | --- | --- |
-| Underground | `UG` / [Config-UG](data/Config-UG) | Experimental US 1.4; disabled by default |
-| Underground 2 | `UG2` / [Config-UG2](data/Config-UG2) | US 1.2 native feedback and impulse triggers; locally tested |
-| Most Wanted (2005) | `MW` / [Config-MW](data/Config-MW) | PC 1.3 adapter retained from the rumble fork |
+| Underground | `UG` / [Config-UG](data/Config-UG) | [Native feedback](docs/ug-rumble.md) |
+| Underground 2 | `UG2` / [Config-UG2](data/Config-UG2) | [Native feedback and impulse triggers](docs/ug2-rumble.md) |
+| Most Wanted (2005) | `MW` / [Config-MW](data/Config-MW) | Retained from the rumble fork |
 | Carbon | `CB` / [Config-Carbon](data/Config-Carbon) | Input only |
 | Undercover | `UC` / [Config-UC](data/Config-UC) | Input only |
-| ProStreet | `PS` / [Config-ProStreet](data/Config-ProStreet) | Experimental; [archived findings](docs/prostreet-rumble.md) |
-| World | `W` / [Config-World](data/Config-World) | Experimental input only |
+| ProStreet | `PS` / [Config-ProStreet](data/Config-ProStreet) | Input and [experimental rumble](docs/prostreet-rumble.md) |
+| World | `W` / [Config-World](data/Config-World) | Input only, experimental |
 
 All seven input targets compile. This does not establish gameplay compatibility.
 
@@ -40,9 +40,7 @@ Canonical mappings come from the actual
 [1.22](https://github.com/xan1242/NFS-XtendedInput/releases/tag/1.22) and
 [2.7](https://github.com/xan1242/NFSU-XtendedInput/releases/tag/2.7) packages.
 [data/config-provenance.json](data/config-provenance.json) records original
-hashes. Control mappings are preserved; the branch adds `[Rumble]`, disables
-experimental UG rumble by default and removes a stray conflict marker from
-the upstream UG2 INI.
+hashes.
 
 ## Build and checks
 
@@ -56,8 +54,9 @@ tests\input.cmd
 ```
 
 Outputs are written under `build/<target>/`. See the
-[UG2 documentation](docs/ug2-rumble.md) for its build and executable checks.
-No game binaries are stored in the repository or required by CI.
+[UG1](docs/ug-rumble.md) and [UG2](docs/ug2-rumble.md) documentation for their
+build and executable checks.
+No game code or binaries are stored in the repository or required by CI.
 
 | Source | Purpose |
 | --- | --- |

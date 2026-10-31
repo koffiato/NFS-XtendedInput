@@ -21,8 +21,8 @@ pushd "%~dp0"
 set "OUTPUT=build\%~1"
 if not exist "%OUTPUT%" mkdir "%OUTPUT%"
 set "CONFIG_RESOURCE="
-if /I "%~1"=="UG2" (
-  rc /nologo /dGAME_UG2 /fo"%OUTPUT%\DefaultConfig.res" src\DefaultConfig.rc
+for %%G in (UG UG2) do if /I "%~1"=="%%G" (
+  rc /nologo /d%GAME% /fo"%OUTPUT%\DefaultConfig.res" src\DefaultConfig.rc
   if errorlevel 1 (popd & exit /b 1)
   set "CONFIG_RESOURCE=%OUTPUT%\DefaultConfig.res"
 )

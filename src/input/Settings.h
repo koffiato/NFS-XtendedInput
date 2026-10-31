@@ -5,8 +5,8 @@
 
 void InitConfig() {
   InputConfig ini;
-#ifdef GAME_UG2
-  if (!ini.EnsureDefault()) OutputDebugStringA("XtendedInput: unable to create default UG2 INI.\n");
+#if defined(GAME_UG) || defined(GAME_UG2)
+  if (!ini.EnsureDefault()) OutputDebugStringA("XtendedInput: unable to create default Underground INI.\n");
 #endif
   KeyboardReadingMode = ini.ReadInteger("Input", "KeyboardReadingMode", 0);
   bAllowTwoPlayerKB = ini.ReadInteger("Input", "AllowTwoPlayerKB", false) != 0;

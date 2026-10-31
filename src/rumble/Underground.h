@@ -1,21 +1,19 @@
 // Controller rumble port from koffiato/NFS-XtendedInput (MIT).
 // Original rumble: Copyright (c) 2026 Martin Penkava.
-// U2 adapter uses native feedback events and wheel data; no MW addresses.
+// Underground adapters use native feedback channels; U2 also supplies tyre data.
 #pragma once
 #include <cstdarg>
 #include "Settings.h"
 #include "Log.h"
 
-// Underground 2 US 1.2. These sites are validated together before any rumble write.
-// Event dispatcher: cdecl(type, port, amount). The original only queues console
-// motor curves; steering-wheel forces have a separate path and remain intact.
-// The test harness supplies its own image buffer; the plugin keeps U2's fixed base.
+// UG US 1.4 and UG2 US 1.2 sites are validated before any rumble write.
+// The test harness supplies a private image; installed games keep their fixed base.
 #ifndef RUMBLE_IMAGE_BASE
 #define RUMBLE_IMAGE_BASE 0x00400000u
 #endif
 #ifdef GAME_UG
-// Underground US 1.4. Its dispatcher uses EDX=event, ESI=port,
-// [ESP+4]=amount; the adapter below preserves that native convention.
+// Underground US 1.4. The main loop samples all four native channels before
+// this call. Keep its EDX=event pointer, ESI=port dispatcher untouched.
 const uintptr_t RUMBLE_EVENT_ADDR = RUMBLE_IMAGE_BASE + 0x00174D90;
 const uintptr_t RUMBLE_UPDATE_CALL = RUMBLE_IMAGE_BASE + 0x000479FC;
 const uintptr_t RUMBLE_UPDATE_ADDR = RUMBLE_IMAGE_BASE + 0x00174EB0;
@@ -50,21 +48,16 @@ struct RumbleNativeEvent {
   const RumbleNativeCurve* curve;
   const float* params; // input min/max, amplitude min/max; road adds initial-value min/max
 };
-static_assert(sizeof(RumbleNativeEvent) == 16, "U2 feedback table layout");
+static_assert(sizeof(RumbleNativeEvent) == 16, "Underground feedback table layout");
 
 bool bRumbleInstalled = false;
 bool bRumbleTelemetry = false;
 bool bRumbleOnWGI = false;
 double RumbleLastFrame = 0.0;
-float RumbleSimClock = 1.0f;
 FILE* RumbleLog = NULL;
 bool bRumbleLogTried = false;
 
 struct RumblePort {
-#ifdef GAME_UG
-  RumblePulse event[RUMBLE_EVENT_COUNT];
-  RumbleEnvelopePoint points[RUMBLE_EVENT_COUNT][8];
-#endif
   int wanted[4];
   int sent[4];
 #ifndef GAME_UG
@@ -101,6 +94,8 @@ void RumbleTelemetry(const char* fmt, ...) {
 const uintptr_t RUMBLE_OUTPUT_ADDR = RUMBLE_IMAGE_BASE + 0x22C0;
 const uintptr_t RUMBLE_OUTPUT_CALL = RUMBLE_IMAGE_BASE + 0x17266E;
 const uintptr_t RUMBLE_STOP_CALL = RUMBLE_IMAGE_BASE + 0x1726C5;
+bool bRumbleInFrame = false;
+#endif
 struct RumbleNativeChannel {
   const RumbleNativeCurve* curve[3];
   float age[3], gain[3];
@@ -108,19 +103,19 @@ struct RumbleNativeChannel {
   char reserved;
   int output, previous;
 };
-static_assert(sizeof(RumbleNativeChannel) == 0x30, "UG2 channel layout");
+static_assert(sizeof(RumbleNativeChannel) == 0x30, "Underground channel layout");
 RumbleNativeChannel* RumbleChannels(int port) {
+#ifdef GAME_UG
+  return (RumbleNativeChannel*)(RUMBLE_IMAGE_BASE + 0x33B158 + port*0x60);
+#else
   return (RumbleNativeChannel*)(RUMBLE_IMAGE_BASE + 0x4653B0 + port*0x60);
+#endif
 }
 bool bRumbleNativeReady = false;
-bool bRumbleInFrame = false;
-#endif
 
 void RumbleResetPort(int port) {
   ZeroMemory(&RumblePorts[port], sizeof(RumblePorts[port]));
-#ifndef GAME_UG
   if (bRumbleNativeReady) ZeroMemory(RumbleChannels(port), 0x60);
-#endif
 }
 
 void RumbleStopAllPads(bool fromDllMain = false) {
@@ -145,8 +140,8 @@ bool RumbleCanPlay() {
   if (!window || GetForegroundWindow() != window || IsIconic(window)) return false;
   if (*(int*)GAMEFLOWMANAGER_STATUS_ADDR != 6) return false;
 #ifdef GAME_UG
-  // The simulation delta is zero while paused. Its producer additionally
-  // guards loading/cinematic states before it reaches our event hook.
+  // The simulation delta is zero while paused. Native producers also guard
+  // loading/cinematic states before dispatch.
   return *(float*)RUMBLE_SIM_DT_ADDR > 0.0f;
 #else
   typedef bool(__cdecl* PackageActive)(const char*);
@@ -155,6 +150,17 @@ bool RumbleCanPlay() {
          !active("UI_PauseOptionsMain.fng") && !active("UI_PC_Customize_Options.fng");
 #endif
 }
+
+#ifdef GAME_UG
+bool RumbleFeedbackEnabled(int port) {
+  // The options handler at 0x4BF0E2 toggles this same per-player byte and
+  // stores it in the profile. Native event producers also check it.
+  __try {
+    const unsigned char* player = ((const unsigned char**)(RUMBLE_IMAGE_BASE + 0x3361B4))[port];
+    return player && player[0x21] != 0;
+  } __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
+}
+#endif
 
 // Called from the existing input poll and from the frame hook. It also catches
 // game transitions that stop feedback updates while controller polling continues.
@@ -165,7 +171,11 @@ void RumblePoll() {
     return;
   }
   for (int port = 0; port < RUMBLE_PORT_COUNT; ++port) {
-    if (!g_Controllers[port].bConnected) {
+    if (!g_Controllers[port].bConnected
+#ifdef GAME_UG
+        || !RumbleFeedbackEnabled(port)
+#endif
+    ) {
       XINPUT_VIBRATION off = {};
       XInputSetState(port, &off);
       RumbleResetPort(port);
@@ -173,50 +183,11 @@ void RumblePoll() {
   }
 }
 
-#ifdef GAME_UG
-// Native events: collision, road, drift, suspension, tyre transitions, NOS,
-// shifting, auxiliary car effect, drag RPM, yaw and wheel slip respectively.
-const RumbleCategory RumbleEventCategory[RUMBLE_EVENT_COUNT] = {
-  kRumbleImpacts, kRumbleSurface, kRumbleTyres, kRumbleSurface,
-  kRumbleImpacts, kRumbleImpacts, kRumbleCar, kRumbleCar,
-  kRumbleCar, kRumbleCar, kRumbleTyres, kRumbleTyres
-};
-bool RumbleEventIsPulse(int type) { return type == 0 || type == 3 || type == 4 || type == 5 || type == 8; }
-
-void __cdecl RumbleEvent(int type, int port, float amount) {
-  if ((unsigned)port >= RUMBLE_PORT_COUNT || (unsigned)type >= RUMBLE_EVENT_COUNT ||
-      !g_Controllers[port].bConnected || !RumbleCanPlay() || !_finite(amount)) return;
-  const RumbleNativeEvent& native = ((const RumbleNativeEvent*)RUMBLE_EVENT_TABLE_ADDR)[type];
-  // Preserve the game's disabled effects (notably types 4/5).
-  if (!native.enabled || amount < native.params[0] || (type == 7 && !bRumbleGearShift)) return;
-  float t = RumbleRampValue(amount, native.params[0], native.params[1]);
-  float amplitude = native.params[2] + (native.params[3] - native.params[2]) * t;
-  RumblePort& state = RumblePorts[port];
-  RumblePulse& pulse = state.event[type];
-  // Repeated physics samples sustain a curve without resetting its attack each tick.
-  if (!pulse.pPoints || (RumbleEventIsPulse(type) && pulse.GetValue() < amplitude * native.curve->points[0].fValue / 255.0f)) {
-    memcpy(state.points[type], native.curve->points, native.curve->count * sizeof(RumbleEnvelopePoint));
-    if (type == 1) state.points[type][0].fValue = native.params[4] + (native.params[5] - native.params[4]) * t;
-    pulse.pPoints = state.points[type];
-    pulse.nPoints = native.curve->count;
-    pulse.fTime = 0;
-    pulse.fAmplitude = amplitude;
-  } else if (!RumbleEventIsPulse(type)) {
-    pulse.fAmplitude = amplitude;
-  }
-  RumbleTelemetry("E,%.4f,%d,%d,%.5f,%.5f\n", RumbleSimClock, port, type, amount, amplitude);
-}
-
-#endif
-
+#ifndef GAME_UG
 // U2's car -> mover -> wheels. Read only while racing, guarded during
 // car replacement and loading. These are U2 layouts, not MW's UTL interfaces.
 bool RumbleReadSlip(int port, float& spin, float& lockup) {
   spin = lockup = 0;
-  #ifdef GAME_UG
-  // UG retains native slip/yaw events; no U2 wheel offsets are used.
-  return false;
-  #else
   __try {
     int count = *(int*)RUMBLE_PLAYER_COUNT_ADDR;
     if (count <= port || count > RUMBLE_PORT_COUNT) return false;
@@ -312,7 +283,6 @@ bool RumbleReadSlip(int port, float& spin, float& lockup) {
     lockup = (std::max)(brakeTraction, RumbleRampValue(lockup, 0.50f, 0.80f));
     return true;
   } __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
-#endif
 }
 
 // Scanner state follows configured bindings, including keyboard and alternate maps.
@@ -322,6 +292,7 @@ float RumblePedal(int port, int digital, int analog, int alternate) {
   if (EventStatesKB[port][analog] || EventStatesKB[port][alternate]) value = 1.0f;
   return RumbleClamp(value);
 }
+#endif
 
 void RumbleSendOutputs() {
   static int connected = 0;
@@ -366,43 +337,29 @@ void RumbleSendOutputs() {
 
 #ifdef GAME_UG
 void __cdecl RumbleFrame() {
-  // Retain the game's channel housekeeping and steering-wheel path.
+  // This call follows the game's inlined four-channel sampling loop. Do not
+  // sample again: doing so would advance native curve ages twice per frame.
+  // Preserve the separate original feedback/camera housekeeping exactly once.
   ((void(__cdecl*)())RUMBLE_UPDATE_ADDR)();
   RumbleLastFrame = RumbleGetTime();
   float dt = *(float*)RUMBLE_SIM_DT_ADDR;
-  if (!RumbleCanPlay() || !(dt > 0.0f && dt <= 0.1f)) { RumbleStopAllPads(); return; }
-  RumbleSimClock += dt;
+  if (!RumbleCanPlay() || !(dt > 0 && dt <= 0.1f)) { RumbleStopAllPads(); return; }
   for (int port = 0; port < RUMBLE_PORT_COUNT; ++port) {
-    if (!g_Controllers[port].bConnected) { RumbleResetPort(port); continue; }
     RumblePort& state = RumblePorts[port];
-    RumbleMixer mixer = {};
-    mixer.Begin();
-    float shift = state.event[7].GetValue();
-    for (int type = 0; type < RUMBLE_EVENT_COUNT; ++type) {
-      float level = state.event[type].GetValue();
-      RumbleCategory category = RumbleEventCategory[type];
-      // Until native motor arbitration is traced, route the authored envelope
-      // directly to the variable-speed heavy motor, without a guessed split.
-      mixer.Add(category, level, 0);
-      state.event[type].Advance(dt);
+    if (!g_Controllers[port].bConnected || !RumbleFeedbackEnabled(port)) {
+      XINPUT_VIBRATION off = {};
+      if (state.sent[0] || state.sent[1]) XInputSetState(port, &off);
+      RumbleResetPort(port);
+      continue;
     }
-    float spin = 0, lockup = 0;
-    if (!RumbleReadSlip(port, spin, lockup)) spin = lockup = 0;
-    float gas = RumblePedal(port, JOY_EVENT_THROTTLE, JOY_EVENT_THROTTLE_ANALOG, JOY_EVENT_THROTTLE_ANALOG_ALTERNATE);
-    float brake = RumblePedal(port, JOY_EVENT_BRAKE, JOY_EVENT_BRAKE_ANALOG, JOY_EVENT_BRAKE_ANALOG_ALTERNATE);
-    mixer.Resolve(state.wanted[0], state.wanted[1]);
-    float pedalL = bRumbleTriggerPedalScaling ? brake : (brake > 0 ? 1.0f : 0.0f);
-    float pedalR = bRumbleTriggerPedalScaling ? gas : (gas > 0 ? 1.0f : 0.0f);
-    // Optional hardware extension: proportional pedal/slip feedback, plus the
-    // same shift envelope. No synthesized ABS pulses or additional NOS effect.
-    float triggerL = lockup*pedalL*fRumbleCategoryScale[kRumbleTyres];
-    float triggerR = spin*pedalR*fRumbleCategoryScale[kRumbleTyres];
-    triggerR = (std::max)(triggerR, shift*fRumbleCategoryScale[kRumbleCar]);
-    state.wanted[2] = RumbleMixer::ToMotor(triggerL, fRumbleTriggerIntensity);
-    state.wanted[3] = RumbleMixer::ToMotor(triggerR, fRumbleTriggerIntensity);
-    for (int m = 0; m < 4; ++m) state.wanted[m] = RumbleRoundToPercent(state.wanted[m]);
-    RumbleTelemetry("F,%.4f,%d,%.3f,%.3f,%d,%d,%d,%d\n", RumbleSimClock, port, spin, lockup,
-                    state.wanted[0], state.wanted[1], state.wanted[2], state.wanted[3]);
+    int level = RumbleChannels(port)->output;
+    state.wanted[0] = RumbleMixer::ToMotor(RumbleClamp(level / 255.0f), fRumbleLeftScale);
+    // UG2-derived output convention; UG1 PS2 actuator packing is unverified.
+    state.wanted[1] = RumbleMixer::ToMotor(level > 128 ? 1.0f : 0.0f, fRumbleRightScale);
+    if (bRumbleSwapMotors) std::swap(state.wanted[0], state.wanted[1]);
+    // No verified UG1 tyre telemetry: leave impulse triggers silent.
+    state.wanted[2] = state.wanted[3] = 0;
+    RumbleTelemetry("F,%.4f,%d,%d,%d,0,0\n", RumbleLastFrame, port, state.wanted[0], state.wanted[1]);
   }
   RumbleSendOutputs();
 }
@@ -481,21 +438,6 @@ void __cdecl RumbleFrame() {
 }
 #endif
 
-#ifdef GAME_UG
-void __declspec(naked) RumbleEventUG() {
-  __asm {
-    pushad
-    push dword ptr [esp+36]
-    push esi
-    push dword ptr [edx]
-    call RumbleEvent
-    add esp,12
-    popad
-    ret
-  }
-}
-#endif
-
 bool RumbleValidateHooks() {
   __try {
 #ifdef GAME_UG
@@ -504,7 +446,20 @@ bool RumbleValidateHooks() {
     const unsigned char setting[] = {0x0F,0x95,0xC3};
     const unsigned char collision[] = {0x8A,0x48,0x21,0x84,0xC9,0x74,0x15};
     const unsigned char auxiliary[] = {0x8A,0x46,0x21,0x84,0xC0,0x74,0x39};
+    // Validate the loop that supplies the sampled levels read by our frame hook.
+    const unsigned char channels[] = {
+      0x8B,0x2D,0x38,0xAD,0x73,0x00,0xBF,0x58,0xB1,0x73,0x00,
+      0xBE,0x02,0x00,0x00,0x00,0x55,0xE8,0x02,0xD3,0x12,0x00,
+      0x83,0xC7,0x30,0x4E,0x75,0xF4,0x81,0xFF,0x18,0xB2,0x73,0x00,0x7C,0xE7
+    };
+    const unsigned char sampler[] = {0x8B,0x47,0x28,0x53,0x55,0x33,0xDB,0x56};
+    const unsigned char admission[] = {0x83,0xEC,0x08,0x53,0x55,0x56,0x83,0xCE,0xFF};
+    const unsigned char housekeeping[] = {0xA1,0xC8,0x45,0x73,0x00,0x85,0xC0,0x74,0x6D};
     if (memcmp((void*)RUMBLE_EVENT_ADDR,event,sizeof(event)) ||
+        memcmp((void*)(RUMBLE_IMAGE_BASE+0x479D8),channels,sizeof(channels)) ||
+        memcmp((void*)(RUMBLE_IMAGE_BASE+0x174CF0),sampler,sizeof(sampler)) ||
+        memcmp((void*)(RUMBLE_IMAGE_BASE+0x174C20),admission,sizeof(admission)) ||
+        memcmp((void*)RUMBLE_UPDATE_ADDR,housekeeping,sizeof(housekeeping)) ||
         memcmp((void*)RUMBLE_UPDATE_CALL,update,sizeof(update)) ||
         memcmp((void*)RUMBLE_SETTING_ADDR,setting,sizeof(setting)) ||
         memcmp((void*)(RUMBLE_COLLISION_SETTING_ADDR-5),collision,sizeof(collision)) ||
@@ -546,35 +501,37 @@ void RumbleInit() {
   RumbleLoadSettings([&](const char* key, float fallback) {
     return ini.ReadFloat("Rumble", const_cast<char*>(key), fallback);
   });
+#ifdef GAME_UG
+  // Ignore legacy trigger settings until UG1-specific tyre data is verified.
+  RumbleTriggerMode = kTriggersOff;
+#endif
   bRumbleTelemetry = ini.ReadInteger("Rumble", "Telemetry", 0) != 0;
   if (!bRumbleEnabled) return;
   if (!RumbleValidateHooks()) {
-    OutputDebugStringA("XtendedInput rumble: unsupported U2 executable or conflicting hook; rumble disabled.\n");
+    OutputDebugStringA("XtendedInput rumble: unsupported Underground executable or conflicting hook; rumble disabled.\n");
     RumbleTelemetry("Rumble disabled: unsupported executable or conflicting hooks.\n");
     return;
   }
-  for (int p = 0; p < RUMBLE_PORT_COUNT; ++p) RumbleResetPort(p);
-#ifdef GAME_UG
-  injector::MakeJMP(RUMBLE_EVENT_ADDR, RumbleEventUG, true);
-  injector::MakeNOP(RUMBLE_AUX_SETTING_ADDR, 2, true);
-#else
+#ifndef GAME_UG
   // 0x4022C0 is a shared empty function, also called without motor arguments
   // throughout the game. Redirect only the rumble frame and stop calls.
   injector::MakeCALL(RUMBLE_OUTPUT_CALL, RumbleNativeOutput, true);
   injector::MakeCALL(RUMBLE_STOP_CALL, RumbleNativeOutput, true);
+#endif
   bRumbleNativeReady = true;
   for (int p = 0; p < RUMBLE_PORT_COUNT; ++p) RumbleResetPort(p);
-#endif
   injector::MakeCALL(RUMBLE_UPDATE_CALL, RumbleFrame, true);
-  // The INI owns the switch. Replace `setne bl` with `mov bl,1; nop` in the
+#ifndef GAME_UG
+  // The UG2 INI owns the switch. Replace `setne bl` with `mov bl,1; nop` in the
   // car's feedback producer, without modifying the profile's vibration byte.
   injector::WriteMemory<unsigned short>(RUMBLE_SETTING_ADDR, 0x01B3, true);
   injector::WriteMemory<unsigned char>(RUMBLE_SETTING_ADDR+2, 0x90, true);
   // Collision production queries that same hidden byte through Player::GetFeedback.
   // Keep its call and other collision guards, bypass only the false-setting branch.
   injector::MakeNOP(RUMBLE_COLLISION_SETTING_ADDR, 2, true);
+#endif
   bRumbleInstalled = true;
-  RumbleTelemetry("U2 rumble initialized; impulse mode=%d\n", RumbleTriggerMode);
+  RumbleTelemetry("Underground rumble initialized; impulse mode=%d\n", RumbleTriggerMode);
 }
 
 

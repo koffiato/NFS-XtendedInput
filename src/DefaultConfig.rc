@@ -1,3 +1,5 @@
-#ifdef GAME_UG2
+#ifdef GAME_UG
+101 RCDATA "data/Config-UG/NFSU_XtendedInput.ini"
+#elif defined(GAME_UG2)
 101 RCDATA "data/Config-UG2/NFSU_XtendedInput.ini"
 #endif
