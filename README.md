@@ -4,9 +4,9 @@ This unofficial branch combines [NFS-XtendedInput](https://github.com/xan1242/NF
 and [NFSU-XtendedInput](https://github.com/xan1242/NFSU-XtendedInput) and adds
 rumble support. It targets Windows 10/11 and 32-bit game executables.
 
-**Current development covers [Underground 1](docs/ug-rumble.md) and
-[Underground 2](docs/ug2-rumble.md).** Both use their native feedback engines
-with a small output adapter. UG2 also supports impulse triggers.
+[Underground 1](docs/ug-rumble.md) and [Underground 2](docs/ug2-rumble.md)
+use their native feedback engines with a small output adapter. UG2 also
+supports impulse triggers.
 
 Current support:
 
@@ -14,10 +14,10 @@ Current support:
 | --- | --- | --- |
 | Underground | `UG` / [Config-UG](data/Config-UG) | [Native feedback](docs/ug-rumble.md) |
 | Underground 2 | `UG2` / [Config-UG2](data/Config-UG2) | [Native feedback and impulse triggers](docs/ug2-rumble.md) |
-| Most Wanted (2005) | `MW` / [Config-MW](data/Config-MW) | Retained from the rumble fork |
-| Carbon | `CB` / [Config-Carbon](data/Config-Carbon) | Input only |
-| Undercover | `UC` / [Config-UC](data/Config-UC) | Input only |
-| ProStreet | `PS` / [Config-ProStreet](data/Config-ProStreet) | Input and [experimental rumble](docs/prostreet-rumble.md) |
+| Most Wanted (2005) | `MW` / [Config-MW](data/Config-MW) | [Reconstructed feedback and impulse triggers](docs/mw-rumble-x360.md) |
+| Carbon | `CB` / [Config-Carbon](data/Config-Carbon) | Input only; [research](docs/cb-rumble-x360.md) |
+| Undercover | `UC` / [Config-UC](data/Config-UC) | Input only; [research](docs/uc-xinput.md) |
+| ProStreet | `PS` / [Config-ProStreet](data/Config-ProStreet) | Input and [experimental rumble](docs/ps-rumble.md) |
 | World | `W` / [Config-World](data/Config-World) | Input only, experimental |
 
 All seven input targets compile. This does not establish gameplay compatibility.

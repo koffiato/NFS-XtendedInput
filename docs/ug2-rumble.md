@@ -7,8 +7,9 @@ including curve points, thresholds, gains, priorities and enabled flags.
 
 UG2 now keeps the original PC dispatcher, three-slot scheduler, gain-scaled
 curve timing and suppression. Its frame-output and explicit-stop call sites
-are redirected to the adapter. Native output levels drive a variable heavy motor and a binary light
-motor above 128; master/motor scales and swapping apply afterward. Pause,
+are redirected to the adapter. Native output levels drive a variable heavy
+motor and a binary light motor above 128; master/motor scales and swapping
+apply afterward. Pause,
 focus loss, disconnect and missed updates stop output and clear queued slots.
 The hidden producer/collision vibration guards are bypassed without changing
 the profile byte.
@@ -140,15 +141,12 @@ DirectInput effects for this controller path.
 
 The empty function is shared by hundreds of direct calls throughout the PC
 executable, including calls without motor arguments at `0x00581470` and
-`0x00581475` in the main loop. The initial adapter incorrectly detoured the
-shared function itself: unrelated callers could supply stack values interpreted
-as motor commands. A native-code regression reproduced an unrelated zero-valued
-call stopping active rumble. Redirecting only `0x0057266E` and `0x005726C5`
-fixes that check and leaves all unrelated calls untouched. Synthetic strong
-collision/suspension events reach both motors, including a collision replacing
-three occupied road slots. This establishes the hook defect, not that it was
-the only cause of the gameplay difference. Subsequent user gameplay testing
-confirmed collision feedback works with the corrected call sites.
+`0x00581475` in the main loop. The adapter redirects only the motor-output
+calls at `0x0057266E` and `0x005726C5`, preserving unrelated calls to the
+shared function. A native-code regression checks that an unrelated zero-valued
+call preserves active rumble. Synthetic strong collision/suspension events
+reach both motors, including a collision replacing three occupied road slots.
+User gameplay testing confirmed working collision feedback with these call sites.
 
 The frame call at `0x005814AD` remains in the executable. Settings matter:
 the producer reads a hidden profile vibration byte (`0x005F6388`, tested at
@@ -400,8 +398,9 @@ builds; the presence of their curves does not mean they should be enabled.
 ## Shared authored curves
 
 Times are authored curve-age coordinates, not fixed playback durations: the
-native age advances by `dt / gain`. Levels are native values, not percentages. Decimal display is rounded, while the
-comparison used the original 32-bit representations.
+native age advances by `dt / gain`. Levels are native values, not percentages.
+Decimal display is rounded, while the comparison used the original 32-bit
+representations.
 
 | Event ID | (time, level) points |
 | --- | --- |
@@ -476,5 +475,6 @@ controller output. It does not establish hardware behavior or gameplay stability
 
 A PCSX2 gameplay trace remains necessary to confirm real event sequences,
 clock/pause transitions, controller initialization, submitted packets and
-hardware behavior. No game image or emulator setting was changed for this research. Results apply only to the identified USA PS2/PC
-builds; other games and revisions remain outside this check.
+hardware behavior. No game image or emulator setting was changed for this
+research. Results apply only to the identified USA PS2/PC builds; other games
+and revisions remain outside this check.
