@@ -41,6 +41,4 @@ They do not establish the Xbox 360 effect model or an ABI identical to MW,
 Carbon or ProStreet. Those games have different feedback layouts and need
 separate investigation.
 
-UC Xbox behavior and motor routing remain unvalidated. Console curves,
-timing and lifecycle behavior
-remain open research questions.
+Xbox curves, motor routing, timing and lifecycle behavior remain unverified.

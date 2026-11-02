@@ -1,48 +1,34 @@
 # ProStreet feedback adapter (archived research)
 
-These ProStreet findings are outdated and retained for reference. Current
-discovery work concerns Most Wanted; no new PS work or console-fidelity claim
-is implied.
+These archived findings describe the ProStreet adapter. Console fidelity
+remains unverified.
 
-ProStreet now uses the same feedback engine, settings, mixer, envelopes and
-XInput/Windows.Gaming.Input output as Most Wanted. The supplied ProStreet INI
-enables it. The native interface was checked against the user's installed
-running game. User testing at revision `1b942a4` confirmed lockup/wheelspin
-feedback and driving with telemetry enabled and wall-impact rumble after the
-road/collision fixes. That test predates subsequent unit and mixer changes.
-This remains experimental: broader race/controller coverage and original
-console fidelity are pending.
+ProStreet shares rumble settings, mixing and XInput/Windows.Gaming.Input
+output with Most Wanted, with separate callbacks. The supplied ProStreet INI
+enables it. The native interface was checked in the running game. Gameplay
+tests at `1b942a4` confirmed lockup, wheelspin and wall impacts with telemetry
+enabled. Later unit and mixer changes have harness coverage only.
 
 ## Live data and temporary values
 
 The game supplies road, skid, drift-skid, RPM, shift-potential, NOS,
 engine-damage and collision callbacks. The adapter additionally reads live
 player speed, velocity, pedals, wheel contact/slip/skid, the raw road signal and
-transmission state. It does not infer feedback from controller button presses.
+transmission state.
 
 Surface waves are read through ProStreet's own `Attrib::Instance` accessor
 (`0x52B950`), for `FFB_ROLL`, `FFB_SKID` and `FFB_SLIP`. Missing,
-unreadable, non-finite or invalid records are silent. A valid native PC curve
-takes priority; an absent curve is not presented as recovered console data.
-Body tyre feedback uses these native waves without synthesized lockup pulses,
-wheelspin oscillation or an added skid hiss. Signed live slip distinguishes
-braking and throttle for the optional proportional trigger extension.
+unreadable, non-finite or invalid records are silent. Body tyre feedback uses
+these native waves. Signed live slip distinguishes braking and throttle for
+the optional proportional trigger extension.
 
-Impacts and landings use the shared MW collision math and console envelopes.
-NOS, shifts and engine damage reuse the MW port's baseline car ramps; the
-shortened NOS kick, custom shift presets, perfect/missed-shift cues, fatigue
-and impact ducking are removed. Scrape strength remains a linear contact-speed
-estimate. These fallbacks are **not ProStreet Xbox 360 curves**. Xbox 360
-decoding remains pending. No game files were downloaded, and no executable,
-memory snapshot or game data is shipped in this repository.
+Impacts and landings use the shared MW collision math and legacy envelopes.
+NOS, shifts and engine damage reuse MW's car ramps. Scrape strength is a
+linear contact-speed estimate. ProStreet Xbox 360 curves remain undecoded.
 
 Compression-derived kerb/bumps and the damaged-tyre surface's separate impact
 category remain pending. Ground impacts received through the native collision
-callback still produce landing feedback. The adapter routes native local-player
-collision listeners before the stock producer's participant-A lookup and
-velocity/profile filters. It checks the
-local simable handle against both A and B and uses the existing MW impact
-math. Other feedback devices keep the original collision producer.
+callback still produce landing feedback.
 
 ## Native interface
 
@@ -77,8 +63,10 @@ The vehicle reader uses PS interface handles and accessors, not MW offsets.
 Transmission state supplies shift feedback even when the native engine-damage
 path omits UpdateShifting. The two local-player collision listener entries at
 `0x9FA07C` and `0x9FA324` route through the adapter. Only registered feedback
-instances receive these events; pause/focus stops and contact ownership checks
-still apply. Native steering-wheel feedback keeps the original handler.
+instances receive these events. The adapter checks local ownership against
+both participants before the stock participant-A lookup and velocity/profile
+filters. Pause/focus stops still apply. Native steering-wheel feedback keeps
+the original handler.
 
 The input device also preserves PS's extra slot before StartVibration and the
 native battery-query/noise-return signatures. Its custom remapping method
@@ -90,12 +78,9 @@ Set `[Rumble] Telemetry = 1` to write `scripts/NFS_XtendedInput_Rumble.log`.
 `S` rows record native surface waves; `T` rows include live vehicle/wheel and
 callback values; `P` rows record raw local-listener contact participants and
 `C` rows record the contacts routed into rumble. PS tick columns identify slip
-ratios, skid angles (radians) and the raw native road signal. PS surface rows
-use `PS-live`
-instead of interpreting MW's surface-name/layout fields. Disable telemetry
-after capturing a short race to avoid an unnecessarily large log. The log now
-permits simultaneous readers, so future captures do not require closing the
-game.
+ratios, skid angles (radians) and the raw native road signal. Surface rows use
+`PS-live` instead of MW's layout fields. The log supports simultaneous readers.
+Disable telemetry after a short capture to limit log size.
 
 From an x86 Visual Studio developer prompt:
 
@@ -114,12 +99,11 @@ written/read during that test. Collision fixtures include local car A/B,
 unrelated contacts, pause and original-handler forwarding. Actions runs it
 with runtime stack checks. Local validation also ran the signature checks
 against a read-only snapshot of the installed running game.
-These checks do not establish in-game stability or original console fidelity.
+Broader race/controller testing remains pending.
 
 ## Gameplay log review (2026-10-31)
 
-Crash was gone and wall impacts worked with
-code revision `1b942a4`. The local capture contains 30,265 complete tick rows
+The capture at `1b942a4` contains 30,265 complete tick rows
 over 271.47 seconds, seven surface definitions, and 104 matched raw/delivered
 collision records. One final tick row is incomplete at shutdown and was excluded
 from the numeric review. Complete rows contain no faults or non-finite values.
@@ -144,13 +128,11 @@ The capture establishes the following input units and operating ranges:
   adapter samples road waves using the latest live body speed. The raw
   road scalar is logged separately.
 
-The unit/motion handling has harness coverage, including moderate spin/lockup
-and quiet parked tyres. Gameplay validation of these settings remains pending;
-the user-tested revision is `1b942a4`.
+Harness checks cover moderate spin/lockup and quiet parked tyres. Gameplay
+validation of these settings remains pending.
 
 The raw 6,981,620-byte log stays outside the repository. Capture SHA-256:
 `6798d54683f9a27f8f1269783626c9529dfdd75bd65c98004cf89cb8528927be`.
 
 Interface research references: [Xan's feedback investigation](https://github.com/xan1242/NFS-XtendedInput/issues/10),
 [NFSPluginSDK ProStreet types](https://github.com/berkayylmao/NFSPluginSDK/tree/master/NFSPluginSDK/Game.ProStreet/Types).
-The bindings were cross-checked with the installed game's live code.

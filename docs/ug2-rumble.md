@@ -5,12 +5,12 @@ Research for the local PC US 1.2 executable and PS2 USA/NTSC build, checked on
 motor writer is an empty stub. All 12 initialized event records match PS2,
 including curve points, thresholds, gains, priorities and enabled flags.
 
-UG2 now keeps the original PC dispatcher, three-slot scheduler, gain-scaled
+UG2 keeps the original PC dispatcher, three-slot scheduler, gain-scaled
 curve timing and suppression. Its frame-output and explicit-stop call sites
 are redirected to the adapter. Native output levels drive a variable heavy
 motor and a binary light motor above 128; master/motor scales and swapping
-apply afterward. Pause,
-focus loss, disconnect and missed updates stop output and clear queued slots.
+apply afterward. Pause, focus loss, disconnect and missed updates stop output
+and clear queued slots.
 The hidden producer/collision vibration guards are bypassed without changing
 the profile byte.
 
@@ -57,8 +57,8 @@ clear the response immediately. Master intensity and trigger intensity apply.
   `slip * (0.75 + 0.25 * slip)`. The stronger of the force
   and rotational cues drives the right trigger, using the full output range.
 
-These thresholds and curves are deliberate tuning choices set through testing. Strong single-wheel
-spin is retained; load averaging applies only to force cues. There are no
+These thresholds and curves are tuning choices. Strong single-wheel spin is
+retained; load averaging applies only to force cues. There are no
 shift/NOS/impact trigger cues or synthesized oscillations. Disabling pedal
 scaling retains the pedal-on gate. Body rumble remains owned by the native engine.
 
@@ -76,8 +76,8 @@ The supported executable supplies the following live tyre data:
 | `+0x164` | Wheel load |
 | `+0x170` | Force/capacity ratio, stored at `0x0059D733..74A` |
 
-Rolling speed is velocity projected onto the wheel's forward X axis. Contact is 
-independent of the force ratio, so a locked tyre with low force remains detectable. 
+Rolling speed is velocity projected onto the wheel's forward X axis. Contact is
+independent of the force ratio, so a locked tyre with low force remains detectable.
 Captures showed braking could saturate tire forces well before rotation stopped,
 and powered cornering could reach the grip limit without rotational wheelspin;
 these observations motivated the force cues above.
@@ -92,7 +92,7 @@ With `Telemetry = 1`, logs beside the ASI contain:
   velocity projected onto all three orientation axes, native `+0x10C` flag,
   force utilization, longitudinal force, lateral force, load and drive torque.
 
-Telemetry defaults to off. Game binaries and user captures stay outside the
+Telemetry defaults to off. Game binaries and gameplay captures stay outside the
 repository; tests use synthetic state and small numeric capture fixtures.
 
 From an x86 Visual Studio developer prompt at the repository root:
@@ -146,7 +146,7 @@ calls at `0x0057266E` and `0x005726C5`, preserving unrelated calls to the
 shared function. A native-code regression checks that an unrelated zero-valued
 call preserves active rumble. Synthetic strong collision/suspension events
 reach both motors, including a collision replacing three occupied road slots.
-User gameplay testing confirmed working collision feedback with these call sites.
+Gameplay testing confirmed collision feedback at these call sites.
 
 The frame call at `0x005814AD` remains in the executable. Settings matter:
 the producer reads a hidden profile vibration byte (`0x005F6388`, tested at
@@ -440,9 +440,10 @@ EE-specific instruction decoding was checked against PCSX2's
 and [float-to-integer conversion](https://github.com/PCSX2/pcsx2/blob/1517c1f52029346441d6a20f4b8b8c1bfdc2347c/pcsx2/FPU.cpp).
 Those sources establish instruction behavior, not UG2's game-specific logic.
 
-The [adapter](../src/rumble/Underground.h) now calls the original native frame
-routine and hooks its two rumble-specific output calls plus the frame call. It preserves
-the PC dispatcher and curve descriptors. The executable harness maps and runs
+The [adapter](../src/rumble/Underground.h) calls the original native frame
+routine and hooks its two rumble-specific output calls plus the frame call.
+It preserves the PC dispatcher and curve descriptors. The executable harness
+(`tests/ug2.cmd`) maps and runs
 those original instructions: native slot admission, gain-scaled timing, routing,
 128/129 light-motor threshold, explicit stop, lifecycle clearing and trigger
 gates/strength are checked with mocked output. The PE runs at its fixed base
@@ -452,29 +453,17 @@ checks themselves are never retried. No installed game is modified or launched.
 
 The adapter additionally guards pause/focus/disconnect and clears queued slots
 on stop, scales motor output and offers conservative slip triggers. These are
-intentional extensions. The user validated the local PC controller feel;
-complete PC/PS2 event-producer parity remains unverified.
+intentional extensions. Complete PC/PS2 event-producer parity remains unverified.
 
-Event 7 uses the matching authored envelope, but that alone does not make the
-game's gear-change feedback fully understood. Its PS2 producer calls event 7 with
-input 1 at `0x0036B944` while predicate `0x0036CA20` is true. That predicate
+Event 7's PS2 producer dispatches input 1 at `0x0036B944` while predicate
+`0x0036CA20` is true. That predicate
 checks object kind 1 and a positive float through `object+0x34 -> +0x4C ->
-+0x5C`; its gameplay meaning has not been independently established. This
-research does not prove an event on every successful gear change.
++0x5C`; its gameplay meaning remains unverified.
 
-The three-slot budget is a game software choice, not a fundamental PS2
-hardware limit. PS2 already drives both motors together; this game path derives
-the two actuator commands from one scalar. The desired modern implementation
-should preserve UG2's character without treating every old restriction as a
-requirement. For the first lightweight baseline, native scheduling and its
-eight-bit output are acceptable; more elaborate mixing is deferred. Trigger
-rumble is an extension with no PS2 reference and needs separate restrained tuning.
-
-The `tests/ug2.cmd` harness checks native code and plugin integration with mocked
-controller output. It does not establish hardware behavior or gameplay stability.
+The three-slot budget belongs to the game scheduler. The PS2 output path
+derives both actuator commands from one eight-bit scalar; the adapter retains
+this behavior. Trigger rumble is an extension with no PS2 reference.
 
 A PCSX2 gameplay trace remains necessary to confirm real event sequences,
 clock/pause transitions, controller initialization, submitted packets and
-hardware behavior. No game image or emulator setting was changed for this
-research. Results apply only to the identified USA PS2/PC builds; other games
-and revisions remain outside this check.
+physical output. Results apply only to the identified USA PS2/PC builds.

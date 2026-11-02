@@ -16,12 +16,9 @@ call "%~dp0..\scripts\target.cmd" %1
 if errorlevel 1 exit /b 1
 pushd "%~dp0.."
 if not exist build\tests mkdir build\tests
-set "CONFIG_RESOURCE="
-for %%G in (UG UG2) do if /I "%~1"=="%%G" (
-  rc /nologo /d%GAME% /fo"build\tests\default-%~1.res" src\DefaultConfig.rc
-  if errorlevel 1 (popd & exit /b 1)
-  set "CONFIG_RESOURCE=build\tests\default-%~1.res"
-)
+rc /nologo /d%GAME% /fo"build\tests\default-%~1.res" src\DefaultConfig.rc
+if errorlevel 1 (popd & exit /b 1)
+set "CONFIG_RESOURCE=build\tests\default-%~1.res"
 cl /nologo /Od /RTC1 /EHsc /std:c++14 /D_CRT_SECURE_NO_WARNINGS /D%GAME% /Isrc\inc /Isrc\_vs tests\runtime_tests.cpp %CONFIG_RESOURCE% /Fo"build\tests\runtime-%~1.obj" /Fe"build\tests\runtime-%~1.exe" /link /BASE:0x2000000 /DYNAMICBASE /MACHINE:X86 /SUBSYSTEM:CONSOLE user32.lib winmm.lib
 if errorlevel 1 (popd & exit /b 1)
 build\tests\runtime-%~1.exe

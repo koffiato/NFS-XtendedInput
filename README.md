@@ -14,7 +14,7 @@ Current support:
 | --- | --- | --- |
 | Underground | `UG` / [Config-UG](data/Config-UG) | [Native feedback](docs/ug-rumble.md) |
 | Underground 2 | `UG2` / [Config-UG2](data/Config-UG2) | [Native feedback and impulse triggers](docs/ug2-rumble.md) |
-| Most Wanted (2005) | `MW` / [Config-MW](data/Config-MW) | [Reconstructed feedback and impulse triggers](docs/mw-rumble-x360.md) |
+| Most Wanted (2005) | `MW` / [Config-MW](data/Config-MW) | [Experimental feedback and impulse triggers](docs/mw-rumble-x360.md) |
 | Carbon | `CB` / [Config-Carbon](data/Config-Carbon) | Input only; [research](docs/cb-rumble-x360.md) |
 | Undercover | `UC` / [Config-UC](data/Config-UC) | Input only; [research](docs/uc-xinput.md) |
 | ProStreet | `PS` / [Config-ProStreet](data/Config-ProStreet) | Input and [experimental rumble](docs/ps-rumble.md) |
@@ -27,6 +27,11 @@ All seven input targets compile. This does not establish gameplay compatibility.
 Development ZIPs use the official release layout. Back up your ASI, INIs and
 custom bindings, then extract the matching `Release-<game>-Pack.zip` into the
 game directory.
+
+On startup, a missing settings INI is created beside the ASI from the bundled
+defaults for that target. Later games also create a missing
+`NFS_XtendedInput.default.ini` bindings template there. Existing files,
+including empty files, are preserved.
 
 * UG/UG2 settings and bindings reside in `scripts/NFSU_XtendedInput.ini`,
   with bindings in `[Events]` and `[EventsKB]` while rumble is under `[Rumble]`.

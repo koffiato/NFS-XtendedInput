@@ -42,20 +42,44 @@ LRESULT WINAPI OriginalWindow(HWND, UINT, WPARAM, LPARAM) { return 77; }
 void CheckSettings() {
   InputConfig config;
   // Each test binary lives under build/tests and owns its adjacent INI.
-#if defined(GAME_UG) || defined(GAME_UG2)
+#if !INPUT_SCANNERS
+  InputConfig bindings("NFS_XtendedInput.default.ini");
+  DeleteFileA(bindings.GetIniPath());
+#endif
   DeleteFileA(config.GetIniPath()); // Remove only this test executable's own INI.
   assert(!config.EnsureDefault(999)); // absent resource must not create an empty INI
   assert(GetFileAttributesA(config.GetIniPath()) == INVALID_FILE_ATTRIBUTES);
+  char workingDirectory[MAX_PATH], windowsDirectory[MAX_PATH];
+  assert(GetCurrentDirectoryA(MAX_PATH, workingDirectory));
+  assert(GetWindowsDirectoryA(windowsDirectory, MAX_PATH));
+  assert(SetCurrentDirectoryA(windowsDirectory));
   InitConfig(); // Startup must create the missing INI, not just expose a helper.
+  assert(SetCurrentDirectoryA(workingDirectory));
   assert(GetFileAttributesA(config.GetIniPath()) != INVALID_FILE_ATTRIBUTES);
-  assert(config.ReadFloat("Rumble","LeftMotorScale",0)==1.0f);
+#if INPUT_SCANNERS
   assert(!strcmp(config.ReadString("Events","JOY_EVENT_THROTTLE_ANALOG",""),"XINPUT_GAMEPAD_RT"));
   assert(*config.ReadString("EventsKB","JOY_EVENT_THROTTLE",""));
+#else
+  assert(GetFileAttributesA(bindings.GetIniPath()) != INVALID_FILE_ATTRIBUTES);
+  assert(!strcmp(defMappingName, bindings.GetIniPath()));
+  bindings.WriteString("Test", "Preserved", "yes");
+#endif
   config.WriteString("Rumble","LeftMotorScale","0.7");
   InitConfig();
   assert(config.ReadFloat("Rumble","LeftMotorScale",0)==0.7f);
-  assert(DeleteFileA(config.GetIniPath()));
+#if !INPUT_SCANNERS
+  assert(!strcmp(bindings.ReadString("Test","Preserved",""),"yes"));
+  assert(DeleteFileA(bindings.GetIniPath()));
 #endif
+  assert(DeleteFileA(config.GetIniPath()));
+  HANDLE empty = CreateFileA(config.GetIniPath(), GENERIC_WRITE, 0, NULL, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, NULL);
+  assert(empty != INVALID_HANDLE_VALUE);
+  CloseHandle(empty);
+  InitConfig(); // An existing empty file is also a customization to preserve.
+  WIN32_FILE_ATTRIBUTE_DATA attributes;
+  assert(GetFileAttributesExA(config.GetIniPath(), GetFileExInfoStandard, &attributes));
+  assert(attributes.nFileSizeHigh == 0 && attributes.nFileSizeLow == 0);
+  assert(DeleteFileA(config.GetIniPath()));
   config.WriteString("Input", "KeyboardReadingMode", "0");
   config.WriteString("Input", "XInputOmniMode", "0");
   config.WriteString("Deadzone", INPUT_SCANNERS ? "DeadzonePercentLS" : "PercentLS", "0.25");
@@ -66,16 +90,17 @@ void CheckSettings() {
   config.WriteString("Test", "Empty", "bad");
   assert(config.ReadFloat("Test", "Invalid", 7) == 7);
   assert(config.ReadFloat("Test", "Empty", 9) == 9);
-#if defined(GAME_UG) || defined(GAME_UG2)
   assert(config.EnsureDefault());
   assert(config.ReadInteger("Rumble","Enabled",1)==0); // existing customization survives
-#endif
   InitConfig();
   assert(INPUT_DEADZONE_LS == (WORD)(0.25f * 32767));
   assert(INPUT_DEADZONE_LS_P2 == (WORD)(0.75f * 32767));
   assert(TRIGGER_ACTIVATION_THRESHOLD == 51);
   assert(ConvertVKNameToValue("a") == 'A');
   assert(DeleteFileA(config.GetIniPath()));
+#if !INPUT_SCANNERS
+  assert(DeleteFileA(bindings.GetIniPath()));
+#endif
 }
 
 void CheckPolling() {

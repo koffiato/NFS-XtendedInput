@@ -2,9 +2,8 @@
 
 UG1 US 1.4 uses the game's native dispatcher, three-slot scheduler and curve
 timing. The adapter forwards the resolved output after the game's channel
-updates. Executable checks pass, and the user reported working controller
-feedback in local gameplay. Tests cover default INI creation and the in-game
-Vibration toggle.
+updates. Executable checks and local gameplay confirm working controller
+feedback. Tests cover default INI creation and the in-game Vibration toggle.
 
 ## Configuration
 
