@@ -5,8 +5,11 @@
 
 void InitConfig() {
   InputConfig ini;
-#if defined(GAME_UG) || defined(GAME_UG2)
-  if (!ini.EnsureDefault()) OutputDebugStringA("XtendedInput: unable to create default Underground INI.\n");
+  if (!ini.EnsureDefault()) OutputDebugStringA("XtendedInput: unable to create default settings INI.\n");
+#if !INPUT_SCANNERS
+  InputConfig bindings("NFS_XtendedInput.default.ini");
+  strcpy_s(defMappingName, bindings.GetIniPath());
+  if (!bindings.EnsureDefault(102)) OutputDebugStringA("XtendedInput: unable to create default bindings INI.\n");
 #endif
   KeyboardReadingMode = ini.ReadInteger("Input", "KeyboardReadingMode", 0);
   bAllowTwoPlayerKB = ini.ReadInteger("Input", "AllowTwoPlayerKB", false) != 0;

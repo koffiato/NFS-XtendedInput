@@ -36,6 +36,7 @@ void RumbleTelemetryPrintf(const char* fmt, ...) {
     fprintf(RumbleTelemetryFile, "# T,time,speed,gas,brake,handbrake,powerband,throttle,nos,shifting,shiftPotential,{surf,ground,comp,slip,skid,av,fbSlip,fbSkid}x4,linVel[3],angVel[3]\n");
 #endif
     fprintf(RumbleTelemetryFile, "# C,time,type,flags,closingVel,normalSpeed,slidingSpeed,speedChange,strength,measuredSpeedChange\n");
+    fprintf(RumbleTelemetryFile, "# F,time,pad,left,right,leftTrigger,rightTrigger,backend,result (XInput error code; WGI -1 means status unavailable)\n");
   }
   va_list args;
   va_start(args, fmt);
@@ -109,6 +110,12 @@ struct RumbleTelemetryTick {
   double fStartTime;
   double fLastFlushTime;
 } RumbleTelemetry;
+
+void RumbleTelemetryOutput(int pad, int left, int right, int leftTrigger, int rightTrigger, const char* backend, long result) {
+  if (!bRumbleTelemetry || !RumbleTelemetry.fStartTime) return;
+  RumbleTelemetryPrintf("F,%.4f,%d,%d,%d,%d,%d,%s,%ld\n", RumbleGetTime() - RumbleTelemetry.fStartTime,
+                        pad, left, right, leftTrigger, rightTrigger, backend, result);
+}
 
 void RumbleTelemetryWriteTick(double now, const RumbleVehicleState* vehicle, bool nos, bool shifting, int shiftPotential) {
   if (!RumbleTelemetry.fStartTime) RumbleTelemetry.fStartTime = now;

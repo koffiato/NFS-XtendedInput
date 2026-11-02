@@ -22,7 +22,7 @@ unreadable, non-finite or invalid records are silent. Body tyre feedback uses
 these native waves. Signed live slip distinguishes braking and throttle for
 the optional proportional trigger extension.
 
-Impacts and landings use the shared MW collision math and legacy envelopes.
+Impacts and landings use experimental strength estimates and legacy MW envelopes.
 NOS, shifts and engine damage reuse MW's car ramps. Scrape strength is a
 linear contact-speed estimate. ProStreet Xbox 360 curves remain undecoded.
 

@@ -1,9 +1,9 @@
 # Most Wanted feedback research
 
 PC, PS2 and Xbox 360 share feedback producers but use different output paths.
-The adapter reproduces the recovered surface waves and car ramps. Its impact
-envelopes, scrape, suspension impulses, extra shifts and lifecycle clearing
-still differ from the console path.
+The MW adapter implements the recovered console waves, car/collision ramps
+and pause/reset state rules. Body rumble has been tested and found accurate
+to the Xbox 360 behavior in gameplay. Impulse triggers are an optional extension.
 
 ## Binaries and address mapping
 
@@ -309,122 +309,41 @@ slip record and no road/skid records. Grass adds two heavy road channels.
 Null and unknown have no controller waves. The full comparison also covers
 damaged tyres, dirt, gravel, sand, mud, railroad, wet pavement and slicks.
 
-## Adapter differences and implementation baseline
+## Adapter implementation
 
-Current collision/suspension envelopes use the legacy arrays, with SmallRumble
-on the right and BigRumble on the left above strength 0.4. Scrape maps sliding
-speed 1..21 m/s to the right motor. Suspension impulses require compression
-speed 4..14 m/s, vehicle speed above 2 m/s and a simulation step below 100 ms.
-The extra shift query uses transmission handle `0x00404010`, slot `+0x10`.
-These paths are additions to the recovered console controller behavior.
+The adapter receives the native PC DoFFB and collision callbacks. It reads
+surface records through the game's attribute accessor and resolves collision
+participants through `0x0041AD40`, then calls PC ISimable::GetLinearVelocity
+at vtable `+0x68`. Vehicle checks use the native interface list.
 
-The next console baseline should use:
-
-| Area | Required behavior |
+| Area | Behavior |
 | --- | --- |
-| Collisions | Recovered strength calculation, left ramp and maximum retrigger rule, including the asymmetric rear-end branch |
-| Sliding | Native collision calculation; omit separate scrape |
-| Zero measured delta | Console calculation; investigate PC physics/callback timing separately from contact-speed fallback |
-| Suspension | Omit the added compression impulse |
-| Shifting | Native engine-damage-or-shifting producer branch; omit extra transmission query |
-| Lifecycle | Preserve console state through gameplay pause/reset; keep focus/disconnect/unload safety stops separate |
-| Sampling | Retain verified waves/car ramps, previous-sample output order and 16-bit motor levels |
-| PC DInput | Keep as an independent force-feedback reference |
+| Collisions | Recovered strength calculation, left-only ramp and maximum retrigger rule, including the asymmetric rear-end branch |
+| Sliding | Same collision calculation; no separate scrape motor |
+| Zero measured delta | No contact-normal fallback; low-delta object contacts retain the console branches |
+| Suspension | Ground collision callbacks only; no compression-derived impulse |
+| Shifting | Native engine-damage-or-shifting producer branch; no extra transmission query |
+| Lifecycle | Pause preserves state; reset clears volumes and the left collision ramp when an output device is available |
+| Sampling | Full positive polling delta, previous-sample output order and 16-bit motor levels |
+| PC DInput | Separate reference; its wheel-force effects are not mixed into controller output |
 
-These changes remain pending. The current adapter samples from device polling,
-uses a 100 ms delta bound and stops stale feedback after 250 ms. Intensity,
-category scaling and impulse triggers are optional extensions.
+Reset's output-effect query maps to an available XInput or WGI pad. Missing
+pads receive zero output without clearing logical effect state. Focus loss
+and feedback older than 250 ms stop output and suspend sampling; polling
+continues to update the clock. Device detach clears adapter state. These are
+PC safety extensions, separate from gameplay Pause/Resume/Reset.
 
-## Validation
+Intensity, motor/category gains, `GearShift` and impulse triggers are optional
+extensions. Use unit gains, `GearShift = 1` and `ImpulseTriggers = 0` for the
+console baseline. All collisions, including ground contacts, use `Impacts`.
 
-### Console models
-
-Retail-instruction models passed 8,724 producer comparisons: 6,800
-surface/car/lifecycle steps, 96 sparse/invalid-range surface cases, 1,820
-collision steps and eight effect-present/absent lifecycle calls. All wave,
-ramp, volume, enable, reserved-word and persistent event fields were compared.
-Largest float difference: `4.76837158203125e-7`; integer/boolean fields match.
-
-Cases cover disabled calls, missing surface indices, front/rear weighting,
-thresholds, both collision ownership choices, missing participants/interfaces,
-sliding flags, overlapping collisions, repeated car events, potential
-`3 -> 3 -> 4 -> 5 -> 2 -> 0`, and pause/reset/resume. A separate wheel-gate
-case confirms PS2 rejects a surface update while Xbox writes controller state.
-
-Another 500 sampler states covered sixteen waves, ten ramps and 1..50 ms
-deltas; largest motor-float difference was `6.556510925292969e-7`.
-Lookup/interface queries and output devices are mocked. Host floating point
-and sine replace hardware details; these checks do not measure gameplay
-cadence or physical motors. EE/VU decoding follows the
-[PCSX2 opcode tables](https://github.com/PCSX2/pcsx2/blob/master/pcsx2/R5900OpcodeTables.cpp).
-
-### Adapter sequences
-
-The current headers were tested with a fixed 100 Hz clock, mocked native
-inputs, unit scales, captured XInput output and impulse triggers off.
-The same events fed the console models. Differences above one 16-bit motor
-unit count as mismatches; 100 Hz is a test rate, not a measured console rate.
-
-| Stream | Compared polls | Mismatching polls |
-| --- | ---: | ---: |
-| Road wave alone, 2 Hz / amplitude 0.6 / offset 0.3 | 220 | 0 |
-| Same road wave overlapping a NOS rising edge and expiry | 220 | 0 |
-| World impact, measured velocity delta 15 m/s | 130 | 119 |
-| Same impact followed by a weaker 6 m/s contact | 130 | 119 |
-| Rear-end branch with stored A/B speeds 20/40 m/s, aligned velocities and zero own measured delta | 130 | 119 |
-| Sliding world contact with 15 m/s measured delta and 5 m/s sliding speed | 130 | 49 |
-| Zero measured delta, 15 m/s contact-normal closing speed | 130 | 119 |
-| Compression rises 0.1 m in 10 ms at vehicle speed 10 m/s, with silent surface records | 12 | 7 |
-| Gear changing with an engine-damage interface reporting no damage | 60 | 51 |
-| NOS held across pause at 100 ms and resume at 200 ms | 25 | 6 |
-
-A strength-0.5 console impact decays on the left for about 0.5 seconds;
-the adapter adds both motors and a BigRumble tail lasting about 1.2 seconds.
-Selected output pairs are:
-
-| Case / poll | Console left/right | Adapter left/right |
-| --- | --- | --- |
-| World impact / 2 | 32112 / 0 | 32767 / 31354 |
-| World impact / 51 | 0 / 0 | 10794 / 4224 |
-| Rear-end 20/40 m/s / 2 | 15728 / 0 | 49151 / 47031 |
-| Sliding world contact / 2 | 32112 / 0 | 0 / 13107 |
-| Compression only / 2 | 0 / 0 | 21588 / 0 |
-| Extra shift / 2 | 0 / 0 | 26214 / 26214 |
-
-The asymmetric rear-end case uses console strength 0.25 versus adapter 0.75.
-Zero measured delta stays silent on console but triggers the adapter's
-contact-speed fallback. Held NOS resumes its preserved console ramp; the
-adapter clears/retriggers it and inserts a silent poll.
-
-### DInput and regression checks
-
-An isolated x86 probe ran the retail force helpers with relocated addresses,
-mock COM devices and a fixed clock. It checked one/two-axis descriptors,
-five waveform selectors, parameter caching, stopped effects, type changes,
-suspension/resume and failed creation/update retries. Driver playback and
-hardware enumeration were not simulated.
-
-`tests/mw.cmd` checks adapter ramps, waves, impacts, suspension, output order,
-16-bit requests, pause and backend errors. These regressions preserve current
-behavior; the sequence comparison above identifies its fidelity gaps.
-Gameplay traces are still needed for physics/callback ordering, polling
-cadence, reconnect and physical output.
-
-## Telemetry and references
-
-The latest PC capture has 7,802 poll rows over 83.3887 seconds, 188 collision
-callbacks and 1,742 changed output requests. All XInput calls succeeded.
-Motor ranges are left 0..65,321 and right 0..65,535; triggers remain zero.
-NOS and shifting are nonzero in 470 and 352 poll rows. Shift potential stays
-in 0..2, so potential-3..5 ramps are not exercised.
-
-Telemetry `F` rows record changed output requests and backend status:
-XInput zero means accepted; WGI -1 means status unavailable. Collision
-`speedChange` is the selected measured delta or contact estimate;
-`measuredSpeedChange` identifies which. MW preserves 16-bit body levels.
+## References
 
 [Upstream issue 10](https://github.com/xan1242/NFS-XtendedInput/issues/10#issuecomment-1181213340)
 documents interface embedding and PC stubs. The
 [`rumble-test` branch](https://github.com/xan1242/NFS-XtendedInput/blob/rumble-test/dllmain.cpp)
 adds structures and interface registration, but its effects are stubs and
 UpdateNOS only prints diagnostics.
+
+PS2 instruction decoding follows the
+[PCSX2 opcode tables](https://github.com/PCSX2/pcsx2/blob/master/pcsx2/R5900OpcodeTables.cpp).

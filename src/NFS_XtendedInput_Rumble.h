@@ -15,7 +15,8 @@
 // The game asks InputDevice::GetInterfaces for IFeedback, then supplies native
 // feedback events and collisions (MW DoFFB @ 0x6EE490; PS @ 0x4D0CF0).
 // PC controller effect methods are stubs. This implementation drives XInput
-// motors using live surface waves, console envelopes and small MW fallbacks.
+// motors using recovered MW controller rules. ProStreet keeps its experimental
+// collision envelopes. Physical console parity remains unverified.
 //
 // The game never stops effects on focus loss and keeps a raw pointer to the interface, so:
 // - the object is embedded in InputDevice (same place as the game's own device, +0x2C) and is never deleted
@@ -24,6 +25,9 @@
 #pragma once
 
 #include "rumble/Settings.h"
+#ifdef GAME_MW
+#include "rumble/MostWanted.h"
+#endif
 #ifdef GAME_PROSTREET
 #include "rumble/ProStreet.h"
 #endif
@@ -59,13 +63,6 @@ void RumbleInstallPatches() {
   injector::WriteMemory<uintptr_t>(0x009FA07C, (uintptr_t)&RumblePSCollisionHook, true);
   injector::WriteMemory<uintptr_t>(0x009FA324, (uintptr_t)&RumblePSCollisionHook, true);
 #else
-  // DoFFB skips UpdateShifting for cars with IEngineDamage (jumps at 0x6EE7F0 / 0x6EE7FF to 0x6EE836), which includes
-  // player cars. Point both at the shifting code (0x6EE801); it only uses locals valid on both paths.
-  if (*(uint16_t*)0x006EE7F0 == 0x44EB && *(uint16_t*)0x006EE7FF == 0x35EB) {
-    injector::WriteMemory<uint8_t>(0x006EE7F1, 0x0F, true);
-    injector::WriteMemory<uint8_t>(0x006EE800, 0x00, true);
-  }
-
   // LocalPlayer::OnCollision skips ReportCollision when the save's hidden Rumble byte is 0 (`je` at 0x6F23EA).
   // The ini is the only switch, so drop that jump; the null-settings check before it stays.
   if (*(uint16_t*)0x006F23EA == 0x2B74) injector::WriteMemory<uint16_t>(0x006F23EA, 0x9090, true);
@@ -76,12 +73,6 @@ void RumbleInstallPatches() {
 #include "rumble/Surface.h"
 #include "rumble/Telemetry.h"
 
-// measured with the Telemetry log (~120 ticks/s): normal roads stay under ~3 m/s of compression speed,
-// mounting a kerb is a ~9 cm step in one tick (~11-12 m/s)
-const float RUMBLE_BUMP_MIN_VELOCITY  = 4.0f;   // m/s of suspension compression speed
-const float RUMBLE_BUMP_FULL_VELOCITY = 14.0f;
-const float RUMBLE_BUMP_MIN_SPEED     = 2.0f;   // m/s car speed
-const float RUMBLE_BUMP_MAX_SIM_STEP  = 0.1f;   // s; longer gaps (loading, restarts) aren't one physics step
 #ifdef GAME_PROSTREET
 // Trigger normalization estimates from PC records/logs, not recovered console curves.
 // PS uses ratios/angles, not MW's m/s:
@@ -100,10 +91,11 @@ const float RUMBLE_SPIN_FULL_SLIP     = 20.0f;
 const float RUMBLE_SLIDE_MIN_SKID     = 2.0f;   // m/s of lateral tyre speed
 const float RUMBLE_SLIDE_FULL_SKID    = 20.0f;
 #endif
-// measured collision speed change below this share of the contact-normal estimate means the body hadn't taken the hit yet
+#ifdef GAME_PROSTREET
+// Experimental contact-normal fallback threshold.
 const float RUMBLE_COLLISION_MIN_MEASURED = 0.25f;
+#endif
 
-// PS2 InputEffectState ramp: starts at amplitude, falls linearly to the floor over its time, then cuts to 0
 struct SimSurface;
 
 // Sim::Collision::Info, 0x80 bytes
@@ -148,15 +140,22 @@ class IFeedback {
   bool   mNOSEngaged;
   double mLastUpdateTime;
   unsigned int mStopGeneration;
+#ifdef GAME_PROSTREET
   RumblePulse  mPulseLeft;   // collisions
   RumblePulse  mPulseRight;  // collisions
+  RumblePulse  mLandingLeft, mLandingRight;
+#endif
   bool         mOnWGI;       // last output went through Windows.Gaming.Input (else XInput)
   RumbleMixer  mMixer;
+#ifdef GAME_MW
+  MWEffects mMW;
+#endif
 
-  // inputs for this tick, reset in BeginUpdate (the game only calls some of these when they apply)
+  // Callback values for telemetry; MW event edges live in mMW.
   bool           mShifting;
   bool           mEngineBlown;
   ShiftPotential mShiftPotential;
+#ifdef GAME_PROSTREET
   float          mScrapeSpeed;  // m/s, from sliding collision contacts
   // previous tick, for edge detection; survives pauses so a held NOS doesn't kick again on resume
   bool           mPrevNOSEngaged;
@@ -167,21 +166,17 @@ class IFeedback {
   RumbleRamp         mShiftTick;
   RumbleRamp         mEngineBlownRamp;
   float              mScrapeLevel;
+#endif
 
   // surface and tyres
   RumbleVehicleState mVehicle;
   bool               mHasVehicle;
-  bool               mHasPrevVehicle;
-  float              mPrevSimTime;  // sim clock at the previous suspension sample
-  float              mPrevCompression[RUMBLE_MAX_WHEELS];
-  bool               mPrevOnGround[RUMBLE_MAX_WHEELS];
-  RumblePulse        mBumpLeft;
+#ifdef GAME_PROSTREET
+  RumbleWave         mBlownTireWave;
+#endif
   RumbleWave         mRoadWave;
   RumbleWave         mSkidWave;
   RumbleWave         mSlipWave;
-  RumbleWave         mBlownTireWave;  // the spiked surface's road wave, an Impacts effect
-  RumblePulse        mLandingLeft;    // GROUND collisions, a Surface effect
-  RumblePulse        mLandingRight;
   float              mWheelSkid[RUMBLE_MAX_WHEELS];  // from DoFFB, |lateral m/s|
   int                mWheelArg;                      // wheel DoFFB is reporting
   // Optional trigger extension: proportional braking/throttle slip and car ramps.
@@ -206,23 +201,20 @@ class IFeedback {
     mLastTriggerRight = 0;
     mPaused         = true;
     mNOSEngaged     = false;
-    mLastUpdateTime = 0.0;
+    mLastUpdateTime = RumbleGetTime();
     mStopGeneration = RumbleStopGeneration;
     mOnWGI          = false;
-    memset(&mPulseLeft, 0, sizeof(RumblePulse));
-    memset(&mPulseRight, 0, sizeof(RumblePulse));
     memset(&mMixer, 0, sizeof(RumbleMixer));
-    mPrevNOSEngaged     = false;
-    mPrevShifting       = false;
-    mPrevEngineBlown    = false;
+#ifdef GAME_PROSTREET
+    mPulseLeft = mPulseRight = {};
+    mLandingLeft = mLandingRight = {};
+    mPrevNOSEngaged = mPrevShifting = mPrevEngineBlown = false;
+    mBlownTireWave = {};
+#endif
     mVehicle = {};
-    mPrevSimTime = 0;
-    memset(mPrevCompression, 0, sizeof(mPrevCompression));
-    memset(mPrevOnGround, 0, sizeof(mPrevOnGround));
     mRoadWave = {};
     mSkidWave = {};
     mSlipWave = {};
-    mBlownTireWave = {};
     ClearEffects();
   }
 
@@ -235,31 +227,33 @@ class IFeedback {
   }
 
   void ClearEffects() {
-    mPulseLeft.pPoints     = NULL;
-    mPulseRight.pPoints    = NULL;
-    mBumpLeft.pPoints      = NULL;
-    mLandingLeft.pPoints   = NULL;
-    mLandingRight.pPoints  = NULL;
+#ifdef GAME_MW
+    mMW = {};
+#endif
+#ifdef GAME_PROSTREET
+    mPulseLeft.pPoints = mPulseRight.pPoints = NULL;
+    mLandingLeft.pPoints = mLandingRight.pPoints = NULL;
+#endif
     mLockupLevel           = 0.0f;
     mSpinLevel             = 0.0f;
     mSlideLevel            = 0.0f;
     mHasVehicle            = false;
-    mHasPrevVehicle        = false;
     mWheelArg = 0;
     memset(mWheelSkid, 0, sizeof(mWheelSkid));
     mRoadWave.Begin();
     mSkidWave.Begin();
     mSlipWave.Begin();
+#ifdef GAME_PROSTREET
     mBlownTireWave.Begin();
     mNOSKick.Stop();
     mShiftTick.Stop();
     mEngineBlownRamp.Stop();
+    mScrapeSpeed = mScrapeLevel = 0;
+#endif
     mNOSEngaged         = false;
     mShifting           = false;
     mEngineBlown        = false;
     mShiftPotential     = SHIFT_POTENTIAL_NONE;
-    mScrapeSpeed        = 0.0f;
-    mScrapeLevel        = 0.0f;
   }
 
   void Send(int left, int right, int triggerLeft = 0, int triggerRight = 0) {
@@ -285,14 +279,17 @@ class IFeedback {
       mLastLeft = mLastRight = mLastTriggerLeft = mLastTriggerRight = -1;
     }
 
+#ifndef GAME_MW
     left  = RumbleRoundToPercent(left);
     right = RumbleRoundToPercent(right);
+#endif
 
     if (useWGI) {
       triggerLeft  = RumbleRoundToPercent(triggerLeft);
       triggerRight = RumbleRoundToPercent(triggerRight);
       if (left == mLastLeft && right == mLastRight && triggerLeft == mLastTriggerLeft && triggerRight == mLastTriggerRight) return;
       RumbleWGI::Send(left / 65535.0, right / 65535.0, triggerLeft / 65535.0, triggerRight / 65535.0);
+      RumbleTelemetryOutput(-1, left, right, triggerLeft, triggerRight, "WGI", -1);
       mLastLeft         = left;
       mLastRight        = right;
       mLastTriggerLeft  = triggerLeft;
@@ -312,7 +309,9 @@ class IFeedback {
     if (left == mLastLeft && right == mLastRight) return;
 
     XINPUT_VIBRATION vib = {(WORD)left, (WORD)right};
-    if (XInputSetState(mPad, &vib) == ERROR_SUCCESS) {
+    DWORD result = XInputSetState(mPad, &vib);
+    RumbleTelemetryOutput(mPad, left, right, 0, 0, "XInput", (long)result);
+    if (result == ERROR_SUCCESS) {
       mLastLeft  = left;
       mLastRight = right;
     } else {
@@ -326,7 +325,8 @@ class IFeedback {
     Send(0, 0);
   }
 
-  // called every frame from PollDevice: stop the motors if the game stopped ticking us without pausing
+#ifdef GAME_PROSTREET
+  // Stop if the producer stops updating without sending PauseEffects.
   void Watchdog() {
     if (mPaused || (mLastLeft <= 0 && mLastRight <= 0 && mLastTriggerLeft <= 0 && mLastTriggerRight <= 0)) return;
     if (!bRumbleAppActive || RumbleGetTime() - mLastUpdateTime > 0.25) {
@@ -334,71 +334,67 @@ class IFeedback {
       Stop();
     }
   }
+#endif
 
   // never deleted: it's embedded in InputDevice
   virtual void* ScalarDtor(unsigned int /*flags*/) { return this; }
 
+#ifdef GAME_MW
+  bool HasOutput() {
+    int pad = bXInputOmniMode ? RumbleLastActivePad : mDeviceIndex;
+    return RumbleWGI::ShouldUse() || (pad >= 0 && pad < MAX_CONTROLLERS && g_Controllers[pad].bConnected);
+  }
+
+  void PushMW(int leftTrigger = 0, int rightTrigger = 0) {
+    if (mPaused || !bRumbleAppActive || !bRumbleEnabled || !HasOutput()) Send(0, 0);
+    else Send(mMW.outputLeft, mMW.outputRight, leftTrigger, rightTrigger);
+  }
+
+  virtual void PauseEffects() {
+    mPaused = true;
+    PushMW();
+  }
+  virtual void ResumeEffects() {
+    mPaused = false;
+    PushMW();
+  }
+  virtual void ResetEffects() {
+    if (!HasOutput()) return;
+    mPaused = true;
+    mMW.collision = {};
+    mMW.outputLeft = mMW.outputRight = 0;
+    PushMW();
+  }
+#else
   virtual void PauseEffects() {
     mPaused = true;
     Stop();
   }
-
   virtual void ResumeEffects() {
     if (mPaused) {
-      mPaused         = false;
+      mPaused = false;
       mLastUpdateTime = RumbleGetTime();
     }
   }
-
   virtual void ResetEffects() { PauseEffects(); }
+#endif
 
   virtual void BeginUpdate() {
+#ifdef GAME_PROSTREET
     mNOSEngaged     = false;
     mShifting       = false;
     mEngineBlown    = false;
     mShiftPotential = SHIFT_POTENTIAL_NONE;
+#endif
     mWheelArg       = 0;
     for (int i = 0; i < RUMBLE_MAX_WHEELS; i++) mWheelSkid[i] = 0.0f;
     mRoadWave.Begin();
     mSkidWave.Begin();
     mSlipWave.Begin();
-    mBlownTireWave.Begin();
-    RumbleTelemetry.nWheel = 0;
-  }
-
-  // kerbs and bumps: a sharp rise in a grounded wheel's compression knocks once per wheel (landings are collisions).
-  // Measured over the sim clock, so frame rate doesn't matter.
-  void UpdateBumps() {
 #ifdef GAME_PROSTREET
-    // Ground impacts still use native collision events. Compression-derived
-    // kerb impulses await a verified PS suspension accessor and sim clock.
-    return;
-#else
-    if (!mHasVehicle) {
-      mHasPrevVehicle = false;
-      return;
-    }
-    float simTime = RumbleGetSimTime();
-    if (mHasPrevVehicle && simTime == mPrevSimTime) return;  // the physics hasn't stepped since the last sample
-    float simDt = simTime - mPrevSimTime;
-    if (mHasPrevVehicle && simDt > 0.0f && simDt < RUMBLE_BUMP_MAX_SIM_STEP && mVehicle.fSpeed > RUMBLE_BUMP_MIN_SPEED) {
-      for (int i = 0; i < mVehicle.nWheels; i++) {
-        if (!mVehicle.bOnGround[i] || !mPrevOnGround[i]) continue;
-        float velocity = (mVehicle.fCompression[i] - mPrevCompression[i]) / simDt;
-        if (!(velocity >= RUMBLE_BUMP_MIN_VELOCITY)) continue;
-        float strength = Clamp01((velocity - RUMBLE_BUMP_MIN_VELOCITY) / (RUMBLE_BUMP_FULL_VELOCITY - RUMBLE_BUMP_MIN_VELOCITY));
-        // Compression thresholds are measured MW estimates; shape the impulse
-        // with the console's single-road-bump envelope.
-        mBumpLeft.Start(SingleRoadBumpPoints, _countof(SingleRoadBumpPoints), strength);
-      }
-    }
-    for (int i = 0; i < mVehicle.nWheels; i++) {
-      mPrevCompression[i] = mVehicle.fCompression[i];
-      mPrevOnGround[i]    = mVehicle.bOnGround[i];
-    }
-    mPrevSimTime    = simTime;
-    mHasPrevVehicle = true;
+    mBlownTireWave.Begin();
 #endif
+    RumbleTelemetry.nWheel = 0;
   }
 
   // Native tyre waves for body rumble; signed slip estimates for optional triggers.
@@ -460,14 +456,20 @@ class IFeedback {
     float car = fRumbleCategoryScale[kRumbleCar];
     leftTrigger = mLockupLevel * brake * tyres;
     rightTrigger = (std::max)(mSpinLevel, mSlideLevel) * gas * tyres;
+#ifdef GAME_MW
+    float nos = mMW.nos.remaining > 0 ? mMW.nos.floor + (mMW.nos.amplitude-mMW.nos.floor)*mMW.nos.remaining/mMW.nos.duration : 0;
+    rightTrigger = (std::max)(rightTrigger, nos * gas * car);
+    rightTrigger = (std::max)(rightTrigger, (mMW.shiftLeft.remaining > 0 ? 0.4f : 0) * car);
+#else
     rightTrigger = (std::max)(rightTrigger, mNOSKick.GetValue() * gas * car);
     rightTrigger = (std::max)(rightTrigger, mShiftTick.GetValue() * car);
+#endif
     leftTrigger *= fRumbleTriggerIntensity;
     rightTrigger *= fRumbleTriggerIntensity;
   }
 
-  // Console baseline recorded by the MW port; also the temporary PS fallback.
-  // Exact console scheduling remains unverified. No extra shift-quality cues.
+#ifdef GAME_PROSTREET
+  // Temporary ProStreet fallback.
   void UpdateCarEffects() {
     if (mNOSEngaged && !mPrevNOSEngaged) mNOSKick.Start(1.0f, 0.5f, 2.0f);
     if (!mNOSEngaged) mNOSKick.Stop();
@@ -479,32 +481,63 @@ class IFeedback {
     mPrevEngineBlown = mEngineBlown;
     mPrevShifting = mShifting;
   }
+#endif
 
-  virtual void EndUpdate() {
+#ifdef GAME_MW
+  virtual void EndUpdate() { mMW.feedbackTime = RumbleGetTime(); }
+  void PollEffects() { MixFrame(); }
+#else
+  virtual void EndUpdate() { MixFrame(); }
+#endif
+  void MixFrame() {
     if (!bRumbleEnabled) return;  // GetInterfaces hides the object when disabled
 
     double now = RumbleGetTime();
-    float  dt  = (float)(now - mLastUpdateTime);
-    if (dt < 0.0f) dt = 0.0f;
-    if (dt > 0.1f) dt = 0.1f;
+    float dt = (float)(now - mLastUpdateTime);
     mLastUpdateTime = now;
-
+#ifdef GAME_MW
+    // Keep the poll clock moving while disabled, without consuming effect time.
+    if (mPaused || !bRumbleAppActive || now - mMW.feedbackTime > 0.25) {
+      Send(0, 0);
+      return;
+    }
+    // Console Push precedes Run; a nonpositive delta does not sample state.
+    PushMW(mLastTriggerLeft, mLastTriggerRight);
+    if (!(dt > 0)) return;
+    mHasVehicle = (bRumbleTelemetry || mOnWGI) && RumbleReadVehicle(mVehicle);
+    mMixer.Begin();
+    mMW.Mix(dt, mMixer);
+    float roadLeft, roadRight;
+    mRoadWave.Sample(dt, roadLeft, roadRight);
+    mMixer.Add(kRumbleSurface, roadLeft, roadRight);
+    MixTyres(dt);
+    int left, right;
+    mMixer.Resolve(left, right);
+    if (bRumbleTelemetry)
+      RumbleTelemetryWriteTick(now, mHasVehicle ? &mVehicle : NULL, mMW.nosOn, mMW.shifting, (ShiftPotential)mMW.potential);
+    // Trigger output is an optional extension; body output remains one poll late.
+    if (mOnWGI) {
+      float leftTrigger = 0, rightTrigger = 0;
+      MixTriggers(leftTrigger, rightTrigger);
+      PushMW(RumbleMixer::ToMotor(leftTrigger, 1), RumbleMixer::ToMotor(rightTrigger, 1));
+    }
+    mMW.outputLeft = left;
+    mMW.outputRight = right;
+#else
+    if (dt < 0) dt = 0;
+    if (dt > 0.1f) dt = 0.1f;
     mPulseLeft.Advance(dt);
     mPulseRight.Advance(dt);
+    mLandingLeft.Advance(dt);
+    mLandingRight.Advance(dt);
     mNOSKick.Advance(dt);
     mShiftTick.Advance(dt);
     mEngineBlownRamp.Advance(dt);
-    mBumpLeft.Advance(dt);
-    mLandingLeft.Advance(dt);
-    mLandingRight.Advance(dt);
     mHasVehicle = !mPaused && RumbleReadVehicle(mVehicle);
-#ifdef GAME_PROSTREET
     // PS skips UpdateShifting when IEngineDamage is present. Query the native
-    // transmission instead of patching its DoFFB control flow as MW does.
+    // transmission for its experimental shift extension.
     if (mHasVehicle) mShifting = RumblePSIsShifting();
-#endif
     UpdateCarEffects();
-    UpdateBumps();
 
     // Contact-speed fallback until a native scrape effect is verified.
     mScrapeLevel = RumbleRampValue(mScrapeSpeed, 1.0f, 21.0f);
@@ -520,11 +553,9 @@ class IFeedback {
     mMixer.Begin();
     mMixer.Add(kRumbleImpacts, mPulseLeft.GetValue(), mPulseRight.GetValue());
     mMixer.Add(kRumbleImpacts, 0, mScrapeLevel);
-    float blownLeft, blownRight;  // spiked / blown tyre wobble
+    float blownLeft, blownRight;
     mBlownTireWave.Sample(dt, blownLeft, blownRight);
     mMixer.Add(kRumbleImpacts, blownLeft, blownRight);
-
-    mMixer.Add(kRumbleSurface, mBumpLeft.GetValue(), 0);
     mMixer.Add(kRumbleSurface, mLandingLeft.GetValue(), mLandingRight.GetValue());
     float roadLeft, roadRight;
     mRoadWave.Sample(dt, roadLeft, roadRight);
@@ -535,12 +566,12 @@ class IFeedback {
     mMixer.Add(kRumbleCar, mNOSKick.GetValue(), 0);
     mMixer.Add(kRumbleCar, mShiftTick.GetValue(), 0);
     mMixer.Add(kRumbleCar, mEngineBlownRamp.GetValue(), mEngineBlownRamp.GetValue());
-
     int left, right;
     mMixer.Resolve(left, right);
     float leftTrigger = 0.0f, rightTrigger = 0.0f;
     if (mOnWGI) MixTriggers(leftTrigger, rightTrigger);
     Send(left, right, RumbleMixer::ToMotor(leftTrigger, 1.0f), RumbleMixer::ToMotor(rightTrigger, 1.0f));
+#endif
   }
 
   // MW reports Slip, Skid, Road; PS reports Road, Slip, Skid with different arguments.
@@ -554,7 +585,7 @@ class IFeedback {
   }
 #else
   virtual void UpdateRoadNoise(bool /*front*/, const SimSurface& surface, float speed) {
-    (RumbleIsBlownTireSurface(&surface) ? mBlownTireWave : mRoadWave).Add(&surface, ATTRIB_KEY_FFB_ROLL, speed);
+    if (!mPaused) mRoadWave.Add(&surface, ATTRIB_KEY_FFB_ROLL, speed);
     mWheelArg++;
     if (bRumbleTelemetry && RumbleTelemetry.nWheel < RUMBLE_MAX_WHEELS) RumbleTelemetry.iSurface[RumbleTelemetry.nWheel] = RumbleTelemetrySurfaceId(&surface);
     RumbleTelemetry.nWheel++;
@@ -569,13 +600,21 @@ class IFeedback {
 
   void AddSlip(const SimSurface& surface, float slip) {
     if (!_finite(slip)) return;
+#ifdef GAME_MW
+    if (mPaused) return;
+    mSlipWave.Add(&surface, ATTRIB_KEY_FFB_SLIP, slip);
+#else
     mSlipWave.Add(&surface, ATTRIB_KEY_FFB_SLIP, fabsf(slip));
+#endif
     if (mWheelArg >= 0 && mWheelArg < RUMBLE_MAX_WHEELS) RumbleTelemetry.fSlip[mWheelArg] = slip;
   }
 
   void AddSkid(bool front, const SimSurface& surface, float skid) {
     if (!_finite(skid)) return;
-    mSkidWave.Add(&surface, ATTRIB_KEY_FFB_SKID, front ? skid * 0.25f : skid);  // PS2 damps the front wheels
+#ifdef GAME_MW
+    if (mPaused) return;
+#endif
+    mSkidWave.Add(&surface, ATTRIB_KEY_FFB_SKID, front ? skid * 0.25f : skid);  // Xbox MW damps the front wheels
     if (mWheelArg >= 0 && mWheelArg < RUMBLE_MAX_WHEELS) {
       mWheelSkid[mWheelArg] = skid;
       RumbleTelemetry.fSkid[mWheelArg] = skid;
@@ -585,10 +624,30 @@ class IFeedback {
     RumbleTelemetry.fPowerband = powerband;
     RumbleTelemetry.fThrottle  = throttle;
   }
-  virtual void UpdateShiftPotential(ShiftPotential potential) { mShiftPotential = potential; }
-  virtual void UpdateNOS(bool engaged, float /*nosLevel*/) { mNOSEngaged = engaged; }
-  virtual void UpdateEngineBlown(bool blown) { mEngineBlown = blown; }
-  virtual void UpdateShifting(bool shifting) { mShifting = shifting; }
+  virtual void UpdateShiftPotential(ShiftPotential potential) {
+    mShiftPotential = potential;
+#ifdef GAME_MW
+    if (!mPaused) mMW.Potential((int)potential);
+#endif
+  }
+  virtual void UpdateNOS(bool engaged, float /*nosLevel*/) {
+    mNOSEngaged = engaged;
+#ifdef GAME_MW
+    if (!mPaused) mMW.NOS(engaged);
+#endif
+  }
+  virtual void UpdateEngineBlown(bool blown) {
+    mEngineBlown = blown;
+#ifdef GAME_MW
+    if (!mPaused) mMW.Engine(blown);
+#endif
+  }
+  virtual void UpdateShifting(bool shifting) {
+    mShifting = shifting;
+#ifdef GAME_MW
+    if (!mPaused) mMW.Shift(shifting && bRumbleGearShift);
+#endif
+  }
 
 #ifdef GAME_PROSTREET
   virtual void ReservedPS14(uintptr_t) {}
@@ -612,8 +671,50 @@ class IFeedback {
   static float Length(const float* v) { return sqrtf(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]); }
   static float Clamp01(float v) { return v < 0.0f ? 0.0f : (v > 1.0f ? 1.0f : v); }
 
-  // the player's speed change across the hit, |body velocity - pre-impact velocity| like the PS2; falls back to the
-  // closing speed along the normal when the body can't be read or hasn't taken the hit yet. -1 if invalid.
+#ifdef GAME_MW
+  virtual void ReportCollision(const COLLISION_INFO& cinfo, bool iamA) {
+    if (!bRumbleEnabled || mPaused) return;
+    float ownVelocity[3], otherVelocity[3];
+    void* own = RumbleMWCollisionBody(iamA ? cinfo.objA : cinfo.objB, ownVelocity);
+    if (!own) return;
+    void* other = RumbleMWCollisionBody(iamA ? cinfo.objB : cinfo.objA, otherVelocity);
+    const float* before = iamA ? cinfo.objAVel : cinfo.objBVel;
+    float delta[3] = {ownVelocity[0]-before[0], ownVelocity[1]-before[1], ownVelocity[2]-before[2]};
+    float dv = Length(delta), strength = 0;
+    switch (cinfo.flags & 7) {
+      case 2: strength = Clamp01(dv / 30); break;
+      case 3: strength = Clamp01((dv - 1) / 3); break;
+      case 1:
+        if (dv >= 5) strength = Clamp01((dv - 5) / 20);
+        else {
+          const float* otherBefore = iamA ? cinfo.objBVel : cinfo.objAVel;
+          float ownSpeed = Length(before), otherSpeed = Length(otherBefore);
+          bool rearEnd = false;
+          if (other && RumbleMWCollisionVehicle(other) && ownSpeed > 0 && otherSpeed > 0) {
+            float dot = (before[0]*otherBefore[0] + before[1]*otherBefore[1] + before[2]*otherBefore[2]) / (ownSpeed*otherSpeed);
+            rearEnd = dot > 0.1f;
+          }
+          // Retail code reads A's stored speed twice, including when we are B.
+          float rearDelta = Length(cinfo.objAVel) * 0.5f;
+          if (rearEnd && rearDelta > 5) strength = Clamp01((rearDelta - 5) / 20);
+          else if (other) {
+            float otherDelta[3] = {otherVelocity[0]-before[0], otherVelocity[1]-before[1], otherVelocity[2]-before[2]};
+            float liveSpeed = Length(ownVelocity);
+            if (liveSpeed > 2 && Length(otherDelta) > 2) strength = Clamp01((liveSpeed - 20) / 30);
+          }
+        }
+        break;
+    }
+    if (bRumbleTelemetry) {
+      const float* n = cinfo.normal;
+      const float* cv = cinfo.closingVel;
+      RumbleTelemetryPrintf("C,%.4f,%d,0x%02X,%.2f,%.2f,%.2f,%.2f,%.2f,%d\n", RumbleGetTime() - RumbleTelemetry.fStartTime,
+        cinfo.flags & 7, cinfo.flags & 0xFF, Length(cv), fabsf(cv[0]*n[0] + cv[1]*n[1] + cv[2]*n[2]), Length(cinfo.slidingVel), dv, strength, 1);
+    }
+    mMW.Collision(strength);
+  }
+#else
+  // Experimental ProStreet contact-normal fallback. -1 if invalid.
   static float CollisionSpeedChange(const COLLISION_INFO& cinfo, bool iamA, bool& measured) {
     const float* n        = cinfo.normal;
     const float* cv       = cinfo.closingVel;
@@ -635,7 +736,7 @@ class IFeedback {
     return dv == dv ? dv : -1.0f;  // NaN
   }
 
-  // PS2 GameDevice::ReportCollision strength, from the speed change dv (m/s)
+  // ProStreet strength estimate, based on the MW contact thresholds.
   static float CollisionMagnitude(const COLLISION_INFO& cinfo, bool iamA, float dv) {
     if (dv < 0.0f) return 0.0f;
 
@@ -666,25 +767,19 @@ class IFeedback {
     }
   }
 
-#ifdef GAME_PROSTREET
   virtual void ReportCollision(const COLLISION_INFO& cinfo, bool iamA, RumblePSVector velocityChange) {
-#else
-  virtual void ReportCollision(const COLLISION_INFO& cinfo, bool iamA) {
-#endif
     if (!bRumbleEnabled || mPaused) return;
 
-    bool  sliding  = (cinfo.flags & 0x80) != 0;
+    bool sliding = (cinfo.flags & 0x80) != 0;
     bool  measured = false;
     float dv       = sliding ? 0.0f : CollisionSpeedChange(cinfo, iamA, measured);
-#ifdef GAME_PROSTREET
     // PS supplies its own post-contact delta. Prefer it to the shared reader
-    // when it has taken the hit; keep the MW contact-normal fallback otherwise.
+    // above the contact-normal threshold.
     if (!sliding && _finite(velocityChange.x) && _finite(velocityChange.y) && _finite(velocityChange.z)) {
       float change = Length(&velocityChange.x);
       float estimate = fabsf(cinfo.closingVel[0]*cinfo.normal[0] + cinfo.closingVel[1]*cinfo.normal[1] + cinfo.closingVel[2]*cinfo.normal[2]);
       if (change > 0.0f && change >= estimate * RUMBLE_COLLISION_MIN_MEASURED) { dv = change; measured = true; }
     }
-#endif
     float strength = sliding ? 0.0f : CollisionMagnitude(cinfo, iamA, dv);
     if (bRumbleTelemetry) {
       const float* n  = cinfo.normal;
@@ -704,8 +799,8 @@ class IFeedback {
 
     // landings and bottoming out are a Surface effect, everything else an Impact
     bool         ground = (cinfo.flags & 7) == 3;
-    RumblePulse& light  = ground ? mLandingRight : mPulseRight;
-    RumblePulse& heavy  = ground ? mLandingLeft : mPulseLeft;
+    RumblePulse& light = ground ? mLandingRight : mPulseRight;
+    RumblePulse& heavy = ground ? mLandingLeft : mPulseLeft;
     light.Start(SmallRumblePoints, _countof(SmallRumblePoints), strength);
     // the heavy motor only kicks in for proper hits
     if (strength > 0.4f) heavy.Start(BigRumblePoints, _countof(BigRumblePoints), strength);
@@ -716,6 +811,7 @@ class IFeedback {
     OutputDebugStringA(buf);
 #endif
   }
+#endif
 #ifdef GAME_PROSTREET
   virtual int GetControllerType() { return 5; } // native PC default; no force-feedback wheel
 #endif

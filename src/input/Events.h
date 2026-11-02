@@ -345,7 +345,9 @@ class InputDevice {
 #endif
   }
   virtual void PollDevice() {
-#if defined(GAME_MW) || defined(GAME_PROSTREET)
+#ifdef GAME_MW
+    mFFB.PollEffects();
+#elif defined(GAME_PROSTREET)
     mFFB.Watchdog();
 #endif
     if (!bGlobalDoPolling) return;
@@ -520,7 +522,9 @@ class InputDevice {
     // printf("Called InputDevice::StartVibration\n");
   }
   virtual void StopVibration() {
-#if defined(GAME_MW) || defined(GAME_PROSTREET)
+#ifdef GAME_MW
+    if (bRumbleEnabled) mFFB.Send(0, 0);
+#elif defined(GAME_PROSTREET)
     if (bRumbleEnabled) mFFB.PauseEffects();
 #endif
     // this seems to be only called when the controller is unplugged...

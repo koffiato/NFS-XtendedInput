@@ -153,8 +153,22 @@ bool RumblePSIsShifting() {
 }
 #endif
 
-// simulation clock (Sim::GetTime), seconds; advances only when the physics steps
 #ifdef GAME_MW
-float RumbleGetSimTime() { return *(const float*)SIM_TIME_ADDR; }
+// Resolve the contact participants, including traffic/props and participant B.
+// ISimable::GetLinearVelocity fills a vector through vtable slot 26 on PC.
+void*(__cdecl* RumbleMWResolveSimable)(void*) = (void*(__cdecl*)(void*))0x0041AD40;
+void* RumbleMWCollisionBody(void* handle, float* velocity) {
+  __try {
+    void* simable = RumbleMWResolveSimable(handle);
+    if (!simable) return NULL;
+    RumbleVCall<void>(simable, 0x68, velocity);
+    for (int i = 0; i < 3; ++i) if (!_finite(velocity[i])) return NULL;
+    return simable;
+  } __except (EXCEPTION_EXECUTE_HANDLER) { return NULL; }
+}
+bool RumbleMWCollisionVehicle(void* simable) {
+  __try { return RumbleFindInterface(simable, IVEHICLE_IHANDLE_ADDR) != NULL; }
+  __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
+}
 #endif
 

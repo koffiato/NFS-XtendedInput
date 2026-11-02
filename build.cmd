@@ -20,12 +20,9 @@ if not "%~2"=="" (
 pushd "%~dp0"
 set "OUTPUT=build\%~1"
 if not exist "%OUTPUT%" mkdir "%OUTPUT%"
-set "CONFIG_RESOURCE="
-for %%G in (UG UG2) do if /I "%~1"=="%%G" (
-  rc /nologo /d%GAME% /fo"%OUTPUT%\DefaultConfig.res" src\DefaultConfig.rc
-  if errorlevel 1 (popd & exit /b 1)
-  set "CONFIG_RESOURCE=%OUTPUT%\DefaultConfig.res"
-)
+rc /nologo /d%GAME% /fo"%OUTPUT%\DefaultConfig.res" src\DefaultConfig.rc
+if errorlevel 1 (popd & exit /b 1)
+set "CONFIG_RESOURCE=%OUTPUT%\DefaultConfig.res"
 cl /nologo /LD /O2 /MD /EHsc /std:c++14 /W3 /DWIN32 /DNDEBUG /D_WINDOWS /D_USRDLL /D_CRT_SECURE_NO_WARNINGS /D%GAME% /Isrc\inc /Isrc\_vs src\Unified.cpp %CONFIG_RESOURCE% /Fo"%OUTPUT%\Unified.obj" /link /IMPLIB:"%OUTPUT%\%NAME%.lib" /OUT:"%OUTPUT%\%NAME%.asi" /MACHINE:X86 /SUBSYSTEM:WINDOWS user32.lib winmm.lib
 set "RESULT=%errorlevel%"
 popd

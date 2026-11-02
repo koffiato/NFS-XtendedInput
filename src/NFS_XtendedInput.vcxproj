@@ -400,6 +400,10 @@
       <Message>Making final build package...</Message>
       <Command>@call "$(SolutionDir)../data/post-build/HasTPK-MW.bat" Debug MW</Command>
     </PostBuildEvent>
+    <ResourceCompile>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_WINDOWS;_USRDLL;_CRT_SECURE_NO_WARNINGS;GAME_MW;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(ProjectDir)..;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug-MW-Win7|Win32'">
     <ClCompile>
@@ -418,6 +422,10 @@
       <Message>Making final build package...</Message>
       <Command>@call "$(SolutionDir)../data/post-build/HasTPK-MW-Win7.bat" Debug MW</Command>
     </PostBuildEvent>
+    <ResourceCompile>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_WINDOWS;_USRDLL;_CRT_SECURE_NO_WARNINGS;GAME_MW;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(ProjectDir)..;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug-Carbon|Win32'">
     <ClCompile>
@@ -437,6 +445,10 @@
       <Message>Making final build package...</Message>
       <Command>@call "$(SolutionDir)../data/post-build/HasTPK.bat" Debug Carbon</Command>
     </PostBuildEvent>
+    <ResourceCompile>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_WINDOWS;_USRDLL;_CRT_SECURE_NO_WARNINGS;GAME_CARBON;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(ProjectDir)..;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug-Carbon-Win7|Win32'">
     <ClCompile>
@@ -455,6 +467,10 @@
       <Message>Making final build package...</Message>
       <Command>@call "$(SolutionDir)../data/post-build/HasTPK-Win7.bat" Debug Carbon</Command>
     </PostBuildEvent>
+    <ResourceCompile>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_WINDOWS;_USRDLL;_CRT_SECURE_NO_WARNINGS;GAME_CARBON;XINPUT_OLD;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(ProjectDir)..;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug-ProStreet|Win32'">
     <ClCompile>
@@ -473,6 +489,10 @@
       <Message>Making final build package...</Message>
       <Command>@call "$(SolutionDir)../data/post-build/HasTPK.bat" Debug ProStreet</Command>
     </PostBuildEvent>
+    <ResourceCompile>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_WINDOWS;_USRDLL;_CRT_SECURE_NO_WARNINGS;GAME_PROSTREET;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(ProjectDir)..;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug-ProStreet-Win7|Win32'">
     <ClCompile>
@@ -491,6 +511,10 @@
       <Message>Making final build package...</Message>
       <Command>@call "$(SolutionDir)../data/post-build/HasTPK-Win7.bat" Debug ProStreet</Command>
     </PostBuildEvent>
+    <ResourceCompile>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_WINDOWS;_USRDLL;_CRT_SECURE_NO_WARNINGS;GAME_PROSTREET;XINPUT_OLD;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(ProjectDir)..;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug-UC|Win32'">
     <ClCompile>
@@ -510,6 +534,10 @@
       <Message>Making final build package...</Message>
       <Command>@call "$(SolutionDir)../data/post-build/NoTPK.bat" Debug UC</Command>
     </PostBuildEvent>
+    <ResourceCompile>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_WINDOWS;_USRDLL;_CRT_SECURE_NO_WARNINGS;GAME_UC;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(ProjectDir)..;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug-UC-Win7|Win32'">
     <ClCompile>
@@ -527,6 +555,10 @@
       <Message>Making final build package...</Message>
       <Command>@call "$(SolutionDir)../data/post-build/NoTPK-Win7.bat" Debug UC</Command>
     </PostBuildEvent>
+    <ResourceCompile>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_WINDOWS;_USRDLL;_CRT_SECURE_NO_WARNINGS;GAME_UC;XINPUT_OLD;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(ProjectDir)..;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug-World|Win32'">
     <ClCompile>
@@ -546,6 +578,10 @@
       <Message>Making final build package...</Message>
       <Command>@call "$(SolutionDir)../data/post-build/NoTPK.bat" Debug World</Command>
     </PostBuildEvent>
+    <ResourceCompile>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_WINDOWS;_USRDLL;_CRT_SECURE_NO_WARNINGS;GAME_WORLD;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(ProjectDir)..;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug-World-Win7|Win32'">
     <ClCompile>
@@ -563,6 +599,10 @@
       <Message>Making final build package...</Message>
       <Command>@call "$(SolutionDir)../data/post-build/NoTPK-Win7.bat" Debug World</Command>
     </PostBuildEvent>
+    <ResourceCompile>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_WINDOWS;_USRDLL;_CRT_SECURE_NO_WARNINGS;GAME_WORLD;XINPUT_OLD;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(ProjectDir)..;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release-MW|Win32'">
     <ClCompile>
@@ -587,6 +627,10 @@
       <Message>Making final build package...</Message>
       <Command>@call "$(SolutionDir)../data/post-build/HasTPK-MW.bat" Release MW</Command>
     </PostBuildEvent>
+    <ResourceCompile>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_WINDOWS;_USRDLL;_CRT_SECURE_NO_WARNINGS;GAME_MW;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(ProjectDir)..;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release-MW-Win7|Win32'">
     <ClCompile>
@@ -610,6 +654,10 @@
       <Message>Making final build package...</Message>
       <Command>@call "$(SolutionDir)../data/post-build/HasTPK-MW-Win7.bat" Release MW</Command>
     </PostBuildEvent>
+    <ResourceCompile>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_WINDOWS;_USRDLL;_CRT_SECURE_NO_WARNINGS;GAME_MW;XINPUT_OLD;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(ProjectDir)..;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release-Carbon|Win32'">
     <ClCompile>
@@ -634,6 +682,10 @@
       <Message>Making final build package...</Message>
       <Command>@call "$(SolutionDir)../data/post-build/HasTPK.bat" Release Carbon</Command>
     </PostBuildEvent>
+    <ResourceCompile>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_WINDOWS;_USRDLL;_CRT_SECURE_NO_WARNINGS;GAME_CARBON;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(ProjectDir)..;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release-Carbon-Win7|Win32'">
     <ClCompile>
@@ -657,6 +709,10 @@
       <Message>Making final build package...</Message>
       <Command>@call "$(SolutionDir)../data/post-build/HasTPK-Win7.bat" Release Carbon</Command>
     </PostBuildEvent>
+    <ResourceCompile>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_WINDOWS;_USRDLL;_CRT_SECURE_NO_WARNINGS;GAME_CARBON;XINPUT_OLD;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(ProjectDir)..;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release-ProStreet|Win32'">
     <ClCompile>
@@ -681,6 +737,10 @@
       <Message>Making final build package...</Message>
       <Command>@call "$(SolutionDir)../data/post-build/HasTPK.bat" Release ProStreet</Command>
     </PostBuildEvent>
+    <ResourceCompile>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_WINDOWS;_USRDLL;_CRT_SECURE_NO_WARNINGS;GAME_PROSTREET;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(ProjectDir)..;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release-ProStreet-Win7|Win32'">
     <ClCompile>
@@ -704,6 +764,10 @@
       <Message>Making final build package...</Message>
       <Command>@call "$(SolutionDir)../data/post-build/HasTPK-Win7.bat" Release ProStreet</Command>
     </PostBuildEvent>
+    <ResourceCompile>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_WINDOWS;_USRDLL;_CRT_SECURE_NO_WARNINGS;GAME_PROSTREET;XINPUT_OLD;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(ProjectDir)..;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release-UC|Win32'">
     <ClCompile>
@@ -728,6 +792,10 @@
       <Message>Making final build package...</Message>
       <Command>@call "$(SolutionDir)../data/post-build/NoTPK.bat" Release UC</Command>
     </PostBuildEvent>
+    <ResourceCompile>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_WINDOWS;_USRDLL;_CRT_SECURE_NO_WARNINGS;GAME_UC;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(ProjectDir)..;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release-UC-Win7|Win32'">
     <ClCompile>
@@ -750,6 +818,10 @@
       <Message>Making final build package...</Message>
       <Command>@call "$(SolutionDir)../data/post-build/NoTPK-Win7.bat" Release UC</Command>
     </PostBuildEvent>
+    <ResourceCompile>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_WINDOWS;_USRDLL;_CRT_SECURE_NO_WARNINGS;GAME_UC;XINPUT_OLD;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(ProjectDir)..;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release-World|Win32'">
     <ClCompile>
@@ -774,6 +846,10 @@
       <Message>Making final build package...</Message>
       <Command>@call "$(SolutionDir)../data/post-build/NoTPK.bat" Release World</Command>
     </PostBuildEvent>
+    <ResourceCompile>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_WINDOWS;_USRDLL;_CRT_SECURE_NO_WARNINGS;GAME_WORLD;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(ProjectDir)..;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release-World-Win7|Win32'">
     <ClCompile>
@@ -796,6 +872,10 @@
       <Message>Making final build package...</Message>
       <Command>@call "$(SolutionDir)../data/post-build/NoTPK-Win7.bat" Release World</Command>
     </PostBuildEvent>
+    <ResourceCompile>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_WINDOWS;_USRDLL;_CRT_SECURE_NO_WARNINGS;GAME_WORLD;XINPUT_OLD;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(ProjectDir)..;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="Definitions.h" />
@@ -833,6 +913,7 @@
     <ClInclude Include="rumble\Log.h" />
     <ClInclude Include="rumble\Vehicle.h" />
     <ClInclude Include="rumble\Surface.h" />
+    <ClInclude Include="rumble\MostWanted.h" />
     <ClInclude Include="rumble\Telemetry.h" />
     <ClInclude Include="rumble\ProStreet.h" />
     <ClInclude Include="rumble\Underground.h" />
@@ -890,6 +971,9 @@
     <Text Include="..\data\Config-ProStreet\EventReference.txt" />
     <Text Include="..\data\Config-UC\EventReference.txt" />
     <Text Include="..\data\Config-World\EventReference.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="DefaultConfig.rc" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

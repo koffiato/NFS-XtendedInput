@@ -32,7 +32,7 @@ float fRumbleCategoryScale[kRumbleCategoryCount] = {1.0f, 1.0f, 1.0f, 1.0f};
 
 bool bRumbleGearShift = true;
 
-// envelopes from the console Rumble.cpp (time in seconds, value 0-255)
+// Legacy envelopes used by ProStreet's experimental path (seconds, 0-255).
 struct RumbleEnvelopePoint {
   float fTime;
   float fValue;
@@ -40,7 +40,6 @@ struct RumbleEnvelopePoint {
 
 const RumbleEnvelopePoint SmallRumblePoints[] = {{0.0f, 255.0f}, {0.05f, 200.0f}, {0.07f, 80.0f}, {0.8f, 0.0f}};
 const RumbleEnvelopePoint BigRumblePoints[]   = {{0.0f, 255.0f}, {0.15f, 255.0f}, {0.2f, 120.0f}, {1.2f, 0.0f}};
-const RumbleEnvelopePoint SingleRoadBumpPoints[] = {{0.0f, 140.0f}, {0.07f, 0.0f}};
 
 struct RumbleRamp {
   float fTime;
