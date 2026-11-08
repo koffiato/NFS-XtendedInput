@@ -1,6 +1,7 @@
 // Recovered Carbon controller behavior; native interfaces, clock and output are mocked.
 #define NOMINMAX
 #define GAME_CARBON
+#define RUMBLE_TESTING
 #include <Windows.h>
 #include <XInput.h>
 #include <cassert>
@@ -156,9 +157,9 @@ void* inputTable[9] = {};
 void* vehicleTable[44] = {};
 VehicleInterface suspension = {suspensionTable}, rigidBody = {rigidBodyTable};
 VehicleInterface vehicleInput = {inputTable}, vehicle = {vehicleTable};
-VehicleInterface simable = {}, player = {};
-void* playerTable[2] = {};
-void* __fastcall PlayerSimable(void*, void*) { return &simable; }
+VehicleInterface simable = {};
+void* testSimable = &simable;
+void* TestGetPlayerSimable() { return testSimable; }
 void* __fastcall FindVehicleInterface(void*, void*, void* handle) {
   // Literal handles recovered from the native constructors, independent of
   // Definitions.h: 0x6DB9F0 registers suspension; 0x6DB810 is transmission.
@@ -183,17 +184,10 @@ const float* __fastcall LinearVelocity(void*, void*) { return linearVelocity; }
 const float* __fastcall AngularVelocity(void*, void*) { return angularVelocity; }
 
 void CheckVehicleReader() {
-  // The test executable is loaded at 0x2000000, leaving the game's globals free.
-  void* globals = VirtualAlloc((void*)0x00A90000, 0x10000, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
-  assert(globals == (void*)0x00A90000);
   auto originalFind = UTL_Com_Object_IList_Find;
   UTL_Com_Object_IList_Find = (decltype(originalFind))FindVehicleInterface;
-  playerTable[1] = PlayerSimable;
-  player.table = playerTable;
-  void* players[] = {&player};
-  *(void***)PLAYER_ILISTABLE_ADDR = players;
-  *(int*)PLAYER_ILISTABLE_COUNT_ADDR = 1;
-  *(int*)GAMEFLOWMANAGER_STATUS_ADDR = 6;
+  RumbleGetPlayerSimableOverride = TestGetPlayerSimable;
+  testSimable = &simable;
   vehicleTable[0xAC / 4] = Speed;
   inputTable[0x08 / 4] = Brake;
   inputTable[0x0C / 4] = Gas;
@@ -211,10 +205,10 @@ void CheckVehicleReader() {
   assert(state.bOnGround[0] && !state.bOnGround[3]);
   assert(state.fSlip[2] == 3 && state.fSkid[2] == 3 && state.fWheelAV[2] == 3);
   assert(state.fLinVel[0] == 25 && state.fAngVel[2] == 1);
-  *(int*)PLAYER_ILISTABLE_COUNT_ADDR = 0;
+  testSimable = NULL;
   assert(!RumbleReadVehicle(state));
   UTL_Com_Object_IList_Find = originalFind;
-  assert(VirtualFree(globals, 0, MEM_RELEASE));
+  RumbleGetPlayerSimableOverride = NULL;
 }
 
 int main() {

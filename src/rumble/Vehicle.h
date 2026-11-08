@@ -1,4 +1,4 @@
-// Live MW/ProStreet vehicle interfaces and guarded reads. MIT; see LICENSE.
+// Live MW/Carbon/ProStreet/Undercover vehicle interfaces and guarded reads. MIT; see LICENSE.
 #pragma once
 #include <cstdint>
 #include <cstring>
@@ -46,8 +46,15 @@ uintptr_t RumbleGameAddress(uintptr_t address) {
 #endif
 }
 
+#ifdef RUMBLE_TESTING
+void* (*RumbleGetPlayerSimableOverride)() = NULL;
+#endif
+
 // the local player's ISimable, or NULL outside a race / while the player list is empty or being rebuilt
 void* RumbleGetPlayerSimable() {
+#ifdef RUMBLE_TESTING
+  if (RumbleGetPlayerSimableOverride) return RumbleGetPlayerSimableOverride();
+#endif
   if (*(int*)RumbleGameAddress(GAMEFLOWMANAGER_STATUS_ADDR) != 6) return NULL;
   void** players = *(void***)RumbleGameAddress(PLAYER_ILISTABLE_ADDR);
   if (!players || *(int*)RumbleGameAddress(PLAYER_ILISTABLE_COUNT_ADDR) <= 0 || !players[0]) return NULL;
@@ -78,7 +85,7 @@ bool RumbleReadVehicleUnsafe(RumbleVehicleState& s) {
 #else
   s.fGas       = RumbleVCall<float>(input, 0x0C);
   s.fBrake     = RumbleVCall<float>(input, 0x08);
-#ifdef GAME_CARBON
+#if defined(GAME_CARBON) || defined(GAME_UC)
   s.fHandBrake = RumbleVCall<float>(input, 0x1C);  // 0x20 is GetControlClutch
 #else
   s.fHandBrake = RumbleVCall<float>(input, 0x20);
@@ -89,21 +96,26 @@ bool RumbleReadVehicleUnsafe(RumbleVehicleState& s) {
   memcpy(s.fLinVel, lin, sizeof(s.fLinVel));
   memcpy(s.fAngVel, ang, sizeof(s.fAngVel));
 
-#ifdef GAME_PROSTREET
-  s.nWheels = RumbleVCall<int>(susp, 0x14); // same suspension interface used by PS DoFFB
+#if defined(GAME_PROSTREET) || defined(GAME_UC)
+  s.nWheels = RumbleVCall<int>(susp, 0x14); // same suspension/chassis interface used by DoFFB
 #else
   s.nWheels = RumbleVCall<int>(susp, 0x08);
 #endif
   if (s.nWheels < 0) return false;
   if (s.nWheels > RUMBLE_MAX_WHEELS) s.nWheels = RUMBLE_MAX_WHEELS;
   for (unsigned int i = 0; i < (unsigned int)s.nWheels; i++) {
+#if defined(GAME_PROSTREET) || defined(GAME_UC)
+    s.bOnGround[i] = true;
+    s.fCompression[i] = 0.0f;
+    s.fSlip[i] = 0.0f;
+    s.fSkid[i] = 0.0f;
+    s.fWheelAV[i] = 0.0f;
 #ifdef GAME_PROSTREET
     s.bOnGround[i] = RumbleVCall<bool>(susp, 0x34, i);
-    s.fCompression[i] = 0.0f; // PS suspension layout differs; no guessed compression offset
     s.fSlip[i] = RumbleVCall<float>(susp, 0x0C, i);
     s.fSkid[i] = RumbleVCall<float>(susp, 0x08, i);
-    s.fWheelAV[i] = 0.0f;
     s.fNativeRoad[i] = RumbleVCall<float>(susp, 0x7C, i);
+#endif
 #else
     s.bOnGround[i]    = RumbleVCall<bool>(susp, 0x24, i);
     s.fCompression[i] = RumbleVCall<float>(susp, 0x28, i);
@@ -162,13 +174,17 @@ bool RumblePSIsShifting() {
 
 #ifdef HAS_CONSOLE_RUMBLE
 // Resolve the contact participants, including traffic/props and participant B.
-// ISimable::GetLinearVelocity fills a vector through vtable slot 26 on PC.
+// ISimable::GetLinearVelocity fills a vector: MW/CB slot 26, UC slot 24.
 void*(__cdecl* RumbleMWResolveSimable)(void*) = (void*(__cdecl*)(void*))SIM_GETSIMABLE_ADDR;
 void* RumbleMWCollisionBody(void* handle, float* velocity) {
   __try {
     void* simable = RumbleMWResolveSimable(handle);
     if (!simable) return NULL;
+#ifdef GAME_UC
+    RumbleVCall<void>(simable, 0x60, velocity); // native collision calls at 0x696537 / 0x6965C4
+#else
     RumbleVCall<void>(simable, 0x68, velocity);
+#endif
     for (int i = 0; i < 3; ++i) if (!_finite(velocity[i])) return NULL;
     return simable;
   } __except (EXCEPTION_EXECUTE_HANDLER) { return NULL; }
@@ -177,7 +193,7 @@ bool RumbleMWCollisionVehicle(void* simable) {
   __try { return RumbleFindInterface(simable, IVEHICLE_IHANDLE_ADDR) != NULL; }
   __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
 }
-#ifdef GAME_CARBON
+#if defined(GAME_CARBON) || defined(GAME_UC)
 const float* RumbleSimTimePtr = (const float*)SIM_TIME_ADDR;
 float RumbleSimTime() {
   __try { return RumbleSimTimePtr && _finite(*RumbleSimTimePtr) ? *RumbleSimTimePtr : 0.0f; }

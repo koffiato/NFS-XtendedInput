@@ -7,7 +7,8 @@ rumble support. It targets Windows 10/11 and 32-bit game executables.
 [Underground 1](docs/ug-rumble.md) and [Underground 2](docs/ug2-rumble.md)
 use their native feedback engines with a small output adapter. Underground 2 has optional trigger support.
 
-[Most Wanted](docs/mw-rumble-x360.md) and [Carbon](docs/cb-rumble-x360.md) port
+[Most Wanted](docs/mw-rumble-x360.md), [Carbon](docs/cb-rumble-x360.md) and
+[Undercover](docs/uc-rumble.md) port
 Xbox 360 controller feedback using native PC physics and surface data. Impulse
 triggers are an optional extension.
 
@@ -19,7 +20,7 @@ Current support:
 | Underground 2 | `UG2` | [Native feedback and impulse triggers](docs/ug2-rumble.md) |
 | Most Wanted (2005) | `MW` | [Xbox 360 feedback and optional impulse triggers](docs/mw-rumble-x360.md) |
 | Carbon | `CB` | [Xbox 360 feedback and optional impulse triggers](docs/cb-rumble-x360.md) |
-| Undercover | `UC` | Input only; [research](docs/uc-xinput.md) |
+| Undercover | `UC` | [Xbox 360 feedback and optional impulse triggers](docs/uc-rumble.md) |
 | ProStreet | `PS` | Experimental native feedback; [research](docs/ps-rumble-x360.md) |
 | World | `W` | Input only; [research](docs/world-rumble.md) |
 
@@ -40,7 +41,8 @@ all WGI controllers on supported games.
 * MW's in-game configuration is disabled for now.
 * **When using dynamic icons in UG/UG2, disable Widescreen Fix's icon replacement.**
 
-Canonical mappings come from the actual [1.22](https://github.com/xan1242/NFS-XtendedInput/releases/tag/1.22) and hashes. ,
+Later-game mappings use the pinned upstream
+[1.22 release](https://github.com/xan1242/NFS-XtendedInput/releases/tag/1.22).
 
 ## Build and checks
 
@@ -50,9 +52,13 @@ Clone with submodules, then use an x86 Visual Studio C++ developer prompt:
 git clone --branch unified-feedback --recurse-submodules https://github.com/koffiato/NFS-XtendedInput.git
 cd NFS-XtendedInput
 build.cmd all
+tests\runtime.cmd all
 tests\input.cmd
+tests\mw.cmd
+tests\cb.cmd
+tests\uc.cmd
+tests\prostreet.cmd
 ```
-
 
 Outputs are written under `build/<target>/`.
 
@@ -85,10 +91,11 @@ No games are downloaded. Run the packaging checks with:
 
 ```bat
 python -m unittest discover -s tests -v
+```
 
 ## Credits and license
-`
--`` [xan1242](https://github.com/xan1242), Berkay Yigit: upstream XtendedInput.
+
+- [xan1242](https://github.com/xan1242), Berkay Yigit: upstream XtendedInput.
 - [Martin Penkava](https://github.com/shaneomac1337): original MW rumble work.
 - [AeroWidescreen](https://github.com/AeroWidescreen): controller textures and mouse cursor.
 - LINK/2012: injector; pulzed: mINI.

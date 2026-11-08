@@ -1,5 +1,28 @@
 # Need for Speed: Undercover feedback research
 
+## Adapter ABI
+
+The PC collision callback takes `(const CollisionInfo&, bool, Vector3)` with
+the 12-byte vector passed **by value**. `LocalPlayer::OnCollision` reserves those
+12 bytes at `0x007BADF7`, then pushes the boolean and contact pointer before
+calling slot 19 at `0x007BAE20`. The native method ends in `ret 0x14` at
+`0x00696E2F`. A two-argument adapter leaves 12 bytes on the stack on every
+contact and can crash as driving begins. The UC adapter must retain this third
+argument even when the effect calculation does not use it.
+
+UC also differs from MW/Carbon in its collision participant interface:
+`ISimable::GetLinearVelocity` fills a vector through **slot 24 (`+0x60`)**,
+as called at `0x00696537` and `0x006965C4`; MW/Carbon use slot 26 (`+0x68`).
+
+Normal per-wheel road feedback arrives through **slot 6** with arguments
+`(bool front, const SimSurface&, float speed)` at `0x007BA9F0` (push sequence
+at `0x007BA9DF`..`0x007BA9EC`). Slot 18 is a separate indexed callback. Give
+these methods distinct C++ names so MSVC does not regroup overloaded virtuals
+and change the native vtable order.
+
+`tests/uc.cmd` checks the native stack cleanup with an assembly caller and
+checks the literal UC participant velocity slot independently of the adapter.
+
 PC and console versions of Undercover inherit the core Black Box feedback architecture from Most
 Wanted (2005), Carbon (2006), and ProStreet (2007). On PC, retail Undercover ships with a complete
 concrete 21-slot `IFeedback` vtable, full MSVC RTTI, an active physical collision evaluator
@@ -92,7 +115,7 @@ cleanup conventions and argument counts match ProStreet's 21-slot layout slot-fo
 | **3** | `+0x0C` | ResetEffects | `0x00677960` | 0 | `mov eax, [ecx]; jmp [eax+4];` virtual forwarder to Slot 1 (Pause) |
 | **4** | `+0x10` | BeginUpdate | `0x004C7740` | 0 | `ret` (stub on PC; console resets master scale and zero-clears wave group inputs) |
 | **5** | `+0x14` | EndUpdate | `0x004C7740` | 0 | `ret` |
-| **6** | `+0x18` | UpdateRoadNoise | `0x006B0620` | `ret 0xC` (12) | Stub (3 params: `wheelIdx`, `roadScalar`, `surface`) |
+| **6** | `+0x18` | UpdateRoadNoise | `0x006B0620` | `ret 0xC` (12) | Stub (3 params: `front`, `surface`, `speed`) |
 | **7** | `+0x1C` | UpdateTireSkid | `0x0054E260` | `ret 0x14` (20) | Stub (5 params: `surface`, `skidAngle`, `slipVel`, etc.) |
 | **8** | `+0x20` | UpdateTireSlip | `0x006B0620` | `ret 0xC` (12) | Stub (3 params: `surface`, `longSlip`, `latSlip`) |
 | **9** | `+0x24` | UpdateRPM | `0x006B0620` | `ret 0xC` (12) | Stub (3 float params: `rpm`, `redline`, `idle`) |
@@ -105,9 +128,8 @@ cleanup conventions and argument counts match ProStreet's 21-slot layout slot-fo
 | **16** | `+0x40` | UpdateDriftSkid | `0x008ECD50` | `ret 0x10` (16) | Stub (4 params: drift angle, velocity) |
 | **17** | `+0x44` | SteeringForce | `0x006B1200` | `ret 4` (4) | Stub (1 param: float steering torque) |
 | **18** | `+0x48` | UpdateRoadWithIndex | `0x006B0620` | `ret 0xC` (12) | Stub (3 params: `wheelIdx`, `bumpScalar`, `surface`) |
-| **19** | `+0x4C` | ReportCollision | `0x00696420` | 20 | **Fully implemented (>2.5 KB)!** Contact physics evaluation, closing delta velocity calculation, Havok simable lookup, 5.0 m/s threshold check, dispatches to `LogitechEZWheelWrapper::Wheel` |
+| **19** | `+0x4C` | ReportCollision | `0x00696420` | 20 | Contact reference, ownership boolean, and 12-byte velocity-change vector by value; physical wheel feedback evaluator |
 | **20** | `+0x50` | GetControllerType | `0x006822A0` | 0 | Calls `0x006821F0`, classifies device (`0x4128808B` gamepad, `0x12345678` wheel, `0x17300A97` keyboard) |
-| **21** | `+0x54` | SecondaryQuery | `0x00646150` | 4 | Extended float/force scaling query |
 
 ---
 
@@ -142,7 +164,7 @@ Feedback production is driven per frame by `LocalPlayer::DoFFB`:
    - Calls **Slot 4 (`BeginUpdate`)** (`0x007BA8A5`).
 3. **Four-Wheel Sampling Loop (`ebp = 0..3`):**
    - Resolves surface pointer. Damaged tyre replaces surface reference with blown tyre surface key **`0xD929E923`** (`0x007BA951`), identical to ProStreet.
-   - Calls **Slot 6 (`UpdateRoadNoise`)** passing wheel index, road bump scalar, and surface reference (`0x007BA9F0`).
+   - Calls **Slot 6 (`UpdateRoadNoise`)** passing front-wheel boolean, surface reference, and absolute speed (`0x007BA9F0`).
 4. **Car & Engine Status Updates:**
    - Calls **Slot 9 (`UpdateRPM`)** passing 3 float parameters (`0x007BAADA`).
    - Calls **Slot 10 (`UpdateShiftPotential`)** passing gear potential level (`0x007BAAF6`).
@@ -278,33 +300,30 @@ Undercover PC completely lacks native gamepad vibration output:
 
 ---
 
-## XtendedInput rumble adapter blueprint
+## XtendedInput rumble adapter
 
-Because Undercover PC contains the complete Black Box `IFeedback` architecture and producer loops,
-restoring console-grade dual-motor rumble requires bridging the game's events into the unified
-rumble engine.
+The adapter exposes its 21-slot `IFeedback` through the replacement input
+device, then mixes the game's native feedback events into controller output.
 
 ### Integration patch points
 
-1. **Collision Listener VTable Hooks:**
-   Replace Slot 0 of the three collision listener vtables with the XtendedInput collision hook:
-   - `0x00C24A14` (`LocalPlayer`)
-   - `0x00C24C00` (`RecordablePlayer`)
-   - `0x00C24E24` (`OnlineLocalPlayer`)
-2. **Hidden Rumble Byte Patch:**
+1. **Hidden Rumble Byte Patch:**
    Bypass the profile rumble check at `0x007BAD13` by writing 6 NOPs (`0x90`):
    ```cpp
    // LocalPlayer::OnCollision skips ReportCollision when PlayerSettings + 9 == 0
    // Original bytes: 0F 84 0D 01 00 00 (je +0x10D)
    injector::MakeNOP(0x007BAD13, 6, true);
    ```
-3. **Feedback Device Installation:**
-   Intercept `LocalPlayer::SetFeedbackDevice` (`0x007BC700`) or install the XtendedInput
-   concrete `IFeedback` adapter into `GameDevice + 0x2C` (`0x00C0D434`).
-4. **Motor Output Pipeline:**
-   Connect the unified wave and ramp pipeline to dynamic `XInputSetState`:
-   - **Left Motor (Low Frequency):** Heavy collisions (`Slot 19`), high shift potential (`Slot 10`), NOS boost (`Slot 11`), blown engine shake (`Slot 12`), road bumps (`Slot 18`, wheels 0 & 2).
-   - **Right Motor (High Frequency):** Tire slip (`Slot 8`), tire skid (`Slot 7`), gear shifts (`Slot 13`), blown engine secondary ramp (`Slot 12`), road bumps (`Slot 18`, wheels 1 & 3).
+2. **Feedback Device Installation:**
+   `InputDevice::GetInterfaces` is slot 9 (`+0x24`). It exposes the embedded
+   feedback object at device offset `+0x2C` when rumble is enabled. The native
+   `LocalPlayer::SetFeedbackDevice` finds it through the device's interface list;
+   native collision listeners deliver slot 19 directly.
+3. **Motor Output Pipeline:**
+   Native road feedback uses slot 6. Surface waves, drift and car/collision
+   ramps feed the shared mixer, which is advanced by device polling and sent to
+   XInput or WGI. Impulse triggers are an optional extension. Pause, disconnect,
+   focus loss and missed-feedback checks stop controller output.
 
 ---
 

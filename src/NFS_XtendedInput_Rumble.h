@@ -10,13 +10,14 @@
 // clang-format on
 */
 
-// Shared MW / Carbon / ProStreet feedback implementation.
+// Shared MW / Carbon / ProStreet / Undercover feedback implementation.
 //
 // The game asks InputDevice::GetInterfaces for IFeedback, then supplies native
 // feedback events and collisions (MW DoFFB @ 0x6EE490; CB @ 0x762000; PS @ 0x4D0CF0).
 // PC controller effect methods are stubs. This implementation drives XInput
-// motors using recovered MW and Carbon controller rules. ProStreet keeps its
-// experimental collision envelopes. Physical console parity remains unverified.
+// motors using recovered MW, Carbon and Undercover controller rules.
+// ProStreet retains experimental collision envelopes; physical console parity
+// remains unverified.
 //
 // The game never stops effects on focus loss and keeps a raw pointer to the interface, so:
 // - the object is embedded in InputDevice (same place as the game's own device, +0x2C) and is never deleted
@@ -51,7 +52,11 @@ void RumbleStopAllPads(bool fromDllMain = false) {
 
 void RumbleInstallPatches() {
   if (!bRumbleEnabled) return;
-#ifdef GAME_PROSTREET
+#ifdef GAME_UC
+  // Bypass collision gatekeeper jump: cmp byte ptr [eax+9], 0; je 0x007BAE26
+  if (*(uint16_t*)PLAYER_COLLISION_RUMBLE_PATCH_ADDR == 0x840F)
+    injector::MakeNOP(PLAYER_COLLISION_RUMBLE_PATCH_ADDR, 6, true);
+#elif defined(GAME_PROSTREET)
   if (!RumbleValidateProStreet()) {
     bRumbleEnabled = false;
     OutputDebugStringA("[XtendedInput] ProStreet rumble disabled: unsupported feedback interface.\n");
@@ -120,7 +125,15 @@ struct COLLISION_INFO {
 };
 static_assert(sizeof(COLLISION_INFO) == 0x80, "COLLISION_INFO size mismatch");
 
-// Native IFeedback: MW has 15 slots (0x8A7BD4); CB has 18 (0x9E2188); PS has 21 (0x98BE6C).
+#ifdef GAME_UC
+// OnCollision builds this vector on the stack at 0x7BADF7 before pushing
+// iamA and CollisionInfo*. Native slot 19 returns with ret 0x14 (0x696E2F).
+struct RumbleUCVector { float x, y, z; };
+static_assert(sizeof(RumbleUCVector) == 12, "UC collision argument size");
+#endif
+
+// Native IFeedback: MW has 15 slots (0x8A7BD4); CB has 18 (0x9E2188);
+// PS and UC have 21 (0x98BE6C / 0xC0D434). Empty virtuals preserve these ABIs.
 // packed to 4 so the double member doesn't push the object off +0x2C inside InputDevice
 #pragma pack(push, 4)
 #pragma warning(push)
@@ -387,7 +400,7 @@ class IFeedback {
     mEngineBlown    = false;
     mShiftPotential = SHIFT_POTENTIAL_NONE;
 #endif
-#ifdef GAME_CARBON
+#if defined(GAME_CARBON) || defined(GAME_UC)
     mMW.Begin();
 #endif
     mWheelArg       = 0;
@@ -493,6 +506,7 @@ class IFeedback {
 #else
   virtual void EndUpdate() { MixFrame(); }
 #endif
+
   void MixFrame() {
     if (!bRumbleEnabled) return;  // GetInterfaces hides the object when disabled
 
@@ -582,9 +596,19 @@ class IFeedback {
 #endif
   }
 
-  // MW reports Slip, Skid, Road; PS reports Road, Slip, Skid with different arguments.
-#ifdef GAME_PROSTREET
+  // Slot 6 reports road feedback in MW/CB/UC; ProStreet uses slot 18.
+#ifndef GAME_PROSTREET
+  virtual void UpdateRoadNoise(bool /*front*/, const SimSurface& surface, float speed) {
+    if (!mPaused) mRoadWave.Add(&surface, ATTRIB_KEY_FFB_ROLL, speed);
+    if (bRumbleTelemetry && RumbleTelemetry.nWheel < RUMBLE_MAX_WHEELS)
+      RumbleTelemetry.iSurface[RumbleTelemetry.nWheel] = RumbleTelemetrySurfaceId(&surface);
+    mWheelArg++;
+    RumbleTelemetry.nWheel++;
+  }
+#else
   virtual void ReservedPS6(uintptr_t, uintptr_t, uintptr_t) {}
+#endif
+#if defined(GAME_PROSTREET) || defined(GAME_UC)
   virtual void UpdateTireSkid(const SimSurface& surface, float skid, float /*load*/, float /*grip*/, float /*totalLoad*/) {
     AddSkid(mWheelArg < 2, surface, fabsf(skid));
   }
@@ -592,12 +616,6 @@ class IFeedback {
     AddSlip(surface, slip);
   }
 #else
-  virtual void UpdateRoadNoise(bool /*front*/, const SimSurface& surface, float speed) {
-    if (!mPaused) mRoadWave.Add(&surface, ATTRIB_KEY_FFB_ROLL, speed);
-    mWheelArg++;
-    if (bRumbleTelemetry && RumbleTelemetry.nWheel < RUMBLE_MAX_WHEELS) RumbleTelemetry.iSurface[RumbleTelemetry.nWheel] = RumbleTelemetrySurfaceId(&surface);
-    RumbleTelemetry.nWheel++;
-  }
   virtual void UpdateTireSkid(bool front, const SimSurface& surface, float skid) {
     AddSkid(front, surface, skid);
   }
@@ -628,10 +646,17 @@ class IFeedback {
       RumbleTelemetry.fSkid[mWheelArg] = skid;
     }
   }
+#ifdef GAME_UC
+  virtual void UpdateRPM(float throttle, float powerband, float /*rpm*/) {
+    RumbleTelemetry.fThrottle  = throttle;
+    RumbleTelemetry.fPowerband = powerband;
+  }
+#else
   virtual void UpdateRPM(float powerband, float /*overrev*/, float throttle) {
     RumbleTelemetry.fPowerband = powerband;
     RumbleTelemetry.fThrottle  = throttle;
   }
+#endif
   virtual void UpdateShiftPotential(ShiftPotential potential) {
     mShiftPotential = potential;
 #ifdef HAS_CONSOLE_RUMBLE
@@ -668,6 +693,24 @@ class IFeedback {
   virtual void UpdateSteering(float /*steering*/) {}
 #endif
 
+#ifdef GAME_UC
+  virtual void UpdateDriftSlip(bool active, float slipAngle, float /*lateralSlip*/) {
+    if (active) mMW.Drift(slipAngle, RumbleSimTime());
+  }
+  virtual void ReservedUC15(uintptr_t, uintptr_t, uintptr_t) {}
+  virtual void UpdateDriftSkid(const SimSurface& surface, float skid, float /*load*/, float /*grip*/) {
+    AddSkid(mWheelArg < 2, surface, fabsf(skid));
+  }
+  virtual void UpdateSteering(float /*steering*/) {}
+  virtual void UpdateRoadWithIndex(unsigned int wheel, float /*bumpScalar*/, const SimSurface& surface) {
+    mWheelArg = wheel < RUMBLE_MAX_WHEELS ? (int)wheel : RUMBLE_MAX_WHEELS;
+    if (mWheelArg == RUMBLE_MAX_WHEELS) return;
+    if (mHasVehicle) mRoadWave.Add(&surface, ATTRIB_KEY_FFB_ROLL, mVehicle.fSpeed);
+    if (bRumbleTelemetry) RumbleTelemetry.iSurface[wheel] = RumbleTelemetrySurfaceId(&surface);
+    if (RumbleTelemetry.nWheel < (int)wheel+1) RumbleTelemetry.nWheel = wheel+1;
+  }
+#endif
+
 #ifdef GAME_PROSTREET
   virtual void ReservedPS14(uintptr_t) {}
   virtual void ReservedPS15(uintptr_t, uintptr_t, uintptr_t) {}
@@ -691,7 +734,11 @@ class IFeedback {
   static float Clamp01(float v) { return v < 0.0f ? 0.0f : (v > 1.0f ? 1.0f : v); }
 
 #ifdef HAS_CONSOLE_RUMBLE
+#ifdef GAME_UC
+  virtual void ReportCollision(const COLLISION_INFO& cinfo, bool iamA, RumbleUCVector /*velocityChange*/) {
+#else
   virtual void ReportCollision(const COLLISION_INFO& cinfo, bool iamA) {
+#endif
     if (!bRumbleEnabled || mPaused) return;
     float ownVelocity[3], otherVelocity[3];
     void* own = RumbleMWCollisionBody(iamA ? cinfo.objA : cinfo.objB, ownVelocity);
@@ -833,6 +880,8 @@ class IFeedback {
 #endif
 #ifdef GAME_PROSTREET
   virtual int GetControllerType() { return 5; } // native PC default; no force-feedback wheel
+#elif defined(GAME_UC)
+  virtual int GetControllerType() { return 0; }
 #endif
 };
 #pragma warning(pop)

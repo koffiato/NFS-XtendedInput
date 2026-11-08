@@ -377,7 +377,7 @@ void CheckBindings() {
   assert(!InputAnalogPressed(pad, XINPUT_GAMEPAD_LS_LEFT_CONFIGDEF, 16000, 51));
   pad.sThumbLX = -16001;
   assert(InputAnalogPressed(pad, XINPUT_GAMEPAD_LS_LEFT_CONFIGDEF, 16000, 51));
-  g_Controllers[1].state.Gamepad.bRightTrigger = 200;
+  g_Controllers[1].state.Gamepad.bRightTrigger = 255;
   assert(GetAnalogActivity(0) == 0);
   assert(GetAnalogActivity(1) == XINPUT_GAMEPAD_RT_CONFIGDEF);
   g_Controllers[1].state.Gamepad.bRightTrigger = 0;

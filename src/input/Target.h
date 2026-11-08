@@ -6,10 +6,10 @@
 #else
 #define INPUT_SCANNERS 0
 #endif
-#if defined(GAME_MW) || defined(GAME_CARBON) || defined(GAME_PROSTREET)
+#if defined(GAME_MW) || defined(GAME_CARBON) || defined(GAME_PROSTREET) || defined(GAME_UC)
 #define HAS_RUMBLE 1
 #endif
-#if defined(GAME_MW) || defined(GAME_CARBON)
+#if defined(GAME_MW) || defined(GAME_CARBON) || defined(GAME_UC)
 #define HAS_CONSOLE_RUMBLE 1
 #endif
 #if defined(GAME_UC) || defined(GAME_WORLD)
@@ -23,7 +23,7 @@ enum GameMask : unsigned {
   Scanners = UG | UG2,
   Later = All & ~Scanners,
   Frontend = MW | CB | PS,
-  Feedback = Scanners | Frontend,
+  Feedback = Scanners | Frontend | UC,
   Triggers = Feedback & ~UG,
 };
 

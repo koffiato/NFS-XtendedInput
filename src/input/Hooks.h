@@ -314,6 +314,15 @@ void __stdcall FEPhotoModeStateManager_HandleRTrigger_Hook() { return; }
 #endif
 
 
+#ifdef GAME_UC
+int(__thiscall* UCWheelConnected)(void*, unsigned int) = (int(__thiscall*)(void*, unsigned int))0x007577C0;
+int __fastcall UCWheelConnectedHook(void* manager, void*, unsigned int port) {
+  // DInput initialization is disabled below, leaving the Logitech manager
+  // NULL. The Controls menu probes it without the guards used elsewhere.
+  return manager ? UCWheelConnected(manager, port) : 0;
+}
+#endif
+
 void InstallGameHooks() {
 #ifdef GAME_PROSTREET
   RumbleInstallPatches(); // validate before any device can expose IFeedback
@@ -328,6 +337,12 @@ void InstallGameHooks() {
 
   // kill DInput initialization
   injector::MakeNOP(DINPUT_KILL_ADDR, 5, true);
+#ifdef GAME_UC
+  // Both Controls menu variants call LogitechEZWheelWrapper with [0xDA3BF0].
+  // Keep native behavior when present; an absent manager means no wheel.
+  injector::MakeCALL(0x005A4A0E, UCWheelConnectedHook, true);
+  injector::MakeCALL(0x005A4C4F, UCWheelConnectedHook, true);
+#endif
 
 #ifndef NO_FENG
   // Mouse stuff

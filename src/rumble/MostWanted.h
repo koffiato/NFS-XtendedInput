@@ -1,4 +1,4 @@
-// MW and Carbon console controller ramps and waves. MIT; see LICENSE and docs/mw-rumble-x360.md.
+// MW, Carbon and Undercover controller ramps and waves. MIT; see LICENSE and docs/mw-rumble-x360.md.
 #pragma once
 #include "Core.h"
 
@@ -13,7 +13,7 @@ struct MWRamp {
   }
 };
 
-#ifdef GAME_CARBON
+#if defined(GAME_CARBON) || defined(GAME_UC)
 // Xbox state is {phase, amplitude, frequency, offset}; BeginUpdate clears all but phase.
 struct MWWave {
   float phase, amplitude, frequency, offset;
@@ -34,7 +34,12 @@ struct MWEffects {
   MWRamp collision;
   MWRamp potentialLeft, potentialRight, nos, engineLeft, engineRight, shiftLeft, shiftRight;
 #ifdef GAME_CARBON
-  MWWave draft, drift;
+  MWWave draft;
+#endif
+#if defined(GAME_CARBON) || defined(GAME_UC)
+  MWWave drift;
+#endif
+#ifdef GAME_CARBON
   float draftScale = 1.0f;
 #endif
   bool nosOn, engineOn, shifting;
@@ -42,12 +47,15 @@ struct MWEffects {
   int outputLeft, outputRight;
   double feedbackTime;
 
-#ifdef GAME_CARBON
+#if defined(GAME_CARBON) || defined(GAME_UC)
   void Begin() {
+#ifdef GAME_CARBON
     draftScale = 1.0f;
     draft.Begin();
+#endif
     drift.Begin();
   }
+#ifdef GAME_CARBON
   void Draft(const void* info, float simTime, bool paused) {
     if (!info || !*(const unsigned char*)info) return;
     float wake = *(const float*)((const char*)info + 0x1C);
@@ -62,6 +70,7 @@ struct MWEffects {
       draftScale = 0.5f;
     }
   }
+#endif
   void Drift(float slipAngle, float simTime) {
     if (!_finite(slipAngle)) return;
     float simTimeMs = simTime * 1000.0f;
@@ -123,6 +132,8 @@ struct MWEffects {
     mixer.Add(kRumbleCar, shiftLeft.Sample(dt), shiftRight.Sample(dt));
 #ifdef GAME_CARBON
     mixer.Add(kRumbleCar, 0, draft.Sample(dt));
+#endif
+#if defined(GAME_CARBON) || defined(GAME_UC)
     mixer.Add(kRumbleTyres, 0, drift.Sample(dt));
 #endif
   }
