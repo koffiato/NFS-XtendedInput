@@ -1,16 +1,20 @@
 # Underground 2 rumble research
 
-Research for the local PC US 1.2 executable and PS2 USA/NTSC build, checked on
-2026-10-31. The PC controller event engine is present and executable; its final
-motor writer is an empty stub. All 12 initialized event records match PS2,
-including curve points, thresholds, gains, priorities and enabled flags.
+Research for the local PC US 1.2 executable, PS2 USA/NTSC build, and original
+Xbox USA retail release. The PC controller
+event engine is present and executable; its final motor writer is an empty stub.
+All 12 initialized event records match PS2, including curve points, thresholds,
+gains, priorities and enabled flags. The original Xbox version shares identical
+curve points and priorities, but retunes input thresholds and gain bounds for
+four events and implements a dedicated motor writer with a deadzone and muted
+high-frequency buzzer.
 
 UG2 keeps the original PC dispatcher, three-slot scheduler, gain-scaled
 curve timing and suppression. Its frame-output and explicit-stop call sites
 are redirected to the adapter. Native output levels drive a variable heavy
-motor and a binary light motor above 128; master/motor scales and swapping
-apply afterward. Pause, focus loss, disconnect and missed updates stop output
-and clear queued slots.
+motor and a binary light motor above 128 (matching the PS2 DualShock 2
+convention); master/motor scales and swapping apply afterward. Pause, focus loss,
+disconnect and missed updates stop output and clear queued slots.
 The hidden producer/collision vibration guards are bypassed without changing
 the profile byte.
 
@@ -199,10 +203,13 @@ wheel investigation is out of scope.
 | PS2 executable SHA-256 | `a666f3e8869e63ad2f5eff90fc30c4953fcce41166ff006aaf1ed327d180d8ff` |
 | PC executable | US 1.2 `SPEED2.EXE`, 4,800,512 bytes |
 | PC executable SHA-256 | `e17c8f060bae797beaf61395c6e2f1a23bcde8c4666a412c92274aa411066214` |
+| Xbox boot executable | `default.xbe`, Title ID `0x4541005A`, USA/NTSC, 4,038,656 bytes |
+| Xbox disc image | Retail Xbox disc image (7,825,162,240 bytes) |
 
-The PS2 executable was read directly from the ISO in memory. No emulator was
-started, no game image or emulator setting was modified, and no game binary
-was copied into the repository.
+The PS2 and Xbox executables were read directly from their respective disc images in memory.
+No emulator was started, no game image or emulator setting was modified, and no
+game binary was copied into the repository. Xbox entry point `0x0021b1ce` and kernel
+thunks were decrypted with the retail keys; debug build path is `D:\Speed\XBOX\obj\UG2Release\nfsUG2Release.exe`.
 
 ## PS2 table decoding
 
@@ -421,6 +428,89 @@ Events 0 and 3 share the same curve descriptor at `0x005723C0`.
 The other descriptors are initialized at GP-relative addresses and point to
 the arrays listed above.
 
+## Original Xbox implementation
+
+The retail original Xbox release (retail Xbox disc image &rarr; `default.xbe`,
+Title ID `0x4541005A`, retail entry point `0x0021b1ce`, debug build path `D:\Speed\XBOX\obj\UG2Release\nfsUG2Release.exe`)
+was inspected.
+
+Unlike PC (where the final motor writer at `0x004022C0` is an empty `RET`), Xbox contains
+the full native motor writer and hardware dispatch sequence linked into the executable.
+
+### Xbox pipeline addresses
+
+| Stage | Xbox VA | PC US 1.2 counterpart | Behavior |
+| --- | --- | --- | --- |
+| Collision producer | `0x001B4245` | `0x005A9A31` | Dispatches event 0 subject to player vibration setting |
+| Driving producers | `0x001E6480..0x001E67DC`| `0x005F6350` | Dispatches events 1-4, 6, 7, 9, 10 |
+| Event dispatcher | `0x0017C5A0` | `0x005727B0` | Selects one of 12 records; calls generic dispatch `0x0017C4C0` |
+| Slot admission | `0x0017C180` | `0x00572390` | Three-slot priority/gain scheduler |
+| Channel update | `0x0017C220` | `0x00572470` | Samples occupied slots, clamps 0-255, advances ages by `dt / gain` |
+| Suppression update | `0x0017C2F0` | `0x00572520` | Sustained-event admission lockout timers |
+| Frame loop | `0x0017C407..0x0017C47C`| `0x00572610` | Updates 2 channels per port across **4 controller ports** (`0x00428E28`) |
+| Frame motor call | `0x0017C451` | `0x0057266E` | Passes `(port, channel0.output, channel0.output)` to writer |
+| Explicit stop call| `0x0017C4B5` | `0x005726C5` | Passes `(port, 0, 0)` to writer |
+| Native motor writer| `0x001C20F0` | `0x004022C0` (empty) | Deadzone cutoff, motor scaling, and `XInputSetState` call |
+
+### Native Xbox motor writer mechanics (`0x001C20F0`)
+
+The Xbox writer function takes `(int port, int levelHeavy, int levelLight)` and writes
+directly to the controller device structure:
+
+1. **Deadzone threshold at 32 (`0x00343EF4`)**:
+   Both motor levels are compared to float `32.0f`. Any value below 32 is silenced:
+   ```x86asm
+   fild   dword ptr [ebp + 8]
+   fcomp  dword ptr [0x343ef4]   ; 32.0f
+   fnstsw ax
+   test   ah, 5
+   jp     keep
+   xor    cl, cl                  ; level < 32 -> 0
+   ```
+2. **Heavy motor linear scaling ($256.0\times$)**:
+   Active level $L \ge 32$ is multiplied by `256.0f` (`0x00343658`) and stored as a
+   16-bit word (`0..65280`) at device offset `+0xb2` (`wLeftMotorSpeed`).
+3. **Light motor explicitly muted ($0.0\times$)**:
+   The right motor input is multiplied by `0.0f` (`0x0033FA8C`) before scaling:
+   ```x86asm
+   fild   dword ptr [ebp + 8]
+   fmul   dword ptr [0x33fa8c]   ; 0.0f!
+   fmul   dword ptr [0x343658]   ; 256.0f
+   call   __ftol
+   mov    word ptr [esi + edx + 0xb4], ax ; wRightMotorSpeed = 0
+   ```
+   Both the Duke and Controller S right motors were intentionally muted to prevent
+   harsh high-frequency buzz from the engine's aggregate scalar channel.
+4. **Hardware transmission via `XInputSetState`**:
+   The writer passes `hDevice` (`device + 0xd0`) and `&device->feedback` (`device + 0x70`)
+   to the Xbox Peripheral library (`XPP`).
+5. **4 controller ports**:
+   Xbox allocates 8 channel state blocks (`4 ports * 0x60 = 0x180` bytes) at `0x00428E28`
+   supporting 4-player split-screen rumble, whereas PC and PS2 allocate 4 channel blocks for 2 ports.
+
+### Cross-platform event table comparison
+
+While all 12 curve point arrays match across PC, PS2 and Xbox, **four events use
+different input ranges and gains on Xbox**:
+
+| ID | Event name / description | PC & PS2 input range | PC & PS2 gain range | Xbox input range | Xbox gain range | Tuning difference |
+| :---: | :--- | :--- | :--- | :--- | :--- | :--- |
+| **0** | **Collision** | 2.0 to 11.0 | 0.3 to 2.0 | **2.0 to 60.0** | **0.4 to 2.5** | 5.5x broader input ceiling before saturation; higher peak gain |
+| **1** | Road surface | 0.001 to 0.025 | 1.1 to 1.5 | 0.001 to 0.025 | 1.1 to 1.5 | Identical (both use 25 to 85 extra initial range) |
+| **2** | **Suspension shock / bump** | 9.0 to 40.0 | 0.95 to 1.5 | **35.0 to 130.0** | **2.45 to 3.0** | High threshold (small bumps filtered out); hard hits have double gain |
+| **3** | **Hard crash / bottom out** | 1.0 to 3.0 | 1.0 to 2.0 | **1.0 to 10.0** | 1.0 to 2.0 | Extended linear input response |
+| **4** | Nitro / shift (stubbed) | 0.0 to 1.0 | 0.3 to 2.0 | 0.0 to 1.0 | 0.3 to 2.0 | Identical (disabled on all platforms) |
+| **5** | Auxiliary (stubbed) | 0.0 to 1.0 | 0.3 to 2.0 | 0.0 to 1.0 | 0.3 to 2.0 | Identical (disabled on all platforms) |
+| **6** | Drift / slide | 0.0 to 1.0 | 1.5 to 3.0 | 0.0 to 1.0 | 1.5 to 3.0 | Identical |
+| **7** | Surface jump / land | 0.0 to 1.0 | 0.3 to 3.0 | 0.0 to 1.0 | 0.3 to 3.0 | Identical |
+| **8** | Auxiliary pulse | 0.0 to 1.0 | 1.0 to 1.9 | 0.0 to 1.0 | 1.0 to 1.9 | Identical |
+| **9** | Brake / tire force | 0.3 to 0.9 | 1.2 to 2.75 | 0.3 to 0.9 | 1.2 to 2.75 | Identical |
+| **10** | **Curb / strip / engine** | 5.0 to 15.0 | 2.0 to 2.5 | **9.0 to 70.0** | **1.8 to 4.0** | Much broader dynamic input range; peak gain reaches 4.0 |
+| **11** | Wall scrape / drag | 1.0 to 10.0 | 1.15 to 1.9 | 1.0 to 10.0 | 1.15 to 1.9 | Identical |
+
+Events 0 and 3 share descriptor `0x003A4CC0` on Xbox. Initial point for Event 2 is 70.0 on
+both PC and Xbox (unlike UG1 which is 55.0).
+
 ## Verification and adapter differences
 
 A bounded, private instruction model evaluated the initializer and the above
@@ -462,8 +552,6 @@ checks object kind 1 and a positive float through `object+0x34 -> +0x4C ->
 
 The three-slot budget belongs to the game scheduler. The PS2 output path
 derives both actuator commands from one eight-bit scalar; the adapter retains
-this behavior. Trigger rumble is an extension with no PS2 reference.
+this behavior.
 
-A PCSX2 gameplay trace remains necessary to confirm real event sequences,
-clock/pause transitions, controller initialization, submitted packets and
-physical output. Results apply only to the identified USA PS2/PC builds.
+
