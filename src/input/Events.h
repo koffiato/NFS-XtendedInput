@@ -69,36 +69,6 @@ int Scanner_DigitalDownAnalog(void* EventNode, unsigned int* unk1, unsigned int 
 	return Scanner_DigitalDownAnalog_XInput(EventNode, unk1, unk2, inScannerConfig, Joystick) | Scanner_DigitalDown_KB(EventNode, unk1, unk2, inScannerConfig, Joystick);
 }
 
-int Scanner_DigitalAnyButton(void* EventNode, unsigned int* unk1, unsigned int unk2, ScannerConfig* inScannerConfig, void* Joystick)
-{
-	int ci = 0;
-	if ((int)Joystick == JOY2_ADDR)
-		ci = 1;
-
-	WORD wButtons = g_Controllers[ci].state.Gamepad.wButtons;
-
-	// we're using BitmaskStuff to define which button is actually pressed
-	if ((wButtons) != EventStates[ci][inScannerConfig->JoyEvent])
-	{
-		// on change to TRUE -- return 0xFF + JoyEvent number (normally this is a number defined in scannerconfig)
-		if ((wButtons))
-		{
-			EventStates[ci][inScannerConfig->JoyEvent] = (wButtons);
-			return inScannerConfig->JoyEvent + (inScannerConfig->param << 8);
-		}
-		// on change to FALSE -- return JoyEvent number
-		if (!(wButtons & inScannerConfig->BitmaskStuff))
-		{
-			EventStates[ci][inScannerConfig->JoyEvent] = (wButtons);
-			return inScannerConfig->JoyEvent;
-		}
-	}
-	
-	// otherwise just keep returning zero, we're only returning changes
-	return 0;
-
-}
-
 int Scanner_Analog(void* EventNode, unsigned int* unk1, unsigned int unk2, ScannerConfig* inScannerConfig, void* Joystick)
 {
 	int ci = 0;
@@ -142,8 +112,6 @@ int Scanner_Analog(void* EventNode, unsigned int* unk1, unsigned int unk2, Scann
 	if (inScannerConfig->JoyEvent == JOY_EVENT_HYDRAULIC_BOUNCE_ANALOG_UD)
 		axis = -axis;
 #endif
-
-	//printf("%s 0x%hX\n", JoyEventNames[inScannerConfig->JoyEvent], inScannerConfig->JoyEvent + (axis << 8));
 
 	if ((axis != EventStates[ci][inScannerConfig->JoyEvent]) || (inScannerConfig->JoyEvent == JOY_EVENT_THROTTLE_ANALOG) || (inScannerConfig->JoyEvent == JOY_EVENT_THROTTLE_ANALOG_ALTERNATE) || (inScannerConfig->JoyEvent == JOY_EVENT_BRAKE_ANALOG) || (inScannerConfig->JoyEvent == JOY_EVENT_BRAKE_ANALOG_ALTERNATE))
 	{
@@ -325,8 +293,6 @@ class InputDevice {
   }
   virtual bool IsWheel() { return false; }
   virtual void Initialize() {
-    // printf("Called InputDevice::Initialize\n");
-    //*(bool*)FEMOUSECURSOR_ISHIDDEN_ADDR = false;
 
     for (unsigned int i = 0; i < MAX_ACTIONID; i++) {
       if (bIsActionDigitalButton((ActionID)i))
@@ -362,8 +328,6 @@ class InputDevice {
     bool bCurrentVKeyState           = false;
     bool bCurrentVKeyState_SECONDARY = false;
     bool bDoPolling                  = true;
-
-    // printf("FEngPkg: %s\n", cFEng_FindPackageWithControl_Name());
 
 #ifdef GAME_MW
     bool bInShowcase = false;
@@ -519,7 +483,6 @@ class InputDevice {
   virtual bool PSControllerCapability() { return true; }
 #endif
   virtual void StartVibration() {
-    // printf("Called InputDevice::StartVibration\n");
   }
   virtual void StopVibration() {
 #ifdef HAS_CONSOLE_RUMBLE
@@ -528,7 +491,6 @@ class InputDevice {
     if (bRumbleEnabled) mFFB.PauseEffects();
 #endif
     // this seems to be only called when the controller is unplugged...
-    // printf("Called InputDevice::StopVibration\n");
   }
 #ifdef HAS_RUMBLE
   virtual int GetInterfaces() { return bRumbleEnabled ? (int)&mFFB : 0; }

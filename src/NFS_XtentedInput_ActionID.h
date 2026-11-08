@@ -1657,24 +1657,6 @@ bool bIsActionFrontEnd(ActionID in) {
   return false;
 }
 
-bool bIsActionHUD(ActionID in) {
-  switch (in) {
-    case HUDACTION_PAUSEREQUEST:
-    case HUDACTION_ENGAGE_EVENT:
-    case HUDACTION_PAD_LEFT:
-    case HUDACTION_PAD_DOWN:
-    case HUDACTION_PAD_RIGHT:
-    case HUDACTION_SKIPNIS:
-    case HUDACTION_NEXTSONG:
-#ifndef GAME_MW
-    case HUDACTION_VOIPACTIVATION:
-    case HUDACTION_VOIPDEACTIVATION:
-#endif
-      return true;
-  }
-  return false;
-}
-
 bool bIsActionFrontEndNavigation(ActionID in) {
   switch (in) {
     case FRONTENDACTION_UP:
@@ -1690,37 +1672,6 @@ bool bIsActionRelativePosition(ActionID in) {
   switch (in) {
     case FRONTENDACTION_LTRIGGER:
     case FRONTENDACTION_RTRIGGER:
-      return true;
-  }
-  return false;
-}
-
-bool bIsActionAnalogAxis(ActionID in) {
-  switch (in) {
-    case GAMEACTION_STEERLEFT:
-    case GAMEACTION_STEERRIGHT:
-    case GAMEACTION_TURNLEFT:
-    case GAMEACTION_TURNRIGHT:
-    case GAMEACTION_GAS:
-    case GAMEACTION_BRAKE:
-    case FRONTENDACTION_RUP:
-    case FRONTENDACTION_RDOWN:
-    case FRONTENDACTION_RLEFT:
-    case FRONTENDACTION_RRIGHT:
-    case FRONTENDACTION_LTRIGGER:
-    case FRONTENDACTION_RTRIGGER:
-    case DEBUGACTION_MOVE_UP:
-    case DEBUGACTION_MOVE_DOWN:
-    case DEBUGACTION_MOVE_LEFT:
-    case DEBUGACTION_MOVE_RIGHT:
-    case DEBUGACTION_MOVE_FORWARD:
-    case DEBUGACTION_MOVE_BACK:
-    case DEBUGACTION_LOOK_UP:
-    case DEBUGACTION_LOOK_DOWN:
-    case DEBUGACTION_LOOK_LEFT:
-    case DEBUGACTION_LOOK_RIGHT:
-    case DEBUGACTION_TURBO:
-    case DEBUGACTION_SUPER_TURBO:
       return true;
   }
   return false;

@@ -21,9 +21,9 @@ enum RumbleTriggerMode {
   kTriggerModeCount,
 };
 
-int   RumbleTriggerMode          = kTriggersAuto;
-float fRumbleTriggerIntensity    = 1.0f;
-bool  bRumbleTriggerPedalScaling = true;  // trigger effects grow with how far the pedal is pressed
+int   RumbleTriggerMode          = ConfigDefaults::Rumble::ImpulseTriggers;
+float fRumbleTriggerIntensity    = ConfigDefaults::Rumble::TriggerIntensity;
+bool  bRumbleTriggerPedalScaling = ConfigDefaults::Rumble::TriggerPedalScaling;  // trigger effects grow with how far the pedal is pressed
 
 namespace RumbleWGI {
 typedef HRESULT(WINAPI* RoInitialize_t)(RO_INIT_TYPE);

@@ -1,3 +1,4 @@
+#define GAME_UG2
 // Integration checks against the supported executable's mapped feedback code/data.
 // Executes native feedback routines in a private mapped PE; device output is mocked.
 #define WIN32_LEAN_AND_MEAN
@@ -214,11 +215,9 @@ int main(int argc, char** argv) {
   RumblePoll();assert(!motors[0].wLeftMotorSpeed);*(int*)GAMEFLOWMANAGER_STATUS_ADDR=6;
   RumbleNativeOutput(0,255,255); focused=false;
   RumbleNativeOutput(0,255,255);assert(!motors[0].wLeftMotorSpeed && !motors[0].wRightMotorSpeed);focused=true;
-  assert(RumbleSlipTrigger(1,1)==0);
+  float eased = 0.5f;
+  assert(RumblePedalTrigger(1,1,.01f,eased)==0 && eased==0);
   RumbleTriggerMode=kTriggersAuto;
-  assert(RumbleSlipTrigger(1,0)==0 && RumbleSlipTrigger(0,1)==0);
-  assert(RumbleSlipTrigger(1,1)==65535 && RumbleSlipTrigger(1,.5f)==32767);
-  float eased = 0;
   int firstBrake = RumblePedalTrigger(1,1,.01f,eased);
   assert(firstBrake > 4000 && firstBrake < 4500); // a solver step cannot hit full output
   for (int i=0;i<99;++i) RumblePedalTrigger(1,1,.01f,eased);
@@ -236,7 +235,10 @@ int main(int argc, char** argv) {
   assert(middle > .436f && middle < .438f);
   assert(upper > .875f && upper < .878f);
   bRumbleTriggerPedalScaling=false;
-  assert(RumbleSlipTrigger(1,0)==0 && RumbleSlipTrigger(1,.5f)==65535);
+  float unscaled = 0;
+  for (int i=0;i<100;++i) RumblePedalTrigger(1,.5f,.01f,unscaled);
+  assert(unscaled > .998f);
+  assert(RumblePedalTrigger(1,0,.01f,unscaled)==0 && unscaled==0);
   bRumbleTriggerPedalScaling=true;RumbleTriggerMode=kTriggersOff;
   // Binding-aware pedals: alternate analog and keyboard maps are honored.
   EventStates[0][JOY_EVENT_THROTTLE_ANALOG_ALTERNATE] = 128;

@@ -1,0 +1,12 @@
+config/inputs.txt
+config/settings.def
+config/bindings.csv
+src/input/Target.h
+src/input/ConfigDefaults.h
+src/input/Bindings.h
+src/input/Keyboard.h
+src/input/StringHash.h
+src/games/UGEvents.h
+src/games/UG2Events.h
+src/NFS_XtentedInput_ActionID.h
+tools/configgen.cpp

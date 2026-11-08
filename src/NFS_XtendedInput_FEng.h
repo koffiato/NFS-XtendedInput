@@ -90,7 +90,6 @@ struct FEObject {
 
 #pragma runtime_checks("", off)
 int(__thiscall* _cFEng_FindPackage)(void* cFEng, char* pkg)         = (int(__thiscall*)(void*, char*))CFENG_FINDPACKAGE_ADDR;
-bool(__thiscall* _cFEng_IsPackageInControl)(void* cFEng, char* pkg) = (bool(__thiscall*)(void*, char*))CFENG_ISPACKAGEINCONTROL_ADDR;
 FEObject* (*FEngFindObject)(char* pkg_name, unsigned int obj_hash)  = (FEObject * (*)(char*, unsigned int)) FENG_FINDOBJECT_ADDR;
 
 #ifdef GAME_MW
@@ -137,7 +136,6 @@ int __declspec(naked) cFEng_FindPackageWithControl() {
 #ifdef GAME_MW
 unsigned int MouseStateArrayOffsetUpdater_Address                            = 0;
 bool(__thiscall* MouseStateArrayOffsetUpdater)(void* CB_Obj, void* FEObject) = (bool(__thiscall*)(void*, void*))FE_MOUSEUPDATER_CALLBACK_ADDR;
-// void(*FEngSetVisible)(void* FEObject) = (void(*)(void*))FENG_SETVISIBLE_ADDR;
 void (*FEngSetInvisible)(void* FEObject) = (void (*)(void*))FENG_SETINVISIBLE_ADDR;
 
 void(__thiscall* CustomTuningScreen_NotificationMessage)(void* thethis, unsigned int unk1, void* FEObject, unsigned int unk2, unsigned int unk3) = (void(
@@ -278,14 +276,6 @@ bool FEngSwapTextureHash(FEObject* inobj, unsigned int target_hash, unsigned int
   return false;
 }
 
-int __stdcall FEngFindImage(char* pkgname, int hash) {
-  int result;
-
-  result = (int)FEngFindObject(pkgname, hash);
-  if (!result || *(int*)(result + 24) != 1) result = 0;
-  return result;
-}
-
 #ifndef GAME_PROSTREET
 void (*FESendKeystroke)(unsigned int key) = (void (*)(unsigned int))FE_SENDKEY_ADDR;
 #endif
@@ -293,37 +283,11 @@ void (*FESendKeystroke)(unsigned int key) = (void (*)(unsigned int))FE_SENDKEY_A
 // functions wrapped because the compiler loves to check the ESP during debugging which causes errors
 int __stdcall cFEng_FindPackage(char* pkg) { return _cFEng_FindPackage(*(void**)CFENG_INSTANCE_ADDR, pkg); }
 
-bool __stdcall cFEng_IsPackageInControl(char* pkg) { return _cFEng_IsPackageInControl(*(void**)CFENG_INSTANCE_ADDR, pkg); }
-
 void FEngSetVisible_Name(char* pkg_name, unsigned int obj_hash) {
   FEObject* obj = FEngFindObject(pkg_name, obj_hash);
   if (obj) FEngSetVisible(obj);
 }
 
-void FEngSetInvisible_Name(char* pkg_name, unsigned int obj_hash) {
-  void* obj = FEngFindObject(pkg_name, obj_hash);
-  if (obj) FEngSetInvisible(obj);
-}
-
-int FEngSetTextureHash_Name(char* pkg_name, unsigned int obj_hash, unsigned int tex_hash) {
-  int obj = FEngFindImage(pkg_name, obj_hash);
-  if (obj) FEngSetTextureHash(obj, tex_hash);
-  return obj;
-}
-
-void FEngSetVisible_CheckObj(FEObject* inobj, unsigned int obj_hash) {
-  if (inobj->NameHash == obj_hash) FEngSetVisible(inobj);
-}
-
-void FEngSetInvisible_CheckObj(FEObject* inobj, unsigned int obj_hash) {
-  if (inobj->NameHash == obj_hash) FEngSetInvisible(inobj);
-}
-
-#ifdef GAME_MW
-void FEngSetLanguageHash_CheckObj(FEObject* inobj, unsigned int obj_hash, unsigned int lang_hash) {
-  if (inobj->NameHash == obj_hash) FEngSetLanguageHash(inobj, lang_hash);
-}
-#endif
 
 void* FEngSetTextureHash_CheckObj(FEObject* inobj, unsigned int obj_hash, unsigned int tex_hash) {
   if (inobj->NameHash == obj_hash) FEngSetTextureHash((int)inobj, tex_hash);

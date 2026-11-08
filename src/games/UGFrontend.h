@@ -20,7 +20,6 @@ enum ResourceFileType
 };
 
 
-
 bool bLoadedConsoleButtonTex = false;
 char LastFEngPackage[128];
 char CurrentSplashText[64];
@@ -28,8 +27,6 @@ char CurrentSplashText[64];
 void* (*CreateResourceFile)(char* filename, int ResType, int unk1, int unk2, int unk3) = (void* (*)(char*, int, int, int, int))0x004482F0;
 void(*ServiceResourceLoading)() = (void(*)())0x004483C0;
 unsigned int(*GetTextureInfo)(unsigned int hash, int unk, int unk2) = (unsigned int(*)(unsigned int, int, int))0x005461C0;
-void(__thiscall* _FEngSetColor)(void* FEObject, unsigned int color) = (void(__thiscall*)(void*, unsigned int))0x004F75B0;
-void(__thiscall* OptionsSelectorMenu_NotificationMessage)(void* UndergroundBriefScreen, unsigned int msg, void* FEObject, unsigned int unk2, unsigned int unk3) = (void(__thiscall*)(void*, unsigned int, void*, unsigned int, unsigned int))0x004D4610;
 
 
 unsigned int ResourceFile_BeginLoading_Addr = 0x00448110;
@@ -64,9 +61,7 @@ unsigned int __stdcall FEHashUpper(const char* instr)
 
 // texture & control stuff
 unsigned int FEPkgMgr_FindPackage_Addr = 0x004F65D0;
-unsigned int FEPackageManager_FindPackage_Addr = 0x004F3F90;
 unsigned int FEngFindObject_Addr = 0x004FFB70;
-unsigned int FEngSendMessageToPackage_Addr = 0x004C96C0;
 unsigned int FEPrintf_Addr = 0x004F68A0;
 #pragma runtime_checks( "", off )
 int __stdcall FEPrintf(void* FEString, const char* format)
@@ -79,17 +74,6 @@ int __stdcall FEPrintf(void* FEString, const char* format)
 	}
 }
 #pragma runtime_checks( "", restore )
-void __stdcall FEngSendMessageToPackage(unsigned int msg, char* dest)
-{
-	_asm
-	{
-		push msg
-		mov eax, dest
-		call FEngSendMessageToPackage_Addr
-		add esp, 4
-	}
-}
-
 unsigned int __stdcall FEPkgMgr_FindPackage(const char* pkgname)
 {
 	unsigned int result = 0;
@@ -97,19 +81,6 @@ unsigned int __stdcall FEPkgMgr_FindPackage(const char* pkgname)
 	{
 		mov eax, pkgname
 		call FEPkgMgr_FindPackage_Addr
-		mov result, eax
-	}
-	return result;
-}
-
-unsigned int __stdcall FEPackageManager_FindPackage(const char* pkgname)
-{
-	unsigned int result = 0;
-	_asm
-	{
-		push 0x00746104
-		mov eax, pkgname
-		call FEPackageManager_FindPackage_Addr
 		mov result, eax
 	}
 	return result;
@@ -173,36 +144,6 @@ int __stdcall FEngFindImage(const char* pkgname, int hash)
 	return result;
 }
 
-unsigned int FEngSetButtonState_Addr = 0x004F5F80;
-void __stdcall FEngSetButtonState(const char* pkgname, unsigned int hash, unsigned int state)
-{
-	int cfeng_instance = *(int*)CFENG_PINSTANCE_ADDR;
-	_asm
-	{
-		push state
-		mov edi, hash
-		mov eax, pkgname
-		push cfeng_instance
-		call FEngSetButtonState_Addr
-		//add esp, 4
-	}
-}
-
-#pragma runtime_checks( "", off )
-void __stdcall FEngSetColor(void* FEObject, unsigned int color)
-{
-	_FEngSetColor(FEObject, color);
-	_asm add esp, 4
-}
-#pragma runtime_checks( "", restore )
-
-// we need to disable controller options menu because they crash the game 
-// (and currently are unusable anyways -- this will require extensive research to hook into the joypad config properly, for now we just stick to an ini config file)
-void DisableControllerOptions()
-{
-	FEngSetButtonState("MU_OptionsSelector_PC.fng", FEHashUpper("Controller"), 0);
-	FEngSetColor((void*)FEngFindObject("MU_OptionsSelector_PC.fng", FEHashUpper("Controller")), 0xFF404040);
-}
 
 void SnoopLastFEPackage(char* format, char* pkg)
 {
@@ -270,8 +211,6 @@ void SetXboxFEButtons(char* pkgname)
 		FEngSetTextureHash(FEImage, XBOXY_HASH);
 	if (FEImage = FEngFindImage(pkgname, 0x83A65176)) // Stock_hotkey
 		FEngSetTextureHash(FEImage, XBOXX_HASH);
-	//if (FEImage = FEngFindImage(pkgname, 0xAD7303C0)) // CreateGame_hotkey
-	//	FEngSetTextureHash(FEImage, XBOXY_HASH);
 	if (FEImage = FEngFindImage(pkgname, 0xC8754FA4)) // Performance_hotkey
 		FEngSetTextureHash(FEImage, XBOXX_HASH);
 	if (FEImage = FEngFindImage(pkgname, 0xA16A1877)) // Changecolor_hotkey -- during car color changer
@@ -290,7 +229,6 @@ void SetXboxFEButtons(char* pkgname)
 		FEngSetTextureHash(FEImage, XBOXLT_HASH);
 	if (FEImage = FEngFindImage(pkgname, 0x6340B326)) // PC_tutorial_02 (tutorial key)
 		FEngSetTextureHash(FEImage, XBOXLT_HASH);
-
 
 
 	// set splash screen text
@@ -324,8 +262,6 @@ void SetPlayStationFEButtons(char* pkgname)
 		FEngSetTextureHash(FEImage, PSSQUARE_HASH);
 	if (FEImage = FEngFindImage(pkgname, 0x83A65176)) // Stock_hotkey
 		FEngSetTextureHash(FEImage, PSSQUARE_HASH);
-	//if (FEImage = FEngFindImage(pkgname, 0xAD7303C0)) // CreateGame_hotkey
-	//	FEngSetTextureHash(FEImage, PSTRIANGLE_HASH);
 	if (FEImage = FEngFindImage(pkgname, 0xC8754FA4)) // Performance_hotkey
 		FEngSetTextureHash(FEImage, PSSQUARE_HASH);
 	if (FEImage = FEngFindImage(pkgname, 0xA16A1877)) // Changecolor_hotkey -- during car color changer
@@ -432,14 +368,3 @@ void __declspec(naked) FEngGlobalCave()
 		jmp FEngGlobalCaveExit
 	}
 }
-#pragma runtime_checks( "", off )
-void __stdcall OptionsSelectorMenu_NotificationMessage_Hook(unsigned int unk1, void* FEObject, unsigned int unk2, unsigned int unk3)
-{
-	unsigned int thethis = 0;
-	_asm mov thethis, ecx
-
-	DisableControllerOptions();
-
-	return OptionsSelectorMenu_NotificationMessage((void*)thethis, unk1, FEObject, unk2, unk3);
-}
-#pragma runtime_checks( "", restore )

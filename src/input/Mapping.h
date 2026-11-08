@@ -1,383 +1,134 @@
 #pragma once
 
 #if INPUT_SCANNERS
-void SetupScannerConfig()
-{
-	InputConfig inireader("");
+unsigned int ScannerDigitalFunction(unsigned int event, bool analog) {
+  if (bIsEventDigitalDownOnly(event))
+    return analog ? (unsigned int)&Scanner_DigitalDownAnalog : (unsigned int)&Scanner_DigitalDown;
+  return analog ? (unsigned int)&Scanner_DigitalAnalog : (unsigned int)&Scanner_DigitalUpOrDown;
+}
 
-	unsigned int inXInputConfigDef = 0;
-
-	for (unsigned int i = 0; i < MAX_JOY_EVENT; i++)
-	{
-		ScannerConfigs[i].JoyEvent = i;
-		ScannerConfigs[i].param = 0xFF;
-		// keyboard VK codes
-		ScannerConfigs[i].keycode = ConvertVKNameToValue(inireader.ReadString("EventsKB", JoyEventNames[i], ""));
-
-		inXInputConfigDef = ConvertXInputOtherConfigDef(inireader.ReadString("Events", JoyEventNames[i], ""));
-		if (!inXInputConfigDef)
-		{
-			if (bIsEventDigitalDownOnly(i))
-				ScannerConfigs[i].ScannerFunctionPointer = (unsigned int)&Scanner_DigitalDown;
-			else
-				ScannerConfigs[i].ScannerFunctionPointer = (unsigned int)&Scanner_DigitalUpOrDown;
-
-			ScannerConfigs[i].BitmaskStuff = ConvertXInputNameToBitmask(inireader.ReadString("Events", JoyEventNames[i], ""));
-		}
-		else
-		{
-			// triggers or sticks or dpad
-			ScannerConfigs[i].BitmaskStuff = inXInputConfigDef;
-			//ScannerConfigs[i].BitmaskStuff2 = inXInputConfigDef;
-
-			if (bIsEventAnalog(i))
-				ScannerConfigs[i].ScannerFunctionPointer = (unsigned int)&Scanner_Analog;
-			else if ((inXInputConfigDef != XINPUT_GAMEPAD_DPAD_CONFIGDEF))
-			{
-				if (bIsEventDigitalDownOnly(i))
-					ScannerConfigs[i].ScannerFunctionPointer = (unsigned int)&Scanner_DigitalDownAnalog;
-				else
-					ScannerConfigs[i].ScannerFunctionPointer = (unsigned int)&Scanner_DigitalAnalog;
-			}
-			// this is horribly broken, drag analog steering goes across all lanes...
-			if ((i == JOY_EVENT_DRAG_RACE_CHANGE_LANE_LEFT_ANALOG) || (i == JOY_EVENT_DRAG_RACE_CHANGE_LANE_RIGHT_ANALOG))
-				ScannerConfigs[i].ScannerFunctionPointer = (unsigned int)&Scanner_Analog_DragSteer;
-		}
-
-		// JOY_EVENT_STEER
-		if ((i == JOY_EVENT_STEER) || (i == JOY_EVENT_STEER_ANALOG))
-		{
-			ScannerConfigs[i].ScannerFunctionPointer = (unsigned int)&Scanner_CombinedSteering;
-		}
-	}
-
-	ScannerConfigs[JOY_EVENT_TYPE_CHANGED].ScannerFunctionPointer = (unsigned int)&Scanner_TypeChanged;
+void SetupScannerConfig() {
+  InputConfig ini;
+  for (unsigned int event = 0; event < MAX_JOY_EVENT; ++event) {
+    ScannerConfig& config = ScannerConfigs[event];
+    config.JoyEvent = event;
+    config.param = 0xFF;
+    config.keycode = ConvertVKNameToValue(ini.ReadString("EventsKB", JoyEventNames[event], ""));
+    WORD analog = (WORD)ConvertXInputOtherConfigDef(ini.ReadString("Events", JoyEventNames[event], ""));
+    if (!analog) {
+      config.BitmaskStuff = ConvertXInputNameToBitmask(ini.ReadString("Events", JoyEventNames[event], ""));
+      config.ScannerFunctionPointer = ScannerDigitalFunction(event, false);
+    } else {
+      config.BitmaskStuff = analog;
+      if (bIsEventAnalog(event)) config.ScannerFunctionPointer = (unsigned int)&Scanner_Analog;
+      else if (analog != XINPUT_GAMEPAD_DPAD_CONFIGDEF) config.ScannerFunctionPointer = ScannerDigitalFunction(event, true);
+      // Drag lane changes use their dedicated steering scanner.
+      if (event == JOY_EVENT_DRAG_RACE_CHANGE_LANE_LEFT_ANALOG || event == JOY_EVENT_DRAG_RACE_CHANGE_LANE_RIGHT_ANALOG)
+        config.ScannerFunctionPointer = (unsigned int)&Scanner_Analog_DragSteer;
+    }
+    if (event == JOY_EVENT_STEER || event == JOY_EVENT_STEER_ANALOG)
+      config.ScannerFunctionPointer = (unsigned int)&Scanner_CombinedSteering;
+  }
+  ScannerConfigs[JOY_EVENT_TYPE_CHANGED].ScannerFunctionPointer = (unsigned int)&Scanner_TypeChanged;
 #ifdef GAME_UG2
-	ScannerConfigs[JOY_EVENT_LIVE_TYPE_CHANGED].ScannerFunctionPointer = (unsigned int)&Scanner_TypeChanged;
+  ScannerConfigs[JOY_EVENT_LIVE_TYPE_CHANGED].ScannerFunctionPointer = (unsigned int)&Scanner_TypeChanged;
 #endif
-	//ScannerConfigs[JOY_EVENT_ANY].ScannerFunctionPointer = (unsigned int)&Scanner_DigitalAnyButton;
-
-	// read steering axis & buttons
-	SteerLeftButton = ConvertXInputNameToBitmask(inireader.ReadString("Events", "SteerLeftButton", ""));
-	SteerRightButton = ConvertXInputNameToBitmask(inireader.ReadString("Events", "SteerRightButton", ""));
-	SteerLeftAxis = ConvertXInputOtherConfigDef(inireader.ReadString("Events", "SteerLeftAxis", "XINPUT_GAMEPAD_LS_LEFT"));
-	SteerRightAxis = ConvertXInputOtherConfigDef(inireader.ReadString("Events", "SteerRightAxis", "XINPUT_GAMEPAD_LS_RIGHT"));
-
-	// read steering VK codes
-	SteerLeftVKey = ConvertVKNameToValue(inireader.ReadString("EventsKB", "KeyboardSteerLeft", "VK_LEFT"));
-	SteerRightVKey = ConvertVKNameToValue(inireader.ReadString("EventsKB", "KeyboardSteerRight", "VK_RIGHT"));
+  SteerLeftButton = ConvertXInputNameToBitmask(ini.ReadString("Events", "SteerLeftButton", ""));
+  SteerRightButton = ConvertXInputNameToBitmask(ini.ReadString("Events", "SteerRightButton", ""));
+  SteerLeftAxis = ConvertXInputOtherConfigDef(ini.ReadString("Events", "SteerLeftAxis", "XINPUT_GAMEPAD_LS_LEFT"));
+  SteerRightAxis = ConvertXInputOtherConfigDef(ini.ReadString("Events", "SteerRightAxis", "XINPUT_GAMEPAD_LS_RIGHT"));
+  SteerLeftVKey = ConvertVKNameToValue(ini.ReadString("EventsKB", "KeyboardSteerLeft", "VK_LEFT"));
+  SteerRightVKey = ConvertVKNameToValue(ini.ReadString("EventsKB", "KeyboardSteerRight", "VK_RIGHT"));
 }
+
 #ifdef GAME_UG
-#define CONFIG_BINDING_DELAY 500
-#define UNBINDER_KEY VK_F5
-void SaveBindingToIni(int JoyEvent, uint16_t bind)
-{
-	InputConfig inireader("");
-	inireader.WriteString("Events", JoyEventNames[JoyEvent], ConvertXInputBitmaskToName(bind));
+const unsigned int CONFIG_BINDING_DELAY = 500;
+const int UNBINDER_KEY = VK_F5;
+
+void SaveBindingToIni(int event, uint16_t binding) {
+  InputConfig ini;
+  ini.WriteString("Events", JoyEventNames[event], ConvertXInputBitmaskToName(binding));
 }
 
-void SaveSteerBindingToIni(char* name, uint16_t bind)
-{
-	InputConfig inireader("");
-	inireader.WriteString("Events", name, ConvertXInputBitmaskToName(bind));
+void SaveBindingToIniKB(int event, int binding) {
+  InputConfig ini;
+  ini.WriteString("EventsKB", JoyEventNames[event], VKeyStrings[binding]);
 }
 
-void SaveBindingToIniKB(int JoyEvent, int bind)
-{
-	InputConfig inireader("");
-	inireader.WriteString("EventsKB", JoyEventNames[JoyEvent], VKeyStrings[bind]);
+void SetUGKeyboardBinding(unsigned int index, bool secondary, int binding) {
+  if (secondary) return; // The keyboard menu exposes primary bindings only.
+  if (index == 3 || index == 4) {
+    bool left = index == 3;
+    unsigned int event = left ? JOY_EVENT_DRAG_RACE_CHANGE_LANE_LEFT : JOY_EVENT_DRAG_RACE_CHANGE_LANE_RIGHT;
+    (left ? SteerLeftVKey : SteerRightVKey) = (USHORT)binding;
+    ScannerConfigs[event].keycode = binding;
+    InputConfig ini;
+    ini.WriteString("EventsKB", left ? "KeyboardSteerLeft" : "KeyboardSteerRight", VKeyStrings[binding]);
+    SaveBindingToIniKB(event, binding);
+    return;
+  }
+  unsigned int event = MapKeyboardConfigToEvent(index);
+  ScannerConfigs[event].keycode = binding;
+  if (binding) ScannerConfigs[event].ScannerFunctionPointer = ScannerDigitalFunction(event, false);
+  SaveBindingToIniKB(event, binding);
 }
 
-void SaveSteerBindingToIniKB(char* name, int bind)
-{
-	InputConfig inireader("");
-	inireader.WriteString("EventsKB", name, VKeyStrings[bind]);
+void SetUGGamepadBinding(unsigned int index, bool secondary, WORD binding, bool analog) {
+  if (index == 3 || index == 4) {
+    bool left = index == 3;
+    InputConfig ini;
+    if (secondary) {
+      (left ? SteerLeftButton : SteerRightButton) = binding;
+      // Digital steering does not also remap drag lane changes.
+      ini.WriteString("Events", left ? "SteerLeftButton" : "SteerRightButton", ConvertXInputBitmaskToName(binding));
+    } else {
+      (left ? SteerLeftAxis : SteerRightAxis) = binding;
+      unsigned int event = left ? JOY_EVENT_DRAG_RACE_CHANGE_LANE_LEFT : JOY_EVENT_DRAG_RACE_CHANGE_LANE_RIGHT;
+      ScannerConfigs[event].BitmaskStuff = binding;
+      ini.WriteString("Events", left ? "SteerLeftAxis" : "SteerRightAxis", ConvertXInputBitmaskToName(binding));
+      SaveBindingToIni(event, binding);
+    }
+    return;
+  }
+  bool pedal = index == 1 || index == 2;
+  if (secondary && !pedal) return;
+  unsigned int event = secondary ? MapSecondaryJoypadConfigToEvent(index) : MapJoypadConfigToEvent(index);
+  ScannerConfigs[event].BitmaskStuff = binding;
+  if (binding) {
+    ScannerConfigs[event].ScannerFunctionPointer = pedal
+        ? (secondary ? (unsigned int)&Scanner_DigitalUpOrDown : (unsigned int)&Scanner_Analog)
+        : ScannerDigitalFunction(event, analog);
+  }
+  SaveBindingToIni(event, binding);
 }
 
-uint32_t BindAcceptTimeBase;
-uint32_t BindAllowTime;
-uint32_t OldSettingIdx;
-void HandleInGameConfigMenu()
-{
-	if (OldSettingIdx != cur_setting_idx)
-	{
-		BindAcceptTimeBase = timeGetTime();
-		BindAllowTime = BindAcceptTimeBase + CONFIG_BINDING_DELAY;
-		OldSettingIdx = cur_setting_idx;
-	}
+uint32_t BindAllowTime = 0;
+uint32_t OldSettingIdx = 0;
 
-	if (cur_setting_idx)
-	{
-		WORD wButtons = g_Controllers[0].state.Gamepad.wButtons;
-		
-		// we want to delay the button reads for just a bit so we don't end up accidentally binding buttons
-		if (timeGetTime() > BindAllowTime)
-		{
-			// keyboard config
-			if (*(int*)CONFIG_JOY_INDEX_ADDR == 0)
-			{
-				int KBkey = KB_GetCurrentPressedKey();
-				if (KBkey != -1)
-				{
-					// REMOVE BINDING BY PRESSING A BUTTON ON KEYBOARD
-					if (KBkey == UNBINDER_KEY)
-					{
-						if ((cur_setting_idx == 3) || (cur_setting_idx == 4))
-						{
-							if (cur_setting_idx == 3)
-							{
-								if (cur_setting_idx_secondary == 0)
-								{
-									SteerLeftVKey = 0;
-									ScannerConfigs[JOY_EVENT_DRAG_RACE_CHANGE_LANE_LEFT].keycode = SteerLeftVKey;
-									SaveSteerBindingToIniKB("KeyboardSteerLeft", SteerLeftVKey);
-									SaveBindingToIniKB(JOY_EVENT_DRAG_RACE_CHANGE_LANE_LEFT, SteerLeftVKey);
-								}
-							}
-							if (cur_setting_idx == 4)
-							{
-								if (cur_setting_idx_secondary == 0)
-								{
-									SteerRightVKey = 0;
-									ScannerConfigs[JOY_EVENT_DRAG_RACE_CHANGE_LANE_RIGHT].keycode = SteerRightVKey;
-									SaveSteerBindingToIniKB("KeyboardSteerRight", SteerRightVKey);
-									SaveBindingToIniKB(JOY_EVENT_DRAG_RACE_CHANGE_LANE_RIGHT, SteerRightVKey);
-								}
-							}
-						}
-						else
-						{
-							if (cur_setting_idx_secondary == 0)
-							{
-								ScannerConfigs[MapKeyboardConfigToEvent(cur_setting_idx)].keycode = 0;
-								SaveBindingToIniKB(MapKeyboardConfigToEvent(cur_setting_idx), ScannerConfigs[MapKeyboardConfigToEvent(cur_setting_idx)].keycode);
-							}
-						}
-
-						cur_setting_idx = 0;
-						return;
-					}
-
-					if ((cur_setting_idx == 3) || (cur_setting_idx == 4))
-					{
-						if (cur_setting_idx == 3)
-						{
-							if (cur_setting_idx_secondary == 0)
-							{
-								SteerLeftVKey = KBkey;
-								ScannerConfigs[JOY_EVENT_DRAG_RACE_CHANGE_LANE_LEFT].keycode = SteerLeftVKey;
-								SaveSteerBindingToIniKB("KeyboardSteerLeft", SteerLeftVKey);
-								SaveBindingToIniKB(JOY_EVENT_DRAG_RACE_CHANGE_LANE_LEFT, SteerLeftVKey);
-							}
-						}
-						if (cur_setting_idx == 4)
-						{
-							if (cur_setting_idx_secondary == 0)
-							{
-								SteerRightVKey = KBkey;
-								ScannerConfigs[JOY_EVENT_DRAG_RACE_CHANGE_LANE_RIGHT].keycode = SteerRightVKey;
-								SaveSteerBindingToIniKB("KeyboardSteerRight", SteerRightVKey);
-								SaveBindingToIniKB(JOY_EVENT_DRAG_RACE_CHANGE_LANE_RIGHT, SteerRightVKey);
-							}
-						}
-					}
-					else
-					{
-						if (cur_setting_idx_secondary == 0)
-						{
-							ScannerConfigs[MapKeyboardConfigToEvent(cur_setting_idx)].keycode = KBkey;
-							if (bIsEventDigitalDownOnly(MapKeyboardConfigToEvent(cur_setting_idx)))
-								ScannerConfigs[MapKeyboardConfigToEvent(cur_setting_idx)].ScannerFunctionPointer = (unsigned int)&Scanner_DigitalDown;
-							else
-								ScannerConfigs[MapKeyboardConfigToEvent(cur_setting_idx)].ScannerFunctionPointer = (unsigned int)&Scanner_DigitalUpOrDown;
-							SaveBindingToIniKB(MapKeyboardConfigToEvent(cur_setting_idx), ScannerConfigs[MapKeyboardConfigToEvent(cur_setting_idx)].keycode);
-						}
-					}
-					cur_setting_idx = 0;
-					return;
-				}
-			}
-			// JoyPad config
-			else
-			{
-				// REMOVE BINDING BY PRESSING A BUTTON ON KEYBOARD
-				if (KB_GetCurrentPressedKey() == UNBINDER_KEY)
-				{
-					if (((cur_setting_idx >= 1) && (cur_setting_idx <= 4)))
-					{
-						if ((cur_setting_idx_secondary == 0))
-						{
-							if ((cur_setting_idx == 1) || (cur_setting_idx == 2))
-							{
-								ScannerConfigs[MapJoypadConfigToEvent(cur_setting_idx)].BitmaskStuff = 0;
-								SaveBindingToIni(MapJoypadConfigToEvent(cur_setting_idx), ScannerConfigs[MapJoypadConfigToEvent(cur_setting_idx)].BitmaskStuff);
-							}
-							if (cur_setting_idx == 3)
-							{
-								SteerLeftAxis = 0;
-								ScannerConfigs[JOY_EVENT_DRAG_RACE_CHANGE_LANE_LEFT].BitmaskStuff = SteerLeftAxis;
-								SaveSteerBindingToIni("SteerLeftAxis", SteerLeftAxis);
-								SaveBindingToIni(JOY_EVENT_DRAG_RACE_CHANGE_LANE_LEFT, SteerLeftAxis);
-							}
-							if (cur_setting_idx == 4)
-							{
-								SteerRightAxis = 0;
-								ScannerConfigs[JOY_EVENT_DRAG_RACE_CHANGE_LANE_RIGHT].BitmaskStuff = SteerRightAxis;
-								SaveSteerBindingToIni("SteerRightAxis", SteerRightAxis);
-								SaveBindingToIni(JOY_EVENT_DRAG_RACE_CHANGE_LANE_RIGHT, SteerRightAxis);
-							}
-						}
-						else
-						{
-							if ((cur_setting_idx == 1) || (cur_setting_idx == 2))
-							{
-								ScannerConfigs[MapSecondaryJoypadConfigToEvent(cur_setting_idx)].BitmaskStuff = 0;
-								SaveBindingToIni(MapSecondaryJoypadConfigToEvent(cur_setting_idx), ScannerConfigs[MapSecondaryJoypadConfigToEvent(cur_setting_idx)].BitmaskStuff);
-							}
-							if (cur_setting_idx == 3)
-							{
-								SteerLeftButton = 0;
-								// TODO: map drag steering to digital steering (or redo its entire handler)
-								SaveSteerBindingToIni("SteerLeftButton", SteerLeftButton);
-							}
-							if (cur_setting_idx == 4)
-							{
-								SteerRightButton = 0;
-								// TODO: map drag steering to digital steering (or redo its entire handler)
-								SaveSteerBindingToIni("SteerRightButton", SteerRightButton);
-							}
-						}
-					}
-					else
-					{
-						if (cur_setting_idx_secondary == 0)
-						{
-							ScannerConfigs[MapJoypadConfigToEvent(cur_setting_idx)].BitmaskStuff = 0;
-							SaveBindingToIni(MapJoypadConfigToEvent(cur_setting_idx), ScannerConfigs[MapJoypadConfigToEvent(cur_setting_idx)].BitmaskStuff);
-						}
-					}
-					cur_setting_idx = 0;
-					return;
-				}
-
-				
-				if (((cur_setting_idx >= 1) && (cur_setting_idx <= 4)))
-				{
-					if ((cur_setting_idx_secondary == 0))
-					{
-						// analog ONLY bindings -- reads only the analog axis and nothing else!
-						uint16_t act = GetAnalogActivity();
-						if (act)
-						{
-							if (cur_setting_idx == 1)
-							{
-								// throttle analog
-								ScannerConfigs[MapJoypadConfigToEvent(cur_setting_idx)].BitmaskStuff = act;
-								ScannerConfigs[MapJoypadConfigToEvent(cur_setting_idx)].ScannerFunctionPointer = (unsigned int)&Scanner_Analog;
-								SaveBindingToIni(MapJoypadConfigToEvent(cur_setting_idx), ScannerConfigs[MapJoypadConfigToEvent(cur_setting_idx)].BitmaskStuff);
-							}
-							if (cur_setting_idx == 2)
-							{
-								// brakes analog
-								ScannerConfigs[MapJoypadConfigToEvent(cur_setting_idx)].BitmaskStuff = act;
-								ScannerConfigs[MapJoypadConfigToEvent(cur_setting_idx)].ScannerFunctionPointer = (unsigned int)&Scanner_Analog;
-								SaveBindingToIni(MapJoypadConfigToEvent(cur_setting_idx), ScannerConfigs[MapJoypadConfigToEvent(cur_setting_idx)].BitmaskStuff);
-							}
-							if (cur_setting_idx == 3)
-							{
-								// steer left analog
-								SteerLeftAxis = act;
-								ScannerConfigs[JOY_EVENT_DRAG_RACE_CHANGE_LANE_LEFT].BitmaskStuff = SteerLeftAxis;
-								SaveSteerBindingToIni("SteerLeftAxis", SteerLeftAxis);
-								SaveBindingToIni(JOY_EVENT_DRAG_RACE_CHANGE_LANE_LEFT, SteerLeftAxis);
-							}
-							if (cur_setting_idx == 4)
-							{
-								// steer right analog
-								SteerRightAxis = act;
-								ScannerConfigs[JOY_EVENT_DRAG_RACE_CHANGE_LANE_RIGHT].BitmaskStuff = SteerRightAxis;
-								SaveSteerBindingToIni("SteerRightAxis", SteerRightAxis);
-								SaveBindingToIni(JOY_EVENT_DRAG_RACE_CHANGE_LANE_RIGHT, SteerRightAxis);
-							}
-							cur_setting_idx = 0;
-							return;
-						}
-					}
-					else
-					{
-						// digital ONLY bindings -- reads only the buttons (on the secondary bind)
-						if (wButtons)
-						{
-							if (cur_setting_idx == 1)
-							{
-								// throttle digital
-								ScannerConfigs[MapSecondaryJoypadConfigToEvent(cur_setting_idx)].BitmaskStuff = wButtons;
-								ScannerConfigs[MapSecondaryJoypadConfigToEvent(cur_setting_idx)].ScannerFunctionPointer = (unsigned int)&Scanner_DigitalUpOrDown;
-								SaveBindingToIni(MapSecondaryJoypadConfigToEvent(cur_setting_idx), ScannerConfigs[MapSecondaryJoypadConfigToEvent(cur_setting_idx)].BitmaskStuff);
-							}
-							if (cur_setting_idx == 2)
-							{
-								// brakes digital
-								ScannerConfigs[MapSecondaryJoypadConfigToEvent(cur_setting_idx)].BitmaskStuff = wButtons;
-								ScannerConfigs[MapSecondaryJoypadConfigToEvent(cur_setting_idx)].ScannerFunctionPointer = (unsigned int)&Scanner_DigitalUpOrDown;
-								SaveBindingToIni(MapSecondaryJoypadConfigToEvent(cur_setting_idx), ScannerConfigs[MapSecondaryJoypadConfigToEvent(cur_setting_idx)].BitmaskStuff);
-							}
-							if (cur_setting_idx == 3)
-							{
-								// steer left digital
-								SteerLeftButton = wButtons;
-								// TODO: map drag steering to digital steering (or redo its entire handler)
-								SaveSteerBindingToIni("SteerLeftButton", SteerLeftButton);
-							}
-							if (cur_setting_idx == 4)
-							{
-								// steer right digital
-								SteerRightButton = wButtons;
-								// TODO: map drag steering to digital steering (or redo its entire handler)
-								SaveSteerBindingToIni("SteerRightButton", SteerRightButton);
-							}
-							cur_setting_idx = 0;
-							return;
-						}
-					}
-				}
-				// all other bindings - these can be bound to both analogs and digitals
-				else
-				{
-					uint16_t act = GetAnalogActivity();
-					if (act)
-					{
-						if (cur_setting_idx_secondary == 0)
-						{
-							ScannerConfigs[MapJoypadConfigToEvent(cur_setting_idx)].BitmaskStuff = act;
-							if (bIsEventDigitalDownOnly(MapJoypadConfigToEvent(cur_setting_idx)))
-								ScannerConfigs[MapJoypadConfigToEvent(cur_setting_idx)].ScannerFunctionPointer = (unsigned int)&Scanner_DigitalDownAnalog;
-							else
-								ScannerConfigs[MapJoypadConfigToEvent(cur_setting_idx)].ScannerFunctionPointer = (unsigned int)&Scanner_DigitalAnalog;
-							SaveBindingToIni(MapJoypadConfigToEvent(cur_setting_idx), ScannerConfigs[MapJoypadConfigToEvent(cur_setting_idx)].BitmaskStuff);
-						}
-						cur_setting_idx = 0;
-						return;
-					}
-					else if (wButtons)
-					{
-						// detect which button is pressed
-						if (cur_setting_idx_secondary == 0)
-						{
-							ScannerConfigs[MapJoypadConfigToEvent(cur_setting_idx)].BitmaskStuff = wButtons;
-							if (bIsEventDigitalDownOnly(MapJoypadConfigToEvent(cur_setting_idx)))
-								ScannerConfigs[MapJoypadConfigToEvent(cur_setting_idx)].ScannerFunctionPointer = (unsigned int)&Scanner_DigitalDown;
-							else
-								ScannerConfigs[MapJoypadConfigToEvent(cur_setting_idx)].ScannerFunctionPointer = (unsigned int)&Scanner_DigitalUpOrDown;
-							SaveBindingToIni(MapJoypadConfigToEvent(cur_setting_idx), ScannerConfigs[MapJoypadConfigToEvent(cur_setting_idx)].BitmaskStuff);
-						}
-						cur_setting_idx = 0;
-						return;
-					}
-				}
-			}
-		}
-	}
+void HandleInGameConfigMenu() {
+  unsigned int index = cur_setting_idx;
+  bool secondary = cur_setting_idx_secondary != 0;
+  if (OldSettingIdx != index) {
+    BindAllowTime = timeGetTime() + CONFIG_BINDING_DELAY;
+    OldSettingIdx = index;
+  }
+  // Delay capture so the button that opened the setting is not bound to it.
+  if (!index || timeGetTime() <= BindAllowTime) return;
+  int key = KB_GetCurrentPressedKey();
+  if (*(int*)CONFIG_JOY_INDEX_ADDR == 0) {
+    if (key == -1) return;
+    SetUGKeyboardBinding(index, secondary, key == UNBINDER_KEY ? 0 : key);
+  } else if (key == UNBINDER_KEY) {
+    SetUGGamepadBinding(index, secondary, 0, false);
+  } else {
+    WORD buttons = g_Controllers[0].state.Gamepad.wButtons;
+    bool drivingControl = index >= 1 && index <= 4;
+    WORD analog = drivingControl && secondary ? 0 : GetAnalogActivity();
+    WORD binding = drivingControl ? (secondary ? buttons : analog) : (analog ? analog : buttons);
+    if (!binding) return;
+    SetUGGamepadBinding(index, secondary, binding, analog != 0);
+  }
+  cur_setting_idx = 0;
 }
 #endif
 
@@ -386,6 +137,22 @@ void HandleInGameConfigMenu()
 void        LoadMapping(std::string userProfileName);
 void        ClearAllMappings();
 std::string gProfileName;
+
+// Keep profile creation and fallback behavior identical for load/save/reset.
+std::string UserMappingPath(const std::string& profile) {
+  return std::string(userMappingDir) + '\\' + profile + '\\' + userMappingName;
+}
+
+std::string EnsureUserMapping(const std::string& profile) {
+  std::string path = UserMappingPath(profile);
+  if (!PathFileExists(path.c_str())) {
+    CreateDirectory(userMappingDir, NULL);
+    std::string directory = std::string(userMappingDir) + '\\' + profile;
+    CreateDirectory(directory.c_str(), NULL);
+    if (!CopyFile(defMappingName, path.c_str(), TRUE)) return defMappingName;
+  }
+  return path;
+}
 #pragma runtime_checks("", off)
 #ifdef GAME_MW
 std::string oldProfileName;
@@ -450,66 +217,21 @@ void __stdcall OnLoadDoneHook() {
 
 
 #ifdef GAME_PROSTREET
-void SaveBindingToIni(ActionID id, bool isPrimary, uint16_t bind) {
-  std::string mapFile = userMappingDir;
-  mapFile += '\\';
-  mapFile += gProfileName;
-  mapFile += '\\';
-  mapFile += userMappingName;
-  if (!PathFileExists(mapFile.c_str())) {
-    if (!PathFileExists(userMappingDir)) CreateDirectory(userMappingDir, NULL);
-    std::string dirName = userMappingDir;
-    dirName += '\\';
-    dirName += gProfileName;
-    if (!PathFileExists(dirName.c_str())) CreateDirectory(dirName.c_str(), NULL);
-    if (CopyFile(defMappingName, mapFile.c_str(), TRUE) == FALSE) mapFile = defMappingName;
-  }
-
-  mINI::INIFile      inifile(mapFile);
+void SaveMappingValue(ActionID id, const char* section, const char* value) {
+  mINI::INIFile file(EnsureUserMapping(gProfileName));
   mINI::INIStructure ini;
-  inifile.read(ini);
-
-  if (bind == 0) {
-    if (ini.has(isPrimary ? "Events" : "Events_Secondary")) {
-      ini[isPrimary ? "Events" : "Events_Secondary"][ActionIDStr[id]] = "";
-      inifile.write(ini, true);
-    }
-    return;
-  }
-
-  ini[isPrimary ? "Events" : "Events_Secondary"][ActionIDStr[id]] = ConvertXInputBitmaskToName(bind);
-  inifile.write(ini, true);
+  file.read(ini);
+  if (!*value && !ini.has(section)) return;
+  ini[section][ActionIDStr[id]] = value;
+  file.write(ini, true);
 }
 
-void SaveBindingToIniKB(ActionID id, bool isPrimary, int bind) {
-  std::string mapFile = userMappingDir;
-  mapFile += '\\';
-  mapFile += gProfileName;
-  mapFile += '\\';
-  mapFile += userMappingName;
-  if (!PathFileExists(mapFile.c_str())) {
-    if (!PathFileExists(userMappingDir)) CreateDirectory(userMappingDir, NULL);
-    std::string dirName = userMappingDir;
-    dirName += '\\';
-    dirName += gProfileName;
-    if (!PathFileExists(dirName.c_str())) CreateDirectory(dirName.c_str(), NULL);
-    if (CopyFile(defMappingName, mapFile.c_str(), TRUE) == FALSE) mapFile = defMappingName;
-  }
+void SaveBindingToIni(ActionID id, bool isPrimary, uint16_t binding) {
+  SaveMappingValue(id, isPrimary ? "Events" : "Events_Secondary", binding ? ConvertXInputBitmaskToName(binding) : "");
+}
 
-  mINI::INIFile      inifile(mapFile);
-  mINI::INIStructure ini;
-  inifile.read(ini);
-
-  if (bind == 0) {
-    if (ini.has(isPrimary ? "EventsKB" : "EventsKB_Secondary")) {
-      ini[isPrimary ? "EventsKB" : "EventsKB_Secondary"][ActionIDStr[id]] = "";
-      inifile.write(ini, true);
-    }
-    return;
-  }
-
-  ini[isPrimary ? "EventsKB" : "EventsKB_Secondary"][ActionIDStr[id]] = VKeyStrings[bind];
-  inifile.write(ini, true);
+void SaveBindingToIniKB(ActionID id, bool isPrimary, int binding) {
+  SaveMappingValue(id, isPrimary ? "EventsKB" : "EventsKB_Secondary", binding ? VKeyStrings[binding] : "");
 }
 
 void ClearExistingMapKB(int bind) {
@@ -543,87 +265,37 @@ void ClearExistingMap(uint16_t bind) {
 }
 
 bool HandleKeyboardRemap(uint32_t index, uint32_t isPrimary) {
-  int      KBkey = g_bRemapClear ? 0 : KB_GetCurrentPressedKey();
-  ActionID id    = FindPCRemapActionID(index);
-  if (KBkey != -1) {
-    ClearExistingMapKB(KBkey);
-    if (isPrimary)
-      VKeyBindings_PRIMARY[id] = KBkey;
-    else
-      VKeyBindings_SECONDARY[id] = KBkey;
-    SaveBindingToIniKB(id, isPrimary, KBkey);
-    return true;
-  }
-  return false;
+  int key = g_bRemapClear ? 0 : KB_GetCurrentPressedKey();
+  if (key == -1) return false;
+  ActionID id = FindPCRemapActionID(index);
+  ClearExistingMapKB(key);
+  (isPrimary ? VKeyBindings_PRIMARY : VKeyBindings_SECONDARY)[id] = key;
+  SaveBindingToIniKB(id, isPrimary, key);
+  return true;
 }
 
 bool HandleGamepadRemap(uint32_t index, uint32_t isPrimary, int fDeviceIndex) {
   ActionID id = FindPCRemapActionID(index);
-  if (g_bRemapClear) {
-    if (isPrimary)
-      XInputBindings_PRIMARY[id] = 0;
-    else
-      XInputBindings_SECONDARY[id] = 0;
-    SaveBindingToIni(id, isPrimary, 0);
-    if (bIsActionTextureBindable(id)) SetBindingButtonTexture(id, isPrimary ? XInputBindings_PRIMARY[id] : XInputBindings_SECONDARY[id]);
-    return true;
+  WORD binding = 0;
+  if (!g_bRemapClear) {
+    binding = GetAnalogActivity();
+    if (!binding) binding = g_Controllers[fDeviceIndex].state.Gamepad.wButtons;
+    if (!binding) return false;
+    ClearExistingMap(binding);
   }
-
-  uint16_t act = GetAnalogActivity();
-  if (act) {
-    ClearExistingMap(act);
-    if (isPrimary)
-      XInputBindings_PRIMARY[id] = act;
-    else
-      XInputBindings_SECONDARY[id] = act;
-    SaveBindingToIni(id, isPrimary, act);
-    if (bIsActionTextureBindable(id)) SetBindingButtonTexture(id, isPrimary ? XInputBindings_PRIMARY[id] : XInputBindings_SECONDARY[id]);
-    return true;
-  }
-
-  WORD buttons = g_Controllers[fDeviceIndex].state.Gamepad.wButtons;
-  if (buttons) {
-    ClearExistingMap(buttons);
-    if (isPrimary)
-      XInputBindings_PRIMARY[id] = buttons;
-    else
-      XInputBindings_SECONDARY[id] = buttons;
-    SaveBindingToIni(id, isPrimary, buttons);
-    if (bIsActionTextureBindable(id)) SetBindingButtonTexture(id, isPrimary ? XInputBindings_PRIMARY[id] : XInputBindings_SECONDARY[id]);
-    return true;
-  }
-
-  return false;
+  (isPrimary ? XInputBindings_PRIMARY : XInputBindings_SECONDARY)[id] = binding;
+  SaveBindingToIni(id, isPrimary, binding);
+  if (bIsActionTextureBindable(id)) SetBindingButtonTexture(id, binding);
+  return true;
 }
 #pragma runtime_checks("", off)
 void __stdcall ResetMappingsToDefault() {
   void*    that;
   _asm mov that, ecx
 
-  std::string mapFile = userMappingDir;
-  mapFile += '\\';
-  mapFile += gProfileName;
-  mapFile += '\\';
-  mapFile += userMappingName;
-  if (!PathFileExists(mapFile.c_str())) {
-    if (!PathFileExists(userMappingDir)) CreateDirectory(userMappingDir, NULL);
-    std::string dirName = userMappingDir;
-    dirName += '\\';
-    dirName += gProfileName;
-    if (!PathFileExists(dirName.c_str())) CreateDirectory(dirName.c_str(), NULL);
-    if (CopyFile(defMappingName, mapFile.c_str(), TRUE) == FALSE) mapFile = defMappingName;
-  } else {
-    DeleteFile(mapFile.c_str());
-  }
+  DeleteFile(UserMappingPath(gProfileName).c_str());
   ClearAllMappings();
   LoadMapping(gProfileName);
-
-  //for (unsigned int i = 0; i < MAX_ACTIONID; i++) {
-  //  SaveBindingToIni((ActionID)i, true, XInputBindings_PRIMARY[i]);
-  //  SaveBindingToIni((ActionID)i, false, XInputBindings_SECONDARY[i]);
-  //  SaveBindingToIniKB((ActionID)i, true, VKeyBindings_PRIMARY[i]);
-  //  SaveBindingToIniKB((ActionID)i, false, VKeyBindings_SECONDARY[i]);
-  //}
 
   reinterpret_cast<void(__thiscall*)(void*)>(0x0070BDE0)(that);
 }
@@ -640,24 +312,7 @@ void ClearAllMappings() {
 }
 
 void LoadMapping(std::string userProfileName) {
-  std::string mapFile = userMappingDir;
-
-  if (userProfileName.empty()) {
-    mapFile = defMappingName;
-  } else {
-    mapFile += '\\';
-    mapFile += userProfileName;
-    mapFile += '\\';
-    mapFile += userMappingName;
-    if (!PathFileExists(mapFile.c_str())) {
-      if (!PathFileExists(userMappingDir)) CreateDirectory(userMappingDir, NULL);
-      std::string dirName = userMappingDir;
-      dirName += '\\';
-      dirName += userProfileName;
-      if (!PathFileExists(dirName.c_str())) CreateDirectory(dirName.c_str(), NULL);
-      if (CopyFile(defMappingName, mapFile.c_str(), TRUE) == FALSE) mapFile = defMappingName;
-    }
-  }
+  std::string mapFile = userProfileName.empty() ? defMappingName : EnsureUserMapping(userProfileName);
 
   mINI::INIFile      inifile(mapFile);
   mINI::INIStructure ini;

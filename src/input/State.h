@@ -1,11 +1,7 @@
 #pragma once
 #include <windows.h>
 #include <XInput.h>
-#if defined(GAME_UG) || defined(GAME_UG2)
-#define INPUT_SCANNERS 1
-#else
-#define INPUT_SCANNERS 0
-#endif
+#include "ConfigDefaults.h"
 #include "Analog.h"
 
 #define MAX_CONTROLLERS 4
@@ -26,33 +22,34 @@ struct CONTROLLER_STATE {
   bool bConnected;
 } g_Controllers[MAX_CONTROLLERS] = {};
 
-WORD INPUT_DEADZONE_LS = (WORD)(0.24f * 32767);
-WORD INPUT_DEADZONE_RS = (WORD)(0.24f * 32767);
-WORD INPUT_DEADZONE_LS_P2 = (WORD)(0.24f * 32767);
-WORD INPUT_DEADZONE_RS_P2 = (WORD)(0.24f * 32767);
-WORD SHIFT_ANALOG_THRESHOLD = (WORD)(0.75f * 32767);
-WORD FEUPDOWN_ANALOG_THRESHOLD = (WORD)(0.50f * 32767);
-WORD TRIGGER_ACTIVATION_THRESHOLD = (WORD)(0.12f * 255);
+constexpr float DEFAULT_STICK_DEADZONE = ConfigDefaults::Deadzone::PercentLS;
+WORD INPUT_DEADZONE_LS = (WORD)(ConfigDefaults::Deadzone::PercentLS * 32767);
+WORD INPUT_DEADZONE_RS = (WORD)(ConfigDefaults::Deadzone::PercentRS * 32767);
+WORD INPUT_DEADZONE_LS_P2 = (WORD)(ConfigDefaults::Deadzone::PercentLS_P2 * 32767);
+WORD INPUT_DEADZONE_RS_P2 = (WORD)(ConfigDefaults::Deadzone::PercentRS_P2 * 32767);
+WORD SHIFT_ANALOG_THRESHOLD = (WORD)(ConfigDefaults::Deadzone::Percent_Shifting * 32767);
+WORD FEUPDOWN_ANALOG_THRESHOLD = (WORD)(ConfigDefaults::Deadzone::Percent_AnalogStickDigital * 32767);
+WORD TRIGGER_ACTIVATION_THRESHOLD = (WORD)(ConfigDefaults::Deadzone::Percent_AnalogTriggerDigital * 255);
 WORD bQuitButtonOldState = 0;
 
 BYTE VKeyStates[2][256] = {};
-unsigned int KeyboardReadingMode = 0;
-unsigned int LastControlledDevice = 0;
+unsigned int KeyboardReadingMode = ConfigDefaults::Input::KeyboardReadingMode;
+unsigned int LastControlledDevice = ConfigDefaults::Icons::FirstControlDevice;
 unsigned int LastControlledDeviceOldState = 0;
-unsigned int ControllerIconMode = 0;
+unsigned int ControllerIconMode = ConfigDefaults::Icons::ControllerIconMode;
 bool KeyboardState = true;
-bool bAllowTwoPlayerKB = false;
+bool bAllowTwoPlayerKB = ConfigDefaults::Input::AllowTwoPlayerKB;
 HANDLE FirstKB = NULL;
 HANDLE SecondKB = NULL;
-bool bXInputOmniMode = false;
-bool bPassConnStatus = true;
+bool bXInputOmniMode = ConfigDefaults::Input::XInputOmniMode;
+bool bPassConnStatus = ConfigDefaults::Input::PassConnStatus;
 bool bGlobalDoPolling = true;
 bool bBlockThisPoll = false;
 bool bInDebugWorldCamera = false;
-bool bEnableSplashTakeover = true;
+bool bEnableSplashTakeover = ConfigDefaults::Icons::EnableSplashTakeover;
 bool bConsoleFEng = false;
-bool bMouseLook = true;
-float MouseLookSensitivity = 1.0f;
+bool bMouseLook = ConfigDefaults::Input::MouseLook;
+float MouseLookSensitivity = ConfigDefaults::Input::MouseLookSensitivity;
 int MouseLook_XSpeed = 0;
 int MouseLook_YSpeed = 0;
 
@@ -63,15 +60,15 @@ bool bMouse2PressedDown = false;
 bool bMouse2PressedDownOldState = false;
 bool bMouse3PressedDown = false;
 bool bMouse3PressedDownOldState = false;
-bool bConfineMouse = false;
+bool bConfineMouse = ConfigDefaults::Input::ConfineMouse;
 int TimeSinceLastMouseMovement = 0;
 int MouseWheelValue = 0;
 float fFEScale = 1.0f;
-bool bUseWin32Cursor = true;
-bool bUseCustomCursor = true;
+bool bUseWin32Cursor = ConfigDefaults::Input::UseWin32Cursor;
+bool bUseCustomCursor = ConfigDefaults::Input::UseCustomCursor;
 bool bLastUsedVirtualMouse = false;
-bool bUseDynamicFEngSwitching = !INPUT_SCANNERS;
-bool bEnableMouseHiding = true;
+bool bUseDynamicFEngSwitching = ConfigDefaults::Icons::UseDynamicFEngSwitching;
+bool bEnableMouseHiding = ConfigDefaults::Input::EnableMouseHiding;
 HCURSOR NFSCursor;
 #define MOUSEHIDE_TIME 5000
 
@@ -79,11 +76,6 @@ float GetAnalogStickValue(int port, WORD binding) {
   return InputAnalogValue(g_Controllers[port].state.Gamepad, binding);
 }
 uint16_t GetAnalogActivity() { return InputAnalogActivity(g_Controllers[0].state.Gamepad); }
-bool bIsAnyAnalogActive() {
-  const XINPUT_GAMEPAD& p = g_Controllers[0].state.Gamepad;
-  return p.sThumbLX || p.sThumbLY || p.sThumbRX || p.sThumbRY || p.bLeftTrigger || p.bRightTrigger;
-}
-
 void InputSetActiveDevice(unsigned int device) {
   LastControlledDevice = device;
   if (bUseDynamicFEngSwitching) bConsoleFEng = device == LASTCONTROLLED_CONTROLLER;

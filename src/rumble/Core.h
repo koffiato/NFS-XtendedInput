@@ -1,5 +1,6 @@
 // Shared rumble math and settings. MIT; original rumble (c) 2026 Martin Penkava.
 #pragma once
+#include "../input/ConfigDefaults.h"
 #include <cmath>
 #include <float.h>
 #include <algorithm>
@@ -23,14 +24,15 @@ enum RumbleCategory {
 };
 
 // Disabled means no rumble patches or device output.
-bool  bRumbleEnabled                             = true;
-bool  bRumbleSwapMotors                          = false;
-float fRumbleIntensity                           = 1.0f;
-float fRumbleLeftScale                           = 1.0f;  // low frequency (heavy) motor
-float fRumbleRightScale                          = 1.0f;  // high frequency (light) motor
-float fRumbleCategoryScale[kRumbleCategoryCount] = {1.0f, 1.0f, 1.0f, 1.0f};
+bool  bRumbleEnabled                             = ConfigDefaults::Rumble::Enabled;
+bool  bRumbleSwapMotors                          = ConfigDefaults::Rumble::SwapMotors;
+float fRumbleIntensity                           = ConfigDefaults::Rumble::Intensity;
+float fRumbleLeftScale                           = ConfigDefaults::Rumble::LeftMotorScale;  // low frequency (heavy) motor
+float fRumbleRightScale                          = ConfigDefaults::Rumble::RightMotorScale;  // high frequency (light) motor
+float fRumbleCategoryScale[kRumbleCategoryCount] = {ConfigDefaults::Rumble::Impacts, ConfigDefaults::Rumble::Surface,
+                                                    ConfigDefaults::Rumble::Tyres, ConfigDefaults::Rumble::Car};
 
-bool bRumbleGearShift = true;
+bool bRumbleGearShift = ConfigDefaults::Rumble::GearShift;
 
 // Legacy envelopes used by ProStreet's experimental path (seconds, 0-255).
 struct RumbleEnvelopePoint {

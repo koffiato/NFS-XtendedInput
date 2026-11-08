@@ -39,6 +39,33 @@ UINT WINAPI ReadRaw(HRAWINPUT, UINT, LPVOID data, PUINT size, UINT) {
 
 LRESULT WINAPI OriginalWindow(HWND, UINT, WPARAM, LPARAM) { return 77; }
 
+void CheckDefault(InputConfig& ini, const char* section, const char* key, int expected) {
+  assert(ini.ReadInteger(section, key, -9999) == expected);
+}
+void CheckDefault(InputConfig& ini, const char* section, const char* key, float expected) {
+  assert(ini.ReadFloat(section, key, -9999) == expected);
+}
+void CheckDefault(InputConfig& ini, const char* section, const char* key, const char* expected) {
+  assert(!strcmp(ini.ReadString(section, key, "missing"), expected));
+}
+
+void CheckGeneratedSettings(InputConfig& ini) {
+  using namespace ConfigDefaults;
+#define CONFIG_BEGIN(section)
+#define CONFIG_END()
+#define CONFIG_SECTION(section, note)
+#define CONFIG_SETTING(scope, section, key, type, value, comment) { \
+  std::string name = (IsScanner && !strcmp(#section, "Deadzone") ? "Deadzone" : "") + std::string(#key); \
+  if ((scope) & Target) CheckDefault(ini, #section, name.c_str(), ConfigDefaults::section::key); \
+  else assert(!*ini.ReadString(#section, name.c_str(), "")); \
+}
+#include "../config/settings.def"
+#undef CONFIG_SETTING
+#undef CONFIG_SECTION
+#undef CONFIG_BEGIN
+#undef CONFIG_END
+}
+
 void CheckSettings() {
   InputConfig config;
   // Each test binary lives under build/tests and owns its adjacent INI.
@@ -56,6 +83,26 @@ void CheckSettings() {
   InitConfig(); // Startup must create the missing INI, not just expose a helper.
   assert(SetCurrentDirectoryA(workingDirectory));
   assert(GetFileAttributesA(config.GetIniPath()) != INVALID_FILE_ATTRIBUTES);
+  // First-run creation must preserve the complete generated text and comments.
+  HMODULE module = (HMODULE)&__ImageBase;
+  HRSRC resource = FindResourceA(module, MAKEINTRESOURCEA(101), RT_RCDATA);
+  DWORD resourceSize = SizeofResource(module, resource);
+  assert(resource && resourceSize);
+  std::vector<char> created(resourceSize);
+  FILE* createdFile = fopen(config.GetIniPath(), "rb");
+  assert(createdFile && fread(created.data(), 1, created.size(), createdFile) == created.size());
+  assert(fgetc(createdFile) == EOF);
+  fclose(createdFile);
+  assert(created[0] == ';');
+  assert(!memcmp(created.data(), LockResource(LoadResource(module, resource)), resourceSize));
+  CheckGeneratedSettings(config);
+#if defined(GAME_UG2) || defined(HAS_RUMBLE)
+  assert(config.ReadInteger("Rumble", "ImpulseTriggers", -1) == 0);
+#endif
+  assert(INPUT_DEADZONE_LS == (WORD)(0.08f * 32767));
+  assert(INPUT_DEADZONE_RS == INPUT_DEADZONE_LS);
+  assert(INPUT_DEADZONE_LS_P2 == INPUT_DEADZONE_LS);
+  assert(INPUT_DEADZONE_RS_P2 == INPUT_DEADZONE_LS);
 #if INPUT_SCANNERS
   assert(!strcmp(config.ReadString("Events","JOY_EVENT_THROTTLE_ANALOG",""),"XINPUT_GAMEPAD_RT"));
   assert(*config.ReadString("EventsKB","JOY_EVENT_THROTTLE",""));
@@ -76,6 +123,8 @@ void CheckSettings() {
   assert(empty != INVALID_HANDLE_VALUE);
   CloseHandle(empty);
   InitConfig(); // An existing empty file is also a customization to preserve.
+  assert(INPUT_DEADZONE_LS == (WORD)(0.08f * 32767));
+  assert(SHIFT_ANALOG_THRESHOLD == (WORD)(ConfigDefaults::Deadzone::Percent_Shifting * 32767));
   WIN32_FILE_ATTRIBUTE_DATA attributes;
   assert(GetFileAttributesExA(config.GetIniPath(), GetFileExInfoStandard, &attributes));
   assert(attributes.nFileSizeHigh == 0 && attributes.nFileSizeLow == 0);
@@ -100,6 +149,133 @@ void CheckSettings() {
   assert(DeleteFileA(config.GetIniPath()));
 #if !INPUT_SCANNERS
   assert(DeleteFileA(bindings.GetIniPath()));
+#endif
+}
+
+void CheckRumbleSettings() {
+#if INPUT_SCANNERS || defined(HAS_RUMBLE)
+  RumbleLoadSettings([](const char*, float fallback) { return fallback; });
+  assert(RumbleTriggerMode == kTriggersOff);
+  assert(!RumbleWGI::ShouldUse() && !RumbleWGI::bTried);
+  InputConfig config;
+  for (int mode : {kTriggersOn, kTriggersAuto}) {
+    config.WriteString("Rumble", "ImpulseTriggers", mode == kTriggersOn ? "1" : "2");
+    assert(config.EnsureDefault());
+    RumbleLoadSettings([&](const char* key, float fallback) { return config.ReadFloat("Rumble", key, fallback); });
+    assert(RumbleTriggerMode == mode);
+  }
+  assert(DeleteFileA(config.GetIniPath()));
+  RumbleLoadSettings([](const char*, float fallback) { return fallback; });
+  assert(RumbleTriggerMode == kTriggersOff);
+#endif
+}
+
+void CheckRemapping() {
+#ifdef GAME_UG
+  InputConfig config;
+  for (unsigned int index : {3u, 4u}) {
+    unsigned int event = index == 3 ? JOY_EVENT_DRAG_RACE_CHANGE_LANE_LEFT : JOY_EVENT_DRAG_RACE_CHANGE_LANE_RIGHT;
+    SetUGKeyboardBinding(index, false, 'A');
+    assert((index == 3 ? SteerLeftVKey : SteerRightVKey) == 'A');
+    assert(ScannerConfigs[event].keycode == 'A');
+    assert(!strcmp(config.ReadString("EventsKB", JoyEventNames[event], ""), "A"));
+    SetUGKeyboardBinding(index, true, 'B');
+    assert(ScannerConfigs[event].keycode == 'A');
+    SetUGKeyboardBinding(index, false, 0);
+    assert(!ScannerConfigs[event].keycode);
+    SetUGGamepadBinding(index, false, XINPUT_GAMEPAD_LT_CONFIGDEF, true);
+    assert((index == 3 ? SteerLeftAxis : SteerRightAxis) == XINPUT_GAMEPAD_LT_CONFIGDEF);
+    assert(ScannerConfigs[event].BitmaskStuff == XINPUT_GAMEPAD_LT_CONFIGDEF);
+    SetUGGamepadBinding(index, true, XINPUT_GAMEPAD_A, false);
+    assert((index == 3 ? SteerLeftButton : SteerRightButton) == XINPUT_GAMEPAD_A);
+    assert(ScannerConfigs[event].BitmaskStuff == XINPUT_GAMEPAD_LT_CONFIGDEF);
+    SetUGGamepadBinding(index, false, 0, false);
+    SetUGGamepadBinding(index, true, 0, false);
+    assert(!ScannerConfigs[event].BitmaskStuff);
+    assert(!(index == 3 ? SteerLeftButton : SteerRightButton));
+  }
+  for (unsigned int index : {1u, 2u, 5u, 6u, 7u, 8u, 9u, 10u, 12u, 14u}) {
+    unsigned int event = MapJoypadConfigToEvent(index);
+    SetUGGamepadBinding(index, false, XINPUT_GAMEPAD_LT_CONFIGDEF, true);
+    assert(ScannerConfigs[event].BitmaskStuff == XINPUT_GAMEPAD_LT_CONFIGDEF);
+    assert(ScannerConfigs[event].ScannerFunctionPointer == (index <= 2
+        ? (unsigned int)&Scanner_Analog : ScannerDigitalFunction(event, true)));
+    SetUGGamepadBinding(index, true, XINPUT_GAMEPAD_A, false);
+    assert(ScannerConfigs[event].BitmaskStuff == XINPUT_GAMEPAD_LT_CONFIGDEF);
+    if (index <= 2) {
+      unsigned int secondary = MapSecondaryJoypadConfigToEvent(index);
+      assert(ScannerConfigs[secondary].BitmaskStuff == XINPUT_GAMEPAD_A);
+      assert(ScannerConfigs[secondary].ScannerFunctionPointer == (unsigned int)&Scanner_DigitalUpOrDown);
+      SetUGGamepadBinding(index, true, 0, false);
+      assert(!ScannerConfigs[secondary].BitmaskStuff);
+    }
+    SetUGGamepadBinding(index, false, XINPUT_GAMEPAD_B, false);
+    assert(ScannerConfigs[event].BitmaskStuff == XINPUT_GAMEPAD_B);
+    SetUGGamepadBinding(index, false, 0, false);
+    assert(!ScannerConfigs[event].BitmaskStuff);
+    unsigned int keyboard = MapKeyboardConfigToEvent(index);
+    SetUGKeyboardBinding(index, false, 'B');
+    assert(ScannerConfigs[keyboard].keycode == 'B');
+    assert(!strcmp(config.ReadString("EventsKB", JoyEventNames[keyboard], ""), "B"));
+    SetUGKeyboardBinding(index, false, 0);
+    assert(!ScannerConfigs[keyboard].keycode);
+  }
+  assert(DeleteFileA(config.GetIniPath()));
+#endif
+}
+
+void CheckProfileFiles() {
+#if !INPUT_SCANNERS
+  char previousDirectory[MAX_PATH], tempDirectory[MAX_PATH], testDirectory[MAX_PATH];
+  char previousDefault[MAX_PATH];
+  strcpy_s(previousDefault, defMappingName);
+  assert(GetCurrentDirectoryA(MAX_PATH, previousDirectory));
+  assert(GetTempPathA(MAX_PATH, tempDirectory));
+  assert(GetTempFileNameA(tempDirectory, "xip", 0, testDirectory));
+  assert(DeleteFileA(testDirectory) && CreateDirectoryA(testDirectory, NULL));
+  assert(SetCurrentDirectoryA(testDirectory));
+  assert(CreateDirectoryA("scripts", NULL));
+  strcpy_s(defMappingName, "template.ini");
+  FILE* fixture = fopen(defMappingName, "w");
+  assert(fixture);
+  fputs("[Events]\nGAMEACTION_GAS = XINPUT_GAMEPAD_RT\n[EventsKB]\nGAMEACTION_GAS = W\n", fixture);
+  fclose(fixture);
+
+  std::string first = EnsureUserMapping("First");
+  std::string second = EnsureUserMapping("Second");
+  assert(first != second && first != defMappingName);
+  mINI::INIFile firstFile(first), secondFile(second);
+  mINI::INIStructure ini;
+  assert(firstFile.read(ini) && ini["Events"]["GAMEACTION_GAS"] == "XINPUT_GAMEPAD_RT");
+  ini["Events"]["GAMEACTION_GAS"] = "XINPUT_GAMEPAD_A";
+  assert(firstFile.write(ini));
+  assert(EnsureUserMapping("First") == first);
+  assert(firstFile.read(ini) && ini["Events"]["GAMEACTION_GAS"] == "XINPUT_GAMEPAD_A");
+  assert(secondFile.read(ini) && ini["Events"]["GAMEACTION_GAS"] == "XINPUT_GAMEPAD_RT");
+#ifdef GAME_PROSTREET
+  gProfileName = "First";
+  SaveBindingToIni(GAMEACTION_GAS, false, XINPUT_GAMEPAD_B);
+  SaveBindingToIniKB(GAMEACTION_GAS, true, 'A');
+  assert(firstFile.read(ini));
+  assert(ini["Events_Secondary"]["GAMEACTION_GAS"] == "XINPUT_GAMEPAD_B");
+  assert(ini["EventsKB"]["GAMEACTION_GAS"] == "A");
+  SaveBindingToIni(GAMEACTION_GAS, false, 0);
+  SaveBindingToIniKB(GAMEACTION_GAS, true, 0);
+  assert(firstFile.read(ini));
+  assert(ini["Events_Secondary"]["GAMEACTION_GAS"].empty() && ini["EventsKB"]["GAMEACTION_GAS"].empty());
+  gProfileName.clear();
+#endif
+  assert(DeleteFileA(defMappingName));
+  assert(EnsureUserMapping("MissingTemplate") == defMappingName);
+  assert(!PathFileExists(UserMappingPath("MissingTemplate").c_str()));
+  assert(DeleteFileA(first.c_str()) && DeleteFileA(second.c_str()));
+  for (const char* profile : {"First", "Second", "MissingTemplate"}) {
+    std::string directory = std::string(userMappingDir) + '\\' + profile;
+    assert(RemoveDirectoryA(directory.c_str()));
+  }
+  assert(RemoveDirectoryA(userMappingDir) && RemoveDirectoryA("scripts"));
+  assert(SetCurrentDirectoryA(previousDirectory) && RemoveDirectoryA(testDirectory));
+  strcpy_s(defMappingName, previousDefault);
 #endif
 }
 
@@ -219,6 +395,9 @@ void CheckBindings() {
 int main() {
   GameWndProc = OriginalWindow;
   CheckSettings();
+  CheckRumbleSettings();
+  CheckRemapping();
+  CheckProfileFiles();
   CheckPolling();
   CheckKeyboard();
   CheckBindings();

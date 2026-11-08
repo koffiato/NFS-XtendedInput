@@ -14,6 +14,7 @@
 #ifndef XTENDEDINPUT_DEFINITIONS_H
 #define XTENDEDINPUT_DEFINITIONS_H
 #pragma once
+#include "input/Target.h"
 
 #include "NFS_XtendedInput.h"
 
@@ -24,9 +25,6 @@
 
 #ifdef GAME_MW
 #define NO_PROFILE_SETTINGS
-#define HAS_RUMBLE 1
-#define HAS_CONSOLE_RUMBLE 1
-
 #define GAMEFLOWMANAGER_STATUS_ADDR        0x00925E90
 #define UTL_ILIST_CONSTRUCTOR_ADDR         0x005D8660
 #define UTL_ILIST_ADD_ADDR                 0x005D7930
@@ -51,7 +49,6 @@
 
 #define CFENG_INSTANCE_ADDR           0x0091CADC
 #define CFENG_FINDPACKAGE_ADDR        0x00516AF0
-#define CFENG_ISPACKAGEINCONTROL_ADDR 0x00516B90
 
 #define GAME_HWND_ADDR 0x00982BF4
 
@@ -351,9 +348,6 @@ void SetTitleScreenText() {
 #endif
 
 #ifdef GAME_CARBON
-#define HAS_RUMBLE 1
-#define HAS_CONSOLE_RUMBLE 1
-
 #define GAMEFLOWMANAGER_STATUS_ADDR        0x00A99BBC
 #define UTL_ILIST_CONSTRUCTOR_ADDR         0x0060DC60
 #define UTL_ILIST_ADD_ADDR                 0x0060DCB0
@@ -378,7 +372,6 @@ void SetTitleScreenText() {
 
 #define CFENG_INSTANCE_ADDR           0x00A97A78
 #define CFENG_FINDPACKAGE_ADDR        0x005983F0
-#define CFENG_ISPACKAGEINCONTROL_ADDR 0x00572350
 
 #define GAME_HWND_ADDR 0x00AB0AD8
 
@@ -706,7 +699,6 @@ void (*InitProfileSettings)() = (void (*)())0x00679BF0;
 
 #ifdef GAME_PROSTREET
 #define NO_QUIT_BUTTON
-#define HAS_RUMBLE 1
 #define GAMEFLOWMANAGER_STATUS_ADDR     0x00ABB510
 #define UTL_ILIST_CONSTRUCTOR_ADDR      0x004613C0
 #define UTL_ILIST_ADD_ADDR              0x00461420
@@ -724,7 +716,6 @@ void (*InitProfileSettings)() = (void (*)())0x00679BF0;
 
 #define CFENG_INSTANCE_ADDR           0x00AB27D8
 #define CFENG_FINDPACKAGE_ADDR        0x005B4D00
-#define CFENG_ISPACKAGEINCONTROL_ADDR 0x0058EDD0
 
 #define GAME_HWND_ADDR 0x00AC6ED8
 
@@ -1036,7 +1027,6 @@ void (*InitProfileSettings)() = (void (*)())0x006A56C0;
 #endif
 
 #ifdef GAME_UC
-#define NO_FENG
 #define NO_QUIT_BUTTON
 
 #define GAMEFLOWMANAGER_STATUS_ADDR     0x00DA57B8
@@ -1094,7 +1084,6 @@ unsigned int DebugWorldCameraMover_Update_Addr = 0x004E4040;
 #ifdef GAME_WORLD
 unsigned int MainBase;
 
-#define NO_FENG
 #define NO_PROFILE_SETTINGS
 #define NO_QUIT_BUTTON
 

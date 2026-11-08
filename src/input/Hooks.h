@@ -14,9 +14,6 @@ void InstallGameHooks()
 	// reroute ScannerConfig table
 	injector::WriteMemory(SCANNERCONFIG_POINTER_ADDR, ScannerConfigs, true);
 	*(int*)0x00704140 = MAX_JOY_EVENT;
-
-	// hook for OptionsSelectorMenu::NotificationMessage to disable controller options (for now)
-	//injector::WriteMemory<unsigned int>(OPTIONSSELECTOR_VTABLE_FUNC_ADDR, (unsigned int)&OptionsSelectorMenu_NotificationMessage_Hook, true);
 	settings_controllers[0].type = 0x13;
 	settings_controllers[1].type = 0x15;
 	injector::WriteMemory<int>(0x00413ADD, (int)(&settings_controllers[0].type), true);
@@ -166,7 +163,6 @@ void* __stdcall InputMapping_Constructor(InputDevice* device, void* AttribCollec
       map.CurrentValue      = -1.0f;
       list_next             = *(int*)(list_current + 4);
       alloc_result          = (int)FastMem_ListAllocator((void*)list_current, (void*)list_next, &map);
-      // STL_List_Add((void*)thethis, 1);
       *(int*)(list_current + 4)   = alloc_result;
       **(int**)(alloc_result + 4) = alloc_result;
     }
@@ -312,19 +308,6 @@ void __stdcall FEPhotoModeStateManager_HandleScreenTick_Hook() {
 void __stdcall FEPhotoModeStateManager_HandleLTrigger_Hook() { return; }
 
 void __stdcall FEPhotoModeStateManager_HandleRTrigger_Hook() { return; }
-#ifdef GAME_CARBON
-int __stdcall ftol2_to_int_bool() {
-  unsigned int obj = 0;
-  _asm mov obj, ecx
-
-      if (obj) {
-    float num = *(float*)(obj + 8);
-    if (num) return 1;
-  }
-  return 0;
-}
-
-#endif
 
 #endif  // GAME_UC
 #pragma runtime_checks("", restore)
@@ -391,7 +374,6 @@ void InstallGameHooks() {
   }
 
   // FORCE CONSOLE OBJECTS TO BE RENDERABLE ON PC
-  // injector::MakeJMP(FENG_HIDEPCOBJ_JMP_FROM, FENG_HIDEPCOBJ_JMP_TO, true); // FEngHidePCObjects
   injector::WriteMemory<unsigned int>(FENG_HIDEPCOBJ_VT_ADDR, (unsigned int)&FEObjectCallback_Function, true);
 
 #ifdef GAME_MW
@@ -514,7 +496,6 @@ void InstallGameHooks() {
 #ifdef GAME_WORLD
   // RECALCULATE FUNCTION POINTERS -- they shift around
   UTL_Com_Object_IList_Constructor = (void*(__thiscall*)(void*, unsigned int))UTL_ILIST_CONSTRUCTOR_ADDR;
-  // InitProfileSettings = (void(*)())(0x756960 + MainBase);
   Managed_Alloc = (void* (*)(int))MANAGED_ALLOCATOR_ADDR;
 
   loc_75E375 = 0x75E375 + MainBase;

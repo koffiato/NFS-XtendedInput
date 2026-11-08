@@ -1,7 +1,6 @@
 """Exercise installable archive contents and refusal of invalid release inputs."""
 from dataclasses import replace
 import hashlib
-import importlib.util
 from pathlib import Path
 import struct
 import sys
@@ -10,22 +9,12 @@ import unittest
 from unittest.mock import patch
 import zipfile
 
-SPEC = importlib.util.spec_from_file_location("release", Path(__file__).resolve().parents[1] / "scripts/release.py")
-release = importlib.util.module_from_spec(SPEC)
-sys.modules[SPEC.name] = release
-SPEC.loader.exec_module(release)
+from config_helpers import REPOSITORY, copy_configuration_sources, config_resources, pe_binary
+
+sys.path.insert(0, str(REPOSITORY / "scripts"))
+from embedded_config import configuration
+import release
 COMMIT = "0123456789abcdef0123456789abcdef01234567"
-
-
-def pe_binary(machine=0x14C):
-    data = bytearray(256)
-    data[:2] = b"MZ"
-    struct.pack_into("<I", data, 0x3C, 128)
-    data[128:132] = b"PE\0\0"
-    struct.pack_into("<H", data, 132, machine)
-    struct.pack_into("<H", data, 150, 0x2000)
-    struct.pack_into("<H", data, 152, 0x10B)
-    return bytes(data)
 
 
 class PackagingTests(unittest.TestCase):
@@ -34,17 +23,12 @@ class PackagingTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
         (self.root / "LICENSE").write_text("Fixture license")
+        copy_configuration_sources(self.root)
 
     def inputs(self, game):
-        config = self.root / "data" / f"Config-{game.name}"
         build = self.root / "build" / game.target
-        config.mkdir(parents=True)
         build.mkdir(parents=True)
-        (build / f"{game.plugin}.asi").write_bytes(pe_binary())
-        (config / f"{game.plugin}.ini").write_bytes(b"[Rumble]\nEnabled = 0\n")
-        (config / "EventReference.txt").write_bytes(b"current action reference")
-        if not game.underground:
-            (config / f"{game.plugin}.default.ini").write_bytes(b"current bindings")
+        (build / f"{game.plugin}.asi").write_bytes(pe_binary(config_resources(self.root, game)))
         upstream = self.root / game.archive
         with zipfile.ZipFile(upstream, "w") as z:
             for name in game.resources:
@@ -65,8 +49,13 @@ class PackagingTests(unittest.TestCase):
                     if not game.underground:
                         expected.add(f"scripts/{game.plugin}.default.ini")
                     self.assertEqual(set(z.namelist()), expected)
-                    self.assertEqual(z.read(f"scripts/{game.plugin}.asi"), pe_binary())
-                    self.assertEqual(z.read(f"scripts/{game.plugin}.ini"), b"[Rumble]\nEnabled = 0\n")
+                    binary = (self.root / "build" / game.target / f"{game.plugin}.asi").read_bytes()
+                    self.assertEqual(z.read(f"scripts/{game.plugin}.asi"), binary)
+                    generated = configuration(binary, game, self.root)
+                    self.assertEqual(z.read(f"scripts/{game.plugin}.ini"), generated[f"{game.plugin}.ini"])
+                    self.assertEqual(z.read("EventReference.txt"), generated["EventReference.txt"])
+                    if not game.underground:
+                        self.assertEqual(z.read(f"scripts/{game.plugin}.default.ini"), generated[f"{game.plugin}.default.ini"])
                     self.assertIn(COMMIT.encode(), z.read("README.md"))
                     self.assertIn(game.feedback.encode(), z.read("README.md"))
                     for name in game.resources:
@@ -96,7 +85,7 @@ class PackagingTests(unittest.TestCase):
                 release.obtain_upstream(release.GAMES["UG2"], self.root)
 
     def test_wrong_architecture_and_truncated_plugins_rejected(self):
-        for data in (b"", b"MZ", pe_binary(0x8664)):
+        for data in (b"", b"MZ", pe_binary(machine=0x8664)):
             with self.subTest(size=len(data)):
                 with self.assertRaises(ValueError):
                     release.validate_binary(data)

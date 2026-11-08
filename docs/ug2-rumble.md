@@ -24,7 +24,7 @@ Edit `[Rumble]` in `scripts/NFSU_XtendedInput.ini`. These are the UG2 settings.
 | `Intensity` | 1.0 | Overall strength, 0-2 |
 | `LeftMotorScale` / `RightMotorScale` | 1.0 / 1.0 | Heavy/light strength, 0-2 |
 | `SwapMotors` | 0 | Swap main motors |
-| `ImpulseTriggers` | 2 | 0 off, 1 broadcast, 2 automatic |
+| `ImpulseTriggers` | 0 | 0 off, 1 broadcast, 2 automatic |
 | `TriggerIntensity` | 1.0 | Trigger strength, 0-2 |
 | `TriggerPedalScaling` | 1 | Scale trigger effects with pedal input |
 | `Telemetry` | 0 | Diagnostic log beside the plugin |

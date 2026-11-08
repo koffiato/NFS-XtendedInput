@@ -1,159 +1,166 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
-<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+<?xml version='1.0' encoding='utf-8'?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003" ToolsVersion="4.0">
   <ItemGroup>
+    <Filter Include="input" />
+    <Filter Include="games" />
+    <Filter Include="rumble" />
+    <Filter Include="_vs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Definitions.h" />
+    <ClInclude Include="Main.hpp" />
     <ClInclude Include="NFS_XtendedInput.h" />
     <ClInclude Include="NFS_XtendedInputButtons.h" />
-    <ClInclude Include="input\StringHash.h" />
-    <ClInclude Include="input\Keyboard.h" />
-    <ClInclude Include="input\Bindings.h" />
-    <ClInclude Include="input\Analog.h" />
     <ClInclude Include="NFS_XtendedInput_FEng.h" />
     <ClInclude Include="NFS_XtendedInput_Rumble.h" />
-    <ClInclude Include="rumble\Core.h" />
-    <ClInclude Include="rumble\Output.h" />
-    <ClInclude Include="rumble\Settings.h" />
-    <ClInclude Include="rumble\Log.h" />
-    <ClInclude Include="rumble\Vehicle.h" />
-    <ClInclude Include="rumble\Surface.h" />
-    <ClInclude Include="rumble\MostWanted.h" />
-    <ClInclude Include="rumble\Telemetry.h" />
-    <ClInclude Include="rumble\ProStreet.h" />
-    <ClInclude Include="rumble\Underground.h" />
     <ClInclude Include="NFS_XtentedInput_ActionID.h" />
-    <ClInclude Include="_vs\stdafx.h">
-      <Filter>_vs</Filter>
-    </ClInclude>
-    <ClInclude Include="Main.hpp" />
-    <ClInclude Include="input\Config.h" />
-    <ClInclude Include="input\Controls.h" />
-    <ClInclude Include="input\Events.h" />
-    <ClInclude Include="input\Frontend.h" />
-    <ClInclude Include="input\Hooks.h" />
-    <ClInclude Include="input\KeyboardState.h" />
-    <ClInclude Include="input\Mapping.h" />
-    <ClInclude Include="input\Poll.h" />
-    <ClInclude Include="input\Settings.h" />
-    <ClInclude Include="input\State.h" />
-    <ClInclude Include="input\Types.h" />
-    <ClInclude Include="input\Window.h" />
-    <ClInclude Include="games\UG.h" />
-    <ClInclude Include="games\UG2.h" />
-    <ClInclude Include="games\UG2Events.h" />
-    <ClInclude Include="games\UG2Frontend.h" />
-    <ClInclude Include="games\UGButtons.h" />
-    <ClInclude Include="games\UGEvents.h" />
-    <ClInclude Include="games\UGFrontend.h" />
     <ClInclude Include="_vs\macros.h">
       <Filter>_vs</Filter>
     </ClInclude>
-    <ClInclude Include="Definitions.h" />
-  </ItemGroup>
-  <ItemGroup>
-    <Filter Include="_vs">
-      <UniqueIdentifier>{dd2fff72-641a-414c-8963-18f8f15ff519}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="_win32">
-      <UniqueIdentifier>{36d66f65-b0eb-4a48-bd79-b371b7124b7b}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="data">
-      <UniqueIdentifier>{b7b13810-75ae-43d9-8b0c-ef547e1c561a}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="data\post-build">
-      <UniqueIdentifier>{fb9cbec8-cf80-4425-beef-7676ae59c530}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="data\Config-Carbon">
-      <UniqueIdentifier>{c803cfa7-804a-4d9d-b2a7-164f0980b0b3}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="data\Config-MW">
-      <UniqueIdentifier>{3246420b-3e82-478d-8a41-a53045f1271b}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="data\Config-ProStreet">
-      <UniqueIdentifier>{62fc524d-476b-46f4-83e2-93091004fdf1}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="data\Config-UC">
-      <UniqueIdentifier>{bceb301d-aecb-4271-bfdd-49949c05b865}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="data\Config-World">
-      <UniqueIdentifier>{24dc8eca-b7f7-4a30-b903-8ae12c4dd437}</UniqueIdentifier>
-    </Filter>
-  </ItemGroup>
-  <ItemGroup>
-    <ClCompile Include="_vs\stdafx.cpp">
+    <ClInclude Include="_vs\stdafx.h">
       <Filter>_vs</Filter>
-    </ClCompile>
-    <ClCompile Include="_win32\dllmain.cpp">
-      <Filter>_win32</Filter>
-    </ClCompile>
+    </ClInclude>
+    <ClInclude Include="games\UG.h">
+      <Filter>games</Filter>
+    </ClInclude>
+    <ClInclude Include="games\UG2.h">
+      <Filter>games</Filter>
+    </ClInclude>
+    <ClInclude Include="games\UG2Events.h">
+      <Filter>games</Filter>
+    </ClInclude>
+    <ClInclude Include="games\UG2Frontend.h">
+      <Filter>games</Filter>
+    </ClInclude>
+    <ClInclude Include="games\UGButtons.h">
+      <Filter>games</Filter>
+    </ClInclude>
+    <ClInclude Include="games\UGEvents.h">
+      <Filter>games</Filter>
+    </ClInclude>
+    <ClInclude Include="games\UGFrontend.h">
+      <Filter>games</Filter>
+    </ClInclude>
+    <ClInclude Include="input\Analog.h">
+      <Filter>input</Filter>
+    </ClInclude>
+    <ClInclude Include="input\Bindings.h">
+      <Filter>input</Filter>
+    </ClInclude>
+    <ClInclude Include="input\Config.h">
+      <Filter>input</Filter>
+    </ClInclude>
+    <ClInclude Include="input\Controls.h">
+      <Filter>input</Filter>
+    </ClInclude>
+    <ClInclude Include="input\Events.h">
+      <Filter>input</Filter>
+    </ClInclude>
+    <ClInclude Include="input\Frontend.h">
+      <Filter>input</Filter>
+    </ClInclude>
+    <ClInclude Include="input\Hooks.h">
+      <Filter>input</Filter>
+    </ClInclude>
+    <ClInclude Include="input\Keyboard.h">
+      <Filter>input</Filter>
+    </ClInclude>
+    <ClInclude Include="input\KeyboardState.h">
+      <Filter>input</Filter>
+    </ClInclude>
+    <ClInclude Include="input\Mapping.h">
+      <Filter>input</Filter>
+    </ClInclude>
+    <ClInclude Include="input\Poll.h">
+      <Filter>input</Filter>
+    </ClInclude>
+    <ClInclude Include="input\Settings.h">
+      <Filter>input</Filter>
+    </ClInclude>
+    <ClInclude Include="input\State.h">
+      <Filter>input</Filter>
+    </ClInclude>
+    <ClInclude Include="input\StringHash.h">
+      <Filter>input</Filter>
+    </ClInclude>
+    <ClInclude Include="input\Types.h">
+      <Filter>input</Filter>
+    </ClInclude>
+    <ClInclude Include="input\Window.h">
+      <Filter>input</Filter>
+    </ClInclude>
+    <ClInclude Include="rumble\Core.h">
+      <Filter>rumble</Filter>
+    </ClInclude>
+    <ClInclude Include="rumble\Log.h">
+      <Filter>rumble</Filter>
+    </ClInclude>
+    <ClInclude Include="rumble\MostWanted.h">
+      <Filter>rumble</Filter>
+    </ClInclude>
+    <ClInclude Include="rumble\Output.h">
+      <Filter>rumble</Filter>
+    </ClInclude>
+    <ClInclude Include="rumble\ProStreet.h">
+      <Filter>rumble</Filter>
+    </ClInclude>
+    <ClInclude Include="rumble\Settings.h">
+      <Filter>rumble</Filter>
+    </ClInclude>
+    <ClInclude Include="rumble\Surface.h">
+      <Filter>rumble</Filter>
+    </ClInclude>
+    <ClInclude Include="rumble\Telemetry.h">
+      <Filter>rumble</Filter>
+    </ClInclude>
+    <ClInclude Include="rumble\Underground.h">
+      <Filter>rumble</Filter>
+    </ClInclude>
+    <ClInclude Include="rumble\Vehicle.h">
+      <Filter>rumble</Filter>
+    </ClInclude>
+    <ClInclude Include="input\Target.h">
+      <Filter>input</Filter>
+    </ClInclude>
+    <ClInclude Include="input\ConfigDefaults.h">
+      <Filter>input</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="Unified.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="$(IntDir)config\DefaultConfig.rc" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\build.cmd" />
+    <None Include="..\scripts\release.py" />
     <None Include="NFS_XtendedInput.licenseheader" />
-    <None Include="..\data\Config-Carbon\NFS_XtendedInput.ini">
-      <Filter>data\Config-Carbon</Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\scripts\generate-config.cmd" />
+    <None Include="..\scripts\targets.py" />
+    <None Include="..\config\bindings.csv">
+      <Filter>config</Filter>
     </None>
-    <None Include="..\data\Config-MW\NFS_XtendedInput.ini">
-      <Filter>data\Config-MW</Filter>
+    <None Include="..\config\provenance.json">
+      <Filter>config</Filter>
     </None>
-    <None Include="..\data\Config-ProStreet\NFS_XtendedInput.ini">
-      <Filter>data\Config-ProStreet</Filter>
-    </None>
-    <None Include="..\data\Config-UC\NFS_XtendedInput.ini">
-      <Filter>data\Config-UC</Filter>
-    </None>
-    <None Include="..\data\Config-World\NFS_XtendedInput.ini">
-      <Filter>data\Config-World</Filter>
-    </None>
-    <None Include="..\data\Config-ProStreet\NFS_XtendedInput.default.ini">
-      <Filter>data\Config-ProStreet</Filter>
-    </None>
-    <None Include="..\data\Config-Carbon\NFS_XtendedInput.default.ini">
-      <Filter>data\Config-Carbon</Filter>
-    </None>
-    <None Include="..\data\Config-MW\NFS_XtendedInput.default.ini">
-      <Filter>data\Config-MW</Filter>
-    </None>
-    <None Include="..\data\Config-UC\NFS_XtendedInput.default.ini">
-      <Filter>data\Config-UC</Filter>
-    </None>
-    <None Include="..\data\Config-World\NFS_XtendedInput.default.ini">
-      <Filter>data\Config-World</Filter>
-    </None>
-    <None Include="..\data\post-build\HasTPK.bat">
-      <Filter>data\post-build</Filter>
-    </None>
-    <None Include="..\data\post-build\HasTPK-MW.bat">
-      <Filter>data\post-build</Filter>
-    </None>
-    <None Include="..\data\post-build\HasTPK-MW-Win7.bat">
-      <Filter>data\post-build</Filter>
-    </None>
-    <None Include="..\data\post-build\HasTPK-Win7.bat">
-      <Filter>data\post-build</Filter>
-    </None>
-    <None Include="..\data\post-build\NoTPK.bat">
-      <Filter>data\post-build</Filter>
-    </None>
-    <None Include="..\data\post-build\NoTPK-Win7.bat">
-      <Filter>data\post-build</Filter>
+    <None Include="..\config\README.md">
+      <Filter>config</Filter>
     </None>
   </ItemGroup>
   <ItemGroup>
-    <Text Include="..\data\Config-Carbon\EventReference.txt">
-      <Filter>data\Config-Carbon</Filter>
-    </Text>
-    <Text Include="..\data\Config-MW\EventReference.txt">
-      <Filter>data\Config-MW</Filter>
-    </Text>
-    <Text Include="..\data\Config-ProStreet\EventReference.txt">
-      <Filter>data\Config-ProStreet</Filter>
-    </Text>
-    <Text Include="..\data\Config-UC\EventReference.txt">
-      <Filter>data\Config-UC</Filter>
-    </Text>
-    <Text Include="..\data\Config-World\EventReference.txt">
-      <Filter>data\Config-World</Filter>
-    </Text>
+    <Filter Include="config" />
   </ItemGroup>
   <ItemGroup>
-    <ResourceCompile Include="DefaultConfig.rc" />
+    <None Include="..\config\settings.def">
+      <Filter>config</Filter>
+    </None>
+    <None Include="..\config\inputs.txt">
+      <Filter>config</Filter>
+    </None>
+    <None Include="..\tools\configgen.cpp" />
+    <None Include="..\scripts\embedded_config.py" />
   </ItemGroup>
 </Project>

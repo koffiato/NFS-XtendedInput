@@ -51,7 +51,7 @@ struct RumbleNativeEvent {
 static_assert(sizeof(RumbleNativeEvent) == 16, "Underground feedback table layout");
 
 bool bRumbleInstalled = false;
-bool bRumbleTelemetry = false;
+bool bRumbleTelemetry = ConfigDefaults::Rumble::Telemetry;
 bool bRumbleOnWGI = false;
 double RumbleLastFrame = 0.0;
 FILE* RumbleLog = NULL;
@@ -385,12 +385,6 @@ void __cdecl RumbleNativeOutput(int port, int smallLevel, int largeLevel) {
   if (!bRumbleInFrame) RumbleSendOutputs();
 }
 
-int RumbleSlipTrigger(float slip, float pedal) {
-  if (RumbleTriggerMode == kTriggersOff) return 0;
-  float gain = bRumbleTriggerPedalScaling ? RumbleClamp(pedal) : (pedal > 0 ? 1.0f : 0.0f);
-  return RumbleMixer::ToMotor(RumbleClamp(slip)*gain, fRumbleTriggerIntensity);
-}
-
 int RumblePedalTrigger(float slip, float pedal, float dt, float& level) {
   if (RumbleTriggerMode == kTriggersOff || !(pedal > 0)) { level = 0; return 0; }
   float demand = RumbleClamp(slip);
@@ -508,7 +502,7 @@ void RumbleInit() {
   // Ignore legacy trigger settings until UG1-specific tyre data is verified.
   RumbleTriggerMode = kTriggersOff;
 #endif
-  bRumbleTelemetry = ini.ReadInteger("Rumble", "Telemetry", 0) != 0;
+  bRumbleTelemetry = ini.ReadInteger("Rumble", "Telemetry", ConfigDefaults::Rumble::Telemetry) != 0;
   if (!bRumbleEnabled) return;
   if (!RumbleValidateHooks()) {
     OutputDebugStringA("XtendedInput rumble: unsupported Underground executable or conflicting hook; rumble disabled.\n");

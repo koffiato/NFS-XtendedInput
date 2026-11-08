@@ -30,6 +30,4 @@ MSVC_WARNINGS_OFF
 
 MSVC_WARNINGS_RESTORE
 
-inline float clampf(const float& val, const float& min, const float& max) { return val < min ? min : val > max ? max : val; }
-
 #endif
