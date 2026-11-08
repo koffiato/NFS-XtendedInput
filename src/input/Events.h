@@ -319,8 +319,6 @@ class InputDevice {
   virtual void PollDevice() {
 #ifdef HAS_CONSOLE_RUMBLE
     mFFB.PollEffects();
-#elif defined(GAME_PROSTREET)
-    mFFB.Watchdog();
 #endif
     if (!bGlobalDoPolling) return;
     if (bBlockThisPoll) { bBlockThisPoll = false; return; }
@@ -497,8 +495,6 @@ class InputDevice {
   virtual void StopVibration() {
 #ifdef HAS_CONSOLE_RUMBLE
     if (bRumbleEnabled) mFFB.Send(0, 0);
-#elif defined(GAME_PROSTREET)
-    if (bRumbleEnabled) mFFB.PauseEffects();
 #endif
     // this seems to be only called when the controller is unplugged...
   }

@@ -1,4 +1,4 @@
-// MW, Carbon and Undercover controller ramps and waves. MIT; see LICENSE and docs/mw-rumble-x360.md.
+// Black Box controller ramps and waves. MIT; see LICENSE and docs/*-rumble-x360.md.
 #pragma once
 #include "Core.h"
 
@@ -33,6 +33,9 @@ struct MWWave {
 struct MWEffects {
   MWRamp collision;
   MWRamp potentialLeft, potentialRight, nos, engineLeft, engineRight, shiftLeft, shiftRight;
+#ifdef GAME_PROSTREET
+  MWRamp bumpLeft, bumpRight;
+#endif
 #ifdef GAME_CARBON
   MWWave draft;
 #endif
@@ -45,7 +48,9 @@ struct MWEffects {
   bool nosOn, engineOn, shifting;
   int potential;
   int outputLeft, outputRight;
+#ifndef GAME_PROSTREET
   double feedbackTime;
+#endif
 
 #if defined(GAME_CARBON) || defined(GAME_UC)
   void Begin() {
@@ -126,10 +131,19 @@ struct MWEffects {
   }
   void Mix(float dt, RumbleMixer& mixer) {
     mixer.Add(kRumbleImpacts, collision.Sample(dt), 0);
+#ifdef GAME_PROSTREET
+    // Retail PS Run (0x825A8CE0) advances these ramps but discards their
+    // results. Only collision, NOS and indexed bumps reach the motor maxima.
+    potentialLeft.Sample(dt); potentialRight.Sample(dt);
+    engineLeft.Sample(dt); engineRight.Sample(dt);
+    shiftLeft.Sample(dt); shiftRight.Sample(dt);
+    mixer.Add(kRumbleSurface, bumpLeft.Sample(dt), bumpRight.Sample(dt));
+#else
     mixer.Add(kRumbleCar, potentialLeft.Sample(dt), potentialRight.Sample(dt));
-    mixer.Add(kRumbleCar, nos.Sample(dt), 0);
     mixer.Add(kRumbleCar, engineLeft.Sample(dt), engineRight.Sample(dt));
     mixer.Add(kRumbleCar, shiftLeft.Sample(dt), shiftRight.Sample(dt));
+#endif
+    mixer.Add(kRumbleCar, nos.Sample(dt), 0);
 #ifdef GAME_CARBON
     mixer.Add(kRumbleCar, 0, draft.Sample(dt));
 #endif

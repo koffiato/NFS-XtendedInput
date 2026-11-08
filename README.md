@@ -7,8 +7,8 @@ rumble support. It targets Windows 10/11 and 32-bit game executables.
 [Underground 1](docs/ug-rumble.md) and [Underground 2](docs/ug2-rumble.md)
 use their native feedback engines with a small output adapter. Underground 2 has optional trigger support.
 
-[Most Wanted](docs/mw-rumble-x360.md), [Carbon](docs/cb-rumble-x360.md) and
-[Undercover](docs/uc-rumble.md) port
+[Most Wanted](docs/mw-rumble-x360.md), [Carbon](docs/cb-rumble-x360.md),
+[Undercover](docs/uc-rumble.md) and [ProStreet](docs/ps-rumble-x360.md) port
 Xbox 360 controller feedback using native PC physics and surface data. Impulse
 triggers are an optional extension.
 
@@ -21,7 +21,7 @@ Current support:
 | Most Wanted (2005) | `MW` | [Xbox 360 feedback and optional impulse triggers](docs/mw-rumble-x360.md) |
 | Carbon | `CB` | [Xbox 360 feedback and optional impulse triggers](docs/cb-rumble-x360.md) |
 | Undercover | `UC` | [Xbox 360 feedback and optional impulse triggers](docs/uc-rumble.md) |
-| ProStreet | `PS` | Experimental native feedback; [research](docs/ps-rumble-x360.md) |
+| ProStreet | `PS` | [Xbox 360 feedback and optional impulse triggers](docs/ps-rumble-x360.md) |
 | World | `W` | Input only; [research](docs/world-rumble.md) |
 
 ## Packages and configuration
@@ -39,7 +39,7 @@ to opt into automatic detection or `1` to broadcast to
 all WGI controllers on supported games.
 * See `EventReference.txt` for the action list.
 * MW's in-game configuration is disabled for now.
-* **When using dynamic icons in UG/UG2, disable Widescreen Fix's icon replacement.**
+* **When using dynamic icons, disable Widescreen Fix's icon replacement.**
 
 Later-game mappings use the pinned upstream
 [1.22 release](https://github.com/xan1242/NFS-XtendedInput/releases/tag/1.22).

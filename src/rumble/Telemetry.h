@@ -24,8 +24,10 @@ void RumbleTelemetryPrintf(const char* fmt, ...) {
       return;
     }
 #ifdef GAME_PROSTREET
-    fprintf(RumbleTelemetryFile, "# PS native PC data; effect envelopes/tuning temporarily shared with MW; Xbox 360 curves not decoded\n");
-    fprintf(RumbleTelemetryFile, "# S,id,collection,PS-live,FFB_ROLL/SKID/SLIP[4 x 8]; '-' means no native attribute\n");
+    fprintf(RumbleTelemetryFile, "# PS Xbox 360 callback transforms, indexed bump ramps and motor routing; native PC surface attributes\n");
+    fprintf(RumbleTelemetryFile, "# S,id,collection,PS-live,FFB_ROLL/SKID/SLIP/DRIFT_SKID[4 x 8 each],bumpThreshold,bumpGain; '-' means no native attribute\n");
+    fprintf(RumbleTelemetryFile, "# E,time,device,frame,slot,wheel,surface,arg0,arg1,arg2,arg3,waveInput (slots 6/7/8/15/16/18; slot 18 input is admitted bump amplitude)\n");
+    fprintf(RumbleTelemetryFile, "# M,time,device,frame,dt,discardedRollLeft,discardedRollRight,mixedLeft,mixedRight\n");
     fprintf(RumbleTelemetryFile, "# P,flags,objectA,objectB,localHandle (raw local-listener contact, before ownership filtering)\n");
 #else
     fprintf(RumbleTelemetryFile, "# S,id,collection,name,renderNoise[freq amp minSpeed maxSpeed],wheelEffect[freq intensity],friction[6],FFB_ROLL/SKID/SLIP[4 x 8]\n");
@@ -84,6 +86,14 @@ void RumbleTelemetryDumpSurfaceUnsafe(int id, const void* surface) {
   RumbleTelemetryDumpFFBWave(surface, 0xBA1297DA);  // FFB_ROLL
   RumbleTelemetryDumpFFBWave(surface, 0x0C149044);  // FFB_SKID
   RumbleTelemetryDumpFFBWave(surface, 0x8FD11D27);  // FFB_SLIP
+#ifdef GAME_PROSTREET
+  RumbleTelemetryDumpFFBWave(surface, ATTRIB_KEY_FFB_DRIFT_SKID);
+  for (unsigned int key : {ATTRIB_KEY_FFB_BUMP_THRESHOLD, ATTRIB_KEY_FFB_BUMP_GAIN}) {
+    float value;
+    if (RumbleReadSurfaceFloat(surface,key,value)) RumbleTelemetryPrintf(",%g",value);
+    else RumbleTelemetryPrintf(",-");
+  }
+#endif
 }
 
 // returns the surface's id in the log, dumping its data the first time it is seen
@@ -115,9 +125,22 @@ struct RumbleTelemetryTick {
   float  fSkid[RUMBLE_MAX_WHEELS];
   float  fPowerband;
   float  fThrottle;
+  unsigned int nFeedbackFrame;
   double fStartTime;
   double fLastFlushTime;
 } RumbleTelemetry;
+
+#ifdef GAME_PROSTREET
+void RumbleTelemetryPSCallback(int device, unsigned int slot, int wheel, const void* surface,
+                               float a, float b, float c, float d, float input) {
+  if (!bRumbleTelemetry) return;
+  double now = RumbleGetTime();
+  if (!RumbleTelemetry.fStartTime) RumbleTelemetry.fStartTime = now;
+  int id = RumbleTelemetrySurfaceId(surface);
+  RumbleTelemetryPrintf("E,%.6f,%d,%u,%u,%d,%d,%.9g,%.9g,%.9g,%.9g,%.9g\n",
+    now-RumbleTelemetry.fStartTime,device,RumbleTelemetry.nFeedbackFrame,slot,wheel,id,a,b,c,d,input);
+}
+#endif
 
 void RumbleTelemetryOutput(int pad, int left, int right, int leftTrigger, int rightTrigger, const char* backend, long result) {
   if (!bRumbleTelemetry || !RumbleTelemetry.fStartTime) return;

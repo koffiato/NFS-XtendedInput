@@ -3,8 +3,9 @@
 ###############################################################################
 * text=auto
 
-# Existing C++ headers include CRLF blobs; check whitespace without flagging CR.
+# Existing C++ files include CRLF blobs; check whitespace without flagging CR.
 *.h whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+*.cpp whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
 
 ###############################################################################
 # Set default behavior for command prompt diff.

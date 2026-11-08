@@ -1,343 +1,236 @@
-# ProStreet feedback research
+# ProStreet controller feedback
 
-PC and Xbox 360 share the Black Box feedback interface architecture, but PC ships
-with stubbed controller effects while Xbox 360 implements the complete native force
-feedback and dual-motor vibration engine. This document consolidates the recovered
-Xbox 360 rumble subsystem, its 24-slot feedback interface, effect state array,
-wave/ramp evaluators, collision calculation formulas, motor output pipeline, PC
-native hook points, adapter implementation rules, and its direct lineage from Most
-Wanted (2005) and Carbon (2006).
+The adapter uses the recovered retail Xbox 360 callback transforms, linear ramps,
+and motor selection rules with native PC surface attributes. Physical controller
+comparison and equivalence of PC/Xbox surface databases remain unverified.
 
-## Binaries and address mapping
+## Reference images
 
-| Input | Size | SHA-256 |
-| --- | ---: | --- |
-| PC Retail Live `prostreet-live.exe` | 24,657,920 | `36d7d61702cbda6e00a88f0a317a56c7a73d83eee50b892dc0e16a64ea9d1a1d` |
-| Retail `default.xex` | 4,812,800 | `4f8b623a2a1ed06555b57da4e70411574ac962bce4b81bb100629ecc518275c2` |
-| XexTool expanded image `default.exe` | 18,087,936 | `49692cddb8a8f666c4f1acec3f8c7df933298d538acb480f2a1f9d877b6d37bd` |
+| Local input | SHA-256 |
+| --- | --- |
+| PC mapped retail `prostreet-live.exe` | `36d7d61702cbda6e00a88f0a317a56c7a73d83eee50b892dc0e16a64ea9d1a1d` |
+| Xbox 360 expanded `default.exe`, title `45410822` | `49692cddb8a8f666c4f1acec3f8c7df933298d538acb480f2a1f9d877b6d37bd` |
 
-PC addresses follow standard Win32 PE image mapping based at `0x00400000`.
+Xbox virtual addresses map to file offsets by subtracting `0x82000000`.
+Executable images and extracted game assets are not distributed with this project.
 
-The Xbox 360 expanded image (`default.exe`) was extracted using `XexTool -e d default.xex default.exe`.
-It loads at base address `0x82000000`, with memory mapping rule `fileOffset = VA - 0x82000000`.
-Its `.text` section spans `0x82140000 - 0x82ADCED4`, with entry point at `0x82A679C8`.
-Original PE timestamp: `0x47266B4C` (Tue Oct 30 02:22:52 2007). Title ID: `45410822` (EA-2082).
+## Native interface and producer
 
-## Feedback interface and producers
+PC `IFeedback` has 21 slots and is embedded at `InputDevice + 0x2C`; the native
+vtable is `0x0098BE6C`. The device getter is slot 9 (`+0x24`, `0x006C7F20`).
+The active Xbox feedback table at `0x820B33F0` contains the shared slots 0-19.
+PC adds a controller-type query at slot 20 (`0x006AD170`). The Xbox words at
+`0x820B3440..0x820B3448` belong to an adjacent object table, not feedback slots
+20-22. Constructor `0x825738F8` installs `0x820B3440` as a separate object's table;
+its entries `0x82573910`, `0x82573930`, and `0x82573940` are not extra rumble events.
+The adapter preserves all 21 entries in the PC interface.
 
-The abstract interface `IFeedback` is embedded at offset `+0x2C` inside the game's concrete
-device class `GameDevice` (owner list at interface `+4`).
-- **PC:** Original `GameDevice` factory is at `0x006C9520`. Interface query `InputDevice::GetInterfaces`
-  is at Slot 9 (`+0x24`), getter `0x006C7F20`. Interface registration handle / type descriptor at
-  `0x004CD5D0` returns string `"IFeedback"` at `0x009F97A4`. Registration into the device interface
-  list uses `IList::Add` (`0x00461420`) and lookup uses `IList::Find` (`0x004614B0`).
-  The concrete PC vtable is at `0x0098BE6C` (21 slots).
-- **Xbox 360:** Interface type descriptor at `0x822A7230` returns string `"IFeedback"` at `0x820867C4`.
-  The outer `GameDevice` vtable is at `0x820B33A8`. The concrete `IFeedback` vtable starts at `0x820B33F0`
-  (24 slots: 21 core slots + 3 secondary/extension methods). The inactive/stub vtable is at `0x820B3450`.
+| Slot | Callback | PC argument layout | Xbox address |
+| ---: | --- | --- | --- |
+| 0 | Destructor | flags | `0x825B2FF8` |
+| 1/2/3 | Pause / Resume / Reset | none | `0x825A9DC8` / `0x825A9E10` / `0x825A9E58` |
+| 4/5 | Begin / End | none | `0x825A9F18` / `0x825A9F98` |
+| 6 | Road roll | front, surface, speed | `0x825A9FA0` |
+| 7 | Tyre skid | surface, skid, range, threshold, load | `0x825AA098` |
+| 8 | Tyre slip | surface, slip, grip | `0x825AA1E0` |
+| 9 | RPM (controller no-op) | three floats | `0x825AA308` |
+| 10 | Shift potential | enum | `0x825AA310` |
+| 11 | NOS | engaged, level | `0x825AA568` |
+| 12 | Engine blown | bool | `0x825AA4B0` |
+| 13 | Shifting | bool | `0x825AA620` |
+| 14 | Reserved | one word | `0x825AA708` |
+| 15 | Drift slip | surface, slip, grip | `0x825AA710` |
+| 16 | Drift skid | surface, skid, range, threshold | `0x825AA870` |
+| 17 | Steering (controller no-op) | float | `0x825A8CA8` |
+| 18 | Indexed bump | wheel, road signal, surface | `0x825AAA18` |
+| 19 | Collision | info reference, iamA, 12-byte vector by value | `0x825AAB88` |
+| 20 | PC controller-type query | none | No Xbox feedback equivalent |
 
-### Vtable slot layout and platform comparison
+PC `LocalPlayer::DoFFB` delegates to `0x004D0CF0`; Xbox delegates to
+`0x822AE230`. Indexed bump is called first per wheel, followed by slip/skid in
+normal physics. Drift physics calls drift skid for rear wheels after the bump.
+The adapter preserves the x86 stack layouts, including the 20-byte collision
+argument list and the producer's surface-first push sequence for slot 18.
 
-| Slot | Method / Event | PC Implementation | Xbox 360 Implementation | Signature and Behavior |
-| ---: | --- | --- | --- | --- |
-| 0 | Destructor | `0x006C7F60` (thunk) | `0x825B2FF8` (thunk) | `this` adjustment `-0x2C`, jumps to `GameDevice` destructor (`0x825A9C68` on X360) |
-| 1 | PauseEffects | `0x006A5A40` | `0x825A9DC8` | Clears `Enabled` byte (`+0x250`), calls `Push` (`0x825A90F0`) |
-| 2 | ResumeEffects | `0x00402CC0` (`ret`) | `0x825A9E10` | Sets `Enabled` byte (`+0x250`) to 1, calls `Push` (`0x825A90F0`) |
-| 3 | ResetEffects | `0x00890020` | `0x825A9E58` | If output device present: zeroes motor volumes `+0x240/+0x244`, zeroes collision ramp `+0x180`, clears `Enabled` byte, calls `Push`. Otherwise no-op |
-| 4 | BeginUpdate | `0x00402CC0` (`ret`) | `0x825A9F18` | Resets master scale `+0x248` to 1.0f; zeroes wave parameters (amp/freq/offset) for 5 wave groups, preserving phases and all 12 ramps |
-| 5 | EndUpdate | `0x00402CC0` (`ret`) | `0x825A9F98` | Empty return (`blr`) |
-| 6 | UpdateRoadNoise | `0x0044AC10` (`ret 0xC`) | `0x825A9FA0` | Key `0xBA1297DA` (`FFB_ROLL`), 4 attribute indices, interpolates via `0x825B68F0`, updates wave Group 0 (`+0x000`) |
-| 7 | UpdateTireSkid | `0x0082D870` (`ret 0x14`)| `0x825AA098` | Key `0x0C149044` (`FFB_SKID`), 4 attribute indices, applies front skid angle scaling, updates wave Group 1 (`+0x040`) |
-| 8 | UpdateTireSlip | `0x0044AC10` (`ret 0xC`) | `0x825AA1E0` | Key `0x8FD11D27` (`FFB_SLIP`), 4 attribute indices, updates wave Group 2 (`+0x080`) |
-| 9 | UpdateRPM | `0x0044AC10` (`ret 0xC`) | `0x825AA308` | Empty return (`blr`); RPM produces no controller vibration |
-| 10 | UpdateShiftPotential | `0x007C71A0` (`ret 4`) | `0x825AA310` | Evaluates potential values 3, 4, 5 (amps 0.5, 0.75, 1.0); duration 3.0s; drives ramps `+0x1A0/+0x1B0`; cached state at `GameDevice + 0x73C` |
-| 11 | UpdateNOS | `0x007B55E0` (`ret 8`) | `0x825AA568` | Rising edge starts ramp `+0x1C0` (Amp: 1.0, Floor: 0.5, Duration: 2.0s); falling edge clears ramp; engaged state at `GameDevice + 0x738` |
-| 12 | UpdateEngineBlown | `0x007C71A0` (`ret 4`) | `0x825AA4B0` | Drives Left ramp `+0x1E0` (1.0 / 0.6) and Right ramp `+0x1F0` (rises to 0.6); duration 1.0s; state at `GameDevice + 0x739` |
-| 13 | UpdateShifting | `0x007C71A0` (`ret 4`) | `0x825AA620` | Drives Left ramp `+0x200` & Right ramp `+0x210` (Amp: 0.4, Floor: 0.4, Duration: 0.5s); state at `GameDevice + 0x73A` |
-| 14 | Reserved / Unused | `0x007C71A0` (`ret 4`) | `0x825AA708` | Empty return (`blr`) |
-| 15 | UpdateDriftSlip | `0x0044AC10` (`ret 0xC`) | `0x825AA710` | Key `0x8FD11D27` (`FFB_SLIP`), evaluates drift slip telemetry, updates wave Group 4 (`+0x100`) |
-| 16 | UpdateDriftSkid | `0x0087E0A0` (`ret 0x10`)| `0x825AA870` | Evaluates drift skid angle and velocity, updates wave Group 5 (`+0x140`) |
-| 17 | SteeringForce | `0x007C71A0` (`ret 4`) | `0x825A8CA8` | Empty return (`blr`) on console controller; wheel forces handled separately |
-| 18 | UpdateRoadWithIndex | `0x0044AC10` (`ret 0xC`) | `0x825AAA18` | Road bump with wheel index (0..3); queries surface attribute `0xE288A6B0`; drives ramps `+0x220` (Left: wheels 0,2) and `+0x230` (Right: wheels 1,3) |
-| 19 | ReportCollision | `0x0082D870` (`ret 0x14`)| `0x825AAB88` | Collision calculations, contact type bitfield extraction, drives Left ramp `+0x180` |
-| 20 | GetControllerType | `0x006AD170` | `0x82573910` | Device type query (returns controller classification) |
-| 21 | SecondaryDeviceQuery | N/A | `0x82573930` | Xbox 360 device extension query |
-| 22 | SecondaryDeviceType | N/A | `0x82573940` | Xbox 360 device interface query |
-| 23 | StubEntry | N/A | `0x825A93D0` | Null handler / return |
+## Slot coverage audit
 
-### Producer calling sequence
+All PC slots are declared in order; allocation of extra state is not evidence of
+additional virtual callbacks or motor contributions.
 
-Feedback production is driven by `LocalPlayer::DoFFB`:
-- **PC:** `0x004D12D0` (vtable `0x009F9FB4`), delegating to producer function `0x004D0CF0`.
-- **Xbox 360:** `0x822AE9F8` (vtable `0x82087884`), delegating to producer function `0x822AE230`.
+| Slots | Coverage / native behavior |
+| --- | --- |
+| 0 | Embedded, non-deleting interface destructor adapter |
+| 1-5 | Lifecycle/ABI implemented; live poll cadence has not been matched against a console trace |
+| 6 | Road roll implemented; primary DoFFB producer uses slot 18 instead |
+| 7-8 | All four skid scalars and both slip scalars preserved and transformed |
+| 9 | Native controller no-op; adapter records RPM telemetry only |
+| 10-13 | Potential, NOS, blown engine and shifting event/ramp state accounted for |
+| 14 | Native no-op retained |
+| 15 | Drift slip implemented; no call from the inspected primary DoFFB loop |
+| 16 | Rear-wheel drift skid implemented with the native drift key |
+| 17 | Native controller steering no-op retained |
+| 18 | Indexed bumps, threshold, gain, side routing and replacement accounted for |
+| 19 | Collision adapter and by-value argument layout accounted for |
+| 20 | PC controller classification query; returns generic controller type 5 |
 
-The producer sequence executes as follows:
-1. **CanDoFFB Validation:** `0x822AE020` on X360 (`0x004D1200` on PC). Checks player profile rumble byte at `settings + 0x1C` (`0xBFB400 + 0x1C` on PC), pause state, demo/replay state, and human AI control. If any check fails, returns immediately.
-2. **Lifecycle Start:** Calls `ResumeEffects` (Slot 2) and `BeginUpdate` (Slot 4).
-3. **Four-Wheel Sampling Loop (wheels 0 to 3):**
-   - Resolves surface pointer. Damaged tyre replaces surface with `0xD929E923`. Airborne wheels use null surface.
-   - Calls **Slot 18 (`UpdateRoadWithIndex`)** passing wheel index (0..3), native road scalar, and surface reference. Note that ProStreet calls road noise **first**, with explicit wheel index routing, whereas Most Wanted called it last.
-   - Calls **Slot 8 (`UpdateTireSlip`)** passing surface, longitudinal slip, and lateral utilization.
-   - Calls **Slot 7 (`UpdateTireSkid`)** passing surface, skid angle, and slip velocity.
-   - If drift physics are active, calls **Slot 16 (`UpdateDriftSkid`)**.
-4. **Car Status Updates:**
-   - Calls **Slot 9 (`UpdateRPM`)**.
-   - Calls **Slot 10 (`UpdateShiftPotential`)**.
-   - Calls **Slot 11 (`UpdateNOS`)**.
-5. **Engine Blown vs Shifting Mutually Exclusive Branch:**
-   ```c
-   if (pVehicle->IsEngineBlown()) {
-       pFeedback->UpdateEngineBlown(true); // Slot 12
-   } else {
-       pFeedback->UpdateShifting(pVehicle->IsShifting()); // Slot 13
-   }
-   ```
-6. **Lifecycle End:** Calls `EndUpdate` (Slot 5).
+Xbox allocates 24 wave channels (six groups of four) and twelve ramps. The
+adapter represents the three wave groups and ten ramps needed by the recovered
+active callbacks. The other two right-hand collision/NOS ramps have no writer in
+those callbacks. The final native mixer samples allocated dormant state but
+omits its result; enabling it would change the reference behavior.
 
-## Console effect state
+The separate device-level StartVibration/StopVibration path uses a 500 ms full
+motor override outside IFeedback. The PC StartVibration method currently remains
+empty. This path is not invoked by the inspected racing feedback producer and
+is not a replacement for kerb, grass or sliding feedback. The Xbox wheel-force
+backend is gated by device capability/subtype and is separate from ordinary
+controller motor output.
 
-Xbox 360 allocates the concrete effect state array at `0x82B97D00`.
-- Stride: `0x254` bytes (596 bytes) per controller port.
-- Capacity: 8 ports (`0x12A0` bytes total).
+The coverage audit has not identified an omitted gameplay callback explaining
+the remaining kerb/grass/sliding discrepancy. Isolated callback/mixer comparisons
+do not establish end-to-end driving parity. In particular, the earlier T rows
+omit the range, threshold, normalized load and grip arguments of the tyre calls.
 
-| Offset Range | Stride / Count | Data Structure | Contents |
-| --- | ---: | --- | --- |
-| `+0x000 .. +0x03F` | `0x10` × 4 | `{float phase, amplitude, freq, offset}` | Wave Group 0: Road Roll Noise (`FFB_ROLL`) |
-| `+0x040 .. +0x07F` | `0x10` × 4 | `{float phase, amplitude, freq, offset}` | Wave Group 1: Tire Skid (`FFB_SKID`) |
-| `+0x080 .. +0x0BF` | `0x10` × 4 | `{float phase, amplitude, freq, offset}` | Wave Group 2: Tire Slip (`FFB_SLIP`) |
-| `+0x0C0 .. +0x0FF` | `0x10` × 4 | `{float phase, amplitude, freq, offset}` | Wave Group 3: Reserved / Secondary surface waves |
-| `+0x100 .. +0x13F` | `0x10` × 4 | `{float phase, amplitude, freq, offset}` | Wave Group 4: Drift Slip (`FFB_SLIP`) |
-| `+0x140 .. +0x17F` | `0x10` × 4 | `{float phase, amplitude, freq, offset}` | Wave Group 5: Drift Skid (`FFB_SKID`) |
-| `+0x180 .. +0x18F` | `0x10` | `{float remaining, duration, amp, floor}` | Ramp 0 (Left): Collision Impact |
-| `+0x190 .. +0x19F` | `0x10` | `{float remaining, duration, amp, floor}` | Ramp 1 (Right): Collision (Unused / zeroed) |
-| `+0x1A0 .. +0x1AF` | `0x10` | `{float remaining, duration, amp, floor}` | Ramp 2 (Left): Shift Potential |
-| `+0x1B0 .. +0x1BF` | `0x10` | `{float remaining, duration, amp, floor}` | Ramp 3 (Right): Shift Potential |
-| `+0x1C0 .. +0x1CF` | `0x10` | `{float remaining, duration, amp, floor}` | Ramp 4 (Left): NOS |
-| `+0x1D0 .. +0x1DF` | `0x10` | `{float remaining, duration, amp, floor}` | Ramp 5 (Right): NOS (Unused) |
-| `+0x1E0 .. +0x1EF` | `0x10` | `{float remaining, duration, amp, floor}` | Ramp 6 (Left): Engine Blown |
-| `+0x1F0 .. +0x1FF` | `0x10` | `{float remaining, duration, amp, floor}` | Ramp 7 (Right): Engine Blown |
-| `+0x200 .. +0x20F` | `0x10` | `{float remaining, duration, amp, floor}` | Ramp 8 (Left): Shifting |
-| `+0x210 .. +0x21F` | `0x10` | `{float remaining, duration, amp, floor}` | Ramp 9 (Right): Shifting |
-| `+0x220 .. +0x22F` | `0x10` | `{float remaining, duration, amp, floor}` | Ramp 10 (Left): Road Bump (wheels 0 and 2) |
-| `+0x230 .. +0x23F` | `0x10` | `{float remaining, duration, amp, floor}` | Ramp 11 (Right): Road Bump (wheels 1 and 3) |
-| `+0x240` | 4 bytes | `float` | Left Motor Final Volume (0.0 .. 1.0) |
-| `+0x244` | 4 bytes | `float` | Right Motor Final Volume (0.0 .. 1.0) |
-| `+0x248` | 4 bytes | `float` | Master Feedback Gain Scale (default 1.0) |
-| `+0x24C` | 4 bytes | `uint32_t` | Reserved / alignment padding |
-| `+0x250` | 1 byte | `uint8_t` | Enabled flag (1 = active, 0 = paused/disabled) |
+## Callback transforms
 
-### Persistent event state fields
+Define `map(x, lo, hi)` as `clamp((x-lo)/(hi-lo), 0, 1)` when
+`hi-lo > 0.000001`, otherwise zero (Xbox helper `0x82141608`).
 
-Unlike the per-tick wave array, persistent trigger tracking fields are located in `GameDevice`:
+Ordinary slip (`0x825AA1E0`) evaluates the `FFB_SLIP` records at:
 
-| Field | `GameDevice` Offset | Data Type | Function |
-| --- | ---: | --- | --- |
-| `mNOSEngaged` | `+0x738` | `uint8_t` | Tracks active NOS state for rising/falling edge detection |
-| `mEngineBlown` | `+0x739` | `uint8_t` | Tracks blown engine state for rising/falling edge detection |
-| `mShifting` | `+0x73A` | `uint8_t` | Tracks manual/automatic gearshift animation state |
-| `mShiftPotential` | `+0x73C` | `uint32_t` | Previous shift potential level (clears ramps when returning to 0) |
+- `1` when slip is strictly below `-0.75`;
+- `0.5 * map(slip, grip, 2)` when slip is above grip;
+- `0` otherwise.
 
-## Surface waves and evaluators
+Ordinary skid (`0x825AA098`) computes:
 
-### Attribute interpolator (`0x825B68F0`)
-
-Surface wave records are stored as 8-float attribute packets in `GLOBAL/attributes.bin`:
-`{float xMin, float y0, float dy, float xMax, ...}`.
-The interpolation helper evaluates:
-```c
-float InterpolateAttribute(const float* record, float input) {
-    float xMin = record[0];
-    float y0   = record[1];
-    float dy   = record[2];
-    float xMax = record[3];
-    if (input >= xMin && xMin < xMax) {
-        float fraction = (input - xMin) / (xMax - xMin);
-        if (fraction > 1.0f) fraction = 1.0f;
-        return y0 + dy * fraction;
-    }
-    return 0.0f;
-}
+```
+level = skid < threshold
+    ? map(skid, range, threshold)
+    : 1 - map(skid, threshold, range + threshold)
+input = pow(level, (1 - load) * 2) * load
 ```
 
-### Surface keys and parameters
+It evaluates `FFB_SKID` at this input. No MW front-wheel damping or absolute-value
+substitution is applied. Drift slip and skid use their separately recovered
+piecewise transforms in `src/rumble/ProStreet.h`. Drift skid queries key
+`0x35A8EADA`. Both drift callbacks write the normal slip/skid groups at state
+`+0x80/+0x40`; they do not write the allocated groups at `+0x100/+0x140`.
 
-1. **Road Noise (`FFB_ROLL`, `0xBA1297DA`):**
-   Queried in Slot 6. Reads 4 native attribute indices across wheels. Independent maximum taken across wheels.
-2. **Tire Skid (`FFB_SKID`, `0x0C149044`):**
-   Queried in Slot 7. Front-wheel skid angle input is scaled by 0.25; rear wheels take 1.0. Updates wave Group 1.
-3. **Tire Slip (`FFB_SLIP`, `0x8FD11D27`):**
-   Queried in Slot 8. Evaluates longitudinal slip and lateral utilization. Updates wave Group 2.
-4. **Drift Slip and Skid (Slots 15 & 16):**
-   Evaluates drift telemetry using keys `0x8FD11D27` and `0x0C149044`, updating wave Groups 4 (`+0x100`) and 5 (`+0x140`).
-5. **Road Bump (`FFB_BUMP`, `0xE288A6B0`):**
-   Queried in Slot 18 with explicit wheel index. Wheels 0 and 2 drive Left ramp `+0x220`; wheels 1 and 3 drive Right ramp `+0x230`.
+Surface wave packets are eight floats:
+`{frequencyMin, amplitudeMin, offsetMin, xMin, frequencyMax, amplitudeMax, offsetMax, xMax}`.
+The interpolator is `0x825B68F0`. All four attribute indices are queried; absent
+or malformed PC records stay silent. Frequency, amplitude, and offset each take
+the maximum across wheel callbacks. Channels 0/1 sum for the heavy motor;
+channels 2/3 sum for the light motor. Signed samples are retained until the final
+maximum selection and motor clamp. The phase advances only when amplitude times
+frequency is positive; the console subtracts one on phase wrap.
 
-### Native wave evaluator (`0x825A7640`)
+## Indexed bumps
 
-Phase advances only when `amplitude * frequency > 0`. Phase wraps modulo 1.0. Sine is evaluated via lookup `0x82A21BE8`:
-```c
-void EvaluateWave(WaveState* wave, float dt) {
-    if (wave->amplitude * wave->frequency > 0.0f) {
-        wave->phase += wave->frequency * dt;
-        if (wave->phase > 1.0f) {
-            wave->phase -= 1.0f;
-        }
-        wave->output = wave->offset + wave->amplitude * sinf(wave->phase * 6.2831853f);
-    } else {
-        wave->output = 0.0f;
-    }
-}
+Slot 18 (`0x825AAA18`) reads **threshold key `0xE289A6B0`** and **gain key
+`0x2D1022A0`**. The old `0xE288A6B0` spelling was incorrect.
+
+When `roadSignal > threshold`, it restarts the wheel's side ramp with:
+
+- amplitude `clamp(gain * roadSignal, 0, 1)`;
+- floor `0.1`;
+- duration and remaining time `0.3` seconds.
+
+Wheels 0/2 write `+0x220` (heavy), wheels 1/3 write `+0x230` (light). Later wheels
+replace the same-side ramp even when weaker; there is no strongest-wheel merge.
+Vehicle speed and `FFB_ROLL` are not substitutes for these attributes.
+
+## Collision and event state
+
+Xbox collision handling resolves both participants and measures the change from
+the local participant's stored pre-contact velocity to its live velocity.
+The passed vector is retained for ABI compatibility and is not used for the
+controller strength. PC bitfield category is `flags & 7`; the Xbox compiler's
+corresponding bitfield uses an arithmetic shift by 29.
+
+| Contact | Strength |
+| --- | --- |
+| World | `clamp(deltaSpeed / 30)` |
+| Ground | `clamp((deltaSpeed - 1) / 3)` |
+| Object, delta at least 5 | `clamp((deltaSpeed - 5) / 20)` |
+| Aligned vehicle contact with small delta | same object formula, substituting `length(info.objAVel) * 0.25` when above 5 |
+| Other small-delta object contact | `clamp((liveSpeed - 20) / 30) * 0.75`, if liveSpeed and the other-live-minus-own-before magnitude both exceed 2 |
+
+Positive strength writes the heavy collision ramp at `+0x180`, with zero floor
+and amplitude/duration equal to strength. Active ramps merge each field by max.
+There is no contact-normal estimate, separate right scrape texture, or synthetic
+landing envelope. Both PC local-listener hooks route participant A and B contacts;
+foreign feedback devices retain the native listener.
+
+NOS is a heavy-only ramp from 1 toward 0.5 over two seconds, started on a rising
+edge and cleared on a falling edge. Potential, shifting, and engine callbacks
+maintain their native event/ramp state. **The retail final mixer samples these
+ramps but discards their values.** Their existence does not mean they produce
+body rumble. The optional impulse-trigger extension can still use shift state.
+
+## Final mixer and lifecycle
+
+`Run` at `0x825A8CE0` samples six four-channel wave groups and twelve ramps.
+Only normal skid/slip channel pairs, collision, NOS, and the two indexed bump
+ramps reach the motor maxima. Roll, the other allocated wave groups, shift
+potential, engine, and shifting results are discarded in this retail build.
+
+The device update at `0x825A93E0` calls Push before Run, so motors receive the
+previous poll's computed output. EndUpdate marks feedback freshness; device
+polling advances effects. Begin clears wave inputs while preserving phases and
+ramps. Pause silences output and freezes sampling. The PC adapter also stops
+output on focus loss, disconnect, missing producer ticks, and DLL unload.
+
+### Recovered durations versus adapter scheduling
+
+The effect durations are read from Xbox constants: indexed bumps 0.3 seconds,
+NOS 2 seconds, engine 1 second, shifting 0.5 seconds and shift potential 3 seconds.
+Collision duration is the computed strength in seconds. The native sampler accepts
+milliseconds and multiplies by 0.001; the adapter supplies seconds directly.
+The inspected mixer discards engine, shifting and potential body contributions.
+
+The **250 ms stale-producer watchdog is PC adapter policy**, not a recovered Xbox
+effect duration. Focus/disconnect gates also belong to the port's output safety
+handling. During a stale/focus gate the adapter sends zero and freezes sampling.
+Those cases can differ from the original device lifecycle.
+
+The adapter obtains elapsed wall time with QueryPerformanceCounter and samples
+from PC InputDevice::PollDevice. The console obtains its delta in its own device
+updater. Push-before-Run order is recovered, but its previous-poll latency in
+milliseconds and the schedule relative to feedback production have not been
+validated against a live console trace. No fixed 30/60 Hz emulation rate, extra
+smoothing or artificial texture delay has been added. Diagnostic logging adds
+execution overhead and can perturb the measured live cadence.
+
+The numeric reference comparisons supply explicit inputs and deltas. They verify
+effect calculations for those values; they do not verify that PC gameplay
+supplies the same event stream or update intervals as Xbox gameplay. Complete
+timing parity is therefore not established.
+
+## Validation and remaining limits
+
 ```
-
-## Ramps and collisions
-
-### Native ramp evaluator (`0x825A75D8`)
-
-Ramps advance by subtracting elapsed seconds `dt` from `remaining`. If `remaining > 0` and `duration > 0`:
-$$\text{output} = \max\left(0.0,\; \text{floor} + \frac{\text{amplitude} - \text{floor}}{\text{duration}} \times \text{remaining}\right)$$
-
-| Event | Ramp Offset | Amplitude / Floor | Duration | Motor Routing and Retrigger Rules |
-| --- | --- | --- | --- | --- |
-| **Collision** | Left: `+0x180` | `strength` / 0.0 | `strength` sec | Left motor only. `remaining`, `duration`, and `amplitude` each take $\max(\text{existing}, \text{strength})$. Floor is 0.0. Right ramp `+0x190` remains 0. |
-| **Shift Potential** | Left: `+0x1A0`<br>Right: `+0x1B0` | Level 3: 0.5 / 0.5<br>Level 4: 0.75 / 0.75<br>Level 5: 1.0 / 1.0 | 3.0 sec | Both motors. Triggered when potential reaches 3, 4, or 5. A potential drop clears both ramps immediately on the next tick. |
-| **NOS** | Left: `+0x1C0` | 1.0 / 0.5 | 2.0 sec | Left motor only. Rising edge (`engaged == 1 && !mNOSEngaged`) triggers ramp. Falling edge clears ramp (`remaining = 0`). |
-| **Engine Blown** | Left: `+0x1E0`<br>Right: `+0x1F0` | Left: 1.0 / 0.6<br>Right: rises to 0.6 | 1.0 sec | Both motors. Rising edge triggers ramp. Left motor starts at 1.0 decaying to 0.6; Right motor starts at 0.0 and ramps up toward 0.6. |
-| **Shifting** | Left: `+0x200`<br>Right: `+0x210` | 0.4 / 0.4 | 0.5 sec | Both motors. Rising edge triggers flat pulse (Amp: 0.4, Floor: 0.4). Falling edge allows pulse to finish playing out. |
-| **Road Bump** | Left: `+0x220`<br>Right: `+0x230` | `bumpAmp` / 0.0 | 0.2 sec | Spatial stereo: Left ramp driven by wheels 0 and 2; Right ramp driven by wheels 1 and 3. |
-
-### Collision calculation (`ReportCollision` `0x825AAB88`)
-
-Collision arguments: `this`, `CollisionInfo* info`, `bool isLocal`, `Vector3 velocityVector` (12 bytes by value).
-
-1. **Contact Type Extraction:**
-   Contact flags word is located at `CollisionInfo + 0x1C`. The contact category is extracted using PowerPC arithmetic right shift by 29 bits:
-   ```asm
-   lwz   r11, 0x1C(r4)
-   srawi r11, r11, 29
-   ```
-   - `type == 1`: Dynamic Object contact (vehicles, track props, traffic)
-   - `type == 2`: World barrier / scenery contact
-   - `type == 3`: Ground contact (road / terrain landing)
-
-2. **Mathematical Strength Formulas:**
-   - **World Contact (`type == 2`):**
-     $$\text{strength} = \text{clamp}\left(\frac{\Delta\text{Speed}}{30.0},\; 0.0,\; 1.0\right)$$
-   - **Ground Contact (`type == 3`):**
-     $$\text{strength} = \text{clamp}\left(\frac{\Delta\text{Speed} - 1.0}{3.0},\; 0.0,\; 1.0\right)$$
-   - **Object Contact (`type == 1`), High Speed Delta ($\Delta\text{Speed} \ge 5.0\text{ m/s}$):**
-     $$\text{strength} = \text{clamp}\left(\frac{\Delta\text{Speed} - 5.0}{20.0},\; 0.0,\; 1.0\right)$$
-   - **Object Contact (`type == 1`), Low Speed Delta ($\Delta\text{Speed} < 5.0\text{ m/s}$):**
-     Queries participant B vehicle interface. If both vehicles have live speed $> 2.0\text{ m/s}$, evaluates closing velocity:
-     $$\text{strength} = \text{clamp}\left(\frac{\text{liveSpeed} - 20.0}{30.0},\; 0.0,\; 1.0\right) \times 0.75$$
-
-3. **Collision Ramp Injection:**
-   Strength feeds directly into Left ramp `+0x180`:
-   ```c
-   ramp->remaining = fmaxf(ramp->remaining, strength);
-   ramp->duration  = fmaxf(ramp->duration,  strength);
-   ramp->amplitude = fmaxf(ramp->amplitude, strength);
-   ramp->floor     = 0.0f;
-   ```
-
-## Timing, lifecycle, and motor output
-
-### Polling loop execution order
-
-The console device updater at `0x825A93E0` maintains a strict **Push-then-Run** execution sequence:
-1. `0x825A93F8`: Calls `Push` (`0x825A90F0`), transmitting the volumes calculated in the **previous** tick to hardware.
-2. `0x825A9404`: Calls `Run` (`0x825A8CE0`), advancing delta time, sampling waves/ramps, and calculating the volumes for the **next** tick.
-
-This order eliminates frame-boundary jitter and mirrors the architecture of Most Wanted and Carbon.
-
-### Master mixer (`Run` `0x825A8CE0`)
-
-1. Evaluates all wave groups (0 to 5) using `0x825A7640`.
-2. Evaluates all 12 ramps using `0x825A75D8`.
-3. Combines channels:
-   $$\text{LeftSum} = \left(\sum \text{Wave}_{\text{left}} + \max(\text{Ramps}_{\text{even}})\right) \times \text{MasterScale}$$
-   $$\text{RightSum} = \left(\sum \text{Wave}_{\text{right}} + \max(\text{Ramps}_{\text{odd}})\right) \times \text{MasterScale}$$
-4. Clamps final volumes to $[0.0,\; 1.0]$ and writes to `+0x240` (Left) and `+0x244` (Right).
-
-### Hardware output (`Push` `0x825A90F0`)
-
-1. If `Enabled` (`+0x250`) is 0, motor levels are forced to 0.
-2. Converts float volumes to 16-bit unsigned integers:
-   $$\text{u16Left} = (\text{uint16\_t})\text{clamp}(\text{LeftVolume} \times 65535.0,\; 0,\; 65535)$$
-   $$\text{u16Right} = (\text{uint16\_t})\text{clamp}(\text{RightVolume} \times 65535.0,\; 0,\; 65535)$$
-3. Calls XInput dispatcher `0x82A649F0`, which invokes `XamInputSetState` import `0x82ADBFB4` (ordinal `0x192`).
-
-### Lifecycle transitions
-
-| Operation | State Transitions |
-| --- | --- |
-| **PauseEffects** (`0x825A9DC8`) | Sets `Enabled` byte `+0x250` = 0; calls `Push` (zeroes physical motors immediately). Preserves all active waves, ramps, and volumes. |
-| **ResumeEffects** (`0x825A9E10`) | Sets `Enabled` byte `+0x250` = 1; calls `Push` (restores active motor volumes). |
-| **ResetEffects** (`0x825A9E58`) | Zeroes final volumes `+0x240/+0x244`; zeroes Collision ramp `+0x180`; sets `Enabled` = 0; calls `Push`. Preserves car ramps. |
-
-## PC interface and adapter implementation
-
-### Native PC hooks and accessors
-
-The PC adapter hooks into the game's native feedback dispatch chain without modifying
-gameplay physics or input processing:
-- **GameDevice factory:** `0x006C9520`.
-- **Interface getter:** `0x006C7F20` (`InputDevice::GetInterfaces`, slot 9 / `+0x24`).
-- **Interface list registration:** `IList::Add` (`0x00461420`) and `IList::Find` (`0x004614B0`).
-- **Collision listeners:** The two local-player collision listener entries in `LocalPlayer` vtable
-  at `0x009FA07C` and `0x009FA324` route to handler `0x004D13F0`. The adapter inspects both collision
-  participants, confirms local player car ownership, and resolves participant velocities.
-- **Surface collection/layout offsets:** Located at `+0/+4` (unlike MW's `+4/+8`).
-- **Native attribute accessor:** ProStreet's `Attrib::Instance` accessor is at `0x0052B950`.
-
-### Adapter runtime behavior
-
-| Area | Adapter Implementation |
-| --- | --- |
-| **Collisions** | Evaluates native contact type bits (`srawi 29`), applies recovered World (`/30`), Ground (`-1/3`), and Object (`-5/20`) formulas into Left ramp `+0x180`. |
-| **Road noise** | Passes explicit wheel index (0..3) from Slot 18; drives Left ramp `+0x220` (wheels 0, 2) and Right ramp `+0x230` (wheels 1, 3). |
-| **Tire telemetry** | Samples native `Attrib::Instance` (`0x0052B950`) records for `FFB_ROLL`, `FFB_SKID`, and `FFB_SLIP`. Operates on native ranges (slip: 0.05..1.0 ratio, skid: 0.1..1.0 rad). Motion gate suppresses stationary tyre squeal. |
-| **Car ramps** | Shift potential, NOS, engine damage, and gearshifts drive recovered linear ramps matching the console timing. |
-| **Lifecycle safety** | Window focus loss and missing ticks suspend motor output without resetting internal ramp ages; device detachment clears state. |
-| **Steering wheels** | Native DirectInput force feedback retains the original game handlers; gamepad rumble routes through XInput/WGI. |
-
-## Diagnostics and validation
-
-Enable telemetry by setting `[Rumble] Telemetry = 1` in `scripts/NFS_XtendedInput.ini`. Telemetry records are written to `scripts/NFS_XtendedInput_Rumble.log`:
-- `S` rows: Native surface wave definitions queried through `Attrib::Instance`.
-- `T` rows: Live telemetry per tick (slip ratios, skid angles in radians, native road scalar, vehicle speed, pedals).
-- `P` rows: Raw collision listener contact participants.
-- `C` rows: Collisions routed into the rumble engine with calculated strengths.
-
-### Automated test harness
-
-From an x86 Visual Studio developer command prompt:
-```bat
 build.cmd PS
-tests\prostreet.cmd
+tests\prostreet.cmd [optional-local-PC-mapped-image]
 ```
-The test harness exercises compiled vtable dispatch, stack cleanup for skid/drift/collision callbacks,
-interface registration, pause/resume transitions, focus loss, and malformed telemetry handling.
 
-## Comparison with Most Wanted and Carbon
+The x86 harness checks native producer stack order, all changed callback layouts,
+both collision participants, measured collision branches, stereo bump routing and
+replacement, strict thresholds, malformed attributes, car-ramp output selection,
+Push-before-Run timing, pause/focus loss, and stale feedback.
 
-| Architectural Feature | Most Wanted (2005) | Carbon (2006) | ProStreet (2007) |
-| --- | --- | --- | --- |
-| **`IFeedback` Vtable Size** | 15 slots (`0x008A7BD4` / `0x820867C8`) | 18 slots (`0x009E2188`) | 21 slots PC (`0x0098BE6C`) / 24 slots X360 (`0x820B33F0`) |
-| **Effect State Stride** | `0x1B0` bytes (432 bytes) | Pending verification | `0x254` bytes (596 bytes) |
-| **Supported Ports** | 4 ports (`0x6C0` total) | 4 ports | 8 ports (`0x12A0` total) |
-| **Wave Groups** | 4 groups (Road, Skid, Slip, Unused) | 4 groups | 6 groups (Road, Skid, Slip, Reserved, Drift Slip, Drift Skid) |
-| **Ramp Slots** | 10 ramps (5 pairs) | 10 ramps (candidate) | 12 ramps (6 pairs: Collision, Potential, NOS, Blown, Shift, Road Bump) |
-| **Road Noise Routing** | Slot 6; called last; single monaural wave | Slot 6 | Slot 18; called **first**; wheel index 0..3 routes to spatial stereo ramps (`+0x220/+0x230`) |
-| **Drift Mechanics** | Not present | Primitive | Dedicated slots (15 & 16) and wave groups (4 & 5) |
-| **Contact Bit Extraction** | High 3 bits (`srawi r11, r11, 29`) | High 3 bits | High 3 bits (`srawi r11, r11, 29`) |
-| **Collision Formulas** | World: `/30`<br>Ground: `-1/3`<br>Object: `-5/20` | World: `/30`<br>Ground: `-1/3`<br>Object: `-5/20` | World: `/30`<br>Ground: `-1/3`<br>Object: `-5/20` (Identical!) |
-| **Update Order** | Push then Run (`0x823A3E30..3C`) | Push then Run | Push then Run (`0x825A93F8..04`) |
-| **Low-Delta Collision** | Closing speed $> 2.0\text{ m/s}$, $(-20)/30 \times 0.75$ | Same lineage | Identical formula |
+An optional independent check requires Python with Capstone and a local expanded
+Xbox image. It executes the original callback and mixer instructions using a
+bounded interpreter, then compares numeric vectors to the compiled adapter:
 
-## References
+```
+python tests/prostreet_console_reference.py path/to/default.exe
+```
 
-- Retail executable images: PC `prostreet-live.exe` and Xbox 360 `default.exe` / `default.xex` (Title ID `45410822`).
-- Most Wanted feedback research: [`mw-rumble-x360.md`](file:///C:/Stuff/Rumble/NFS-XtendedInput-unified/docs/mw-rumble-x360.md).
-- Carbon feedback research: [`cb-rumble-x360.md`](file:///C:/Stuff/Rumble/NFS-XtendedInput-unified/docs/cb-rumble-x360.md).
-- PC rumble adapter implementation: [`ProStreet.h`](file:///C:/Stuff/Rumble/NFS-XtendedInput-unified/src/rumble/ProStreet.h).
-- Upstream XtendedInput feedback investigation: [Issue 10](https://github.com/xan1242/NFS-XtendedInput/issues/10).
+The audit passed **2,500 cases**: 1,000 road/regular/drift tyre callback cases,
+800 potential/NOS/engine/shifting state cases (including paused calls), 200 indexed
+bumps, and 500 complete mixer states. Mixer comparisons allow two units of
+16-bit motor rounding. Sine/power use host math; this is not Xbox hardware
+emulation or physical controller validation. Surface attributes remain native PC
+data; missing channels are not invented, and Xbox asset equality is not claimed.

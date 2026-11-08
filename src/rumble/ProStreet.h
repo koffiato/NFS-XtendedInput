@@ -1,5 +1,4 @@
-// ProStreet PC feedback bindings, checked against the user's running game.
-// No console executable or console curve data is included.
+// ProStreet PC bindings and Xbox 360 callback input transforms.
 #pragma once
 
 // The native GameDevice has a 21-slot IFeedback at +0x2C. Its road callback is
@@ -13,6 +12,37 @@ struct RumblePSVector { float x, y, z; };
 static_assert(sizeof(RumblePSVector) == 12, "PS collision argument size");
 struct COLLISION_INFO;
 void __fastcall RumblePSCollisionHook(void*, void*, const COLLISION_INFO&);
+
+// Xbox helper 0x82141608. Unlike a division-only ramp, degenerate ranges
+// return zero (including negative/zero spans supplied by tyre physics).
+float RumblePSMap(float x, float lo, float hi) {
+  return hi - lo > 0.000001f ? RumbleClamp((x - lo) / (hi - lo)) : 0.0f;
+}
+
+float RumblePSSlip(float slip, float grip) { // 0x825AA1E0
+  if (slip < -0.75f) return 1.0f;
+  return slip > grip ? RumblePSMap(slip, grip, 2.0f) * 0.5f : 0.0f;
+}
+
+float RumblePSSkid(float skid, float range, float threshold, float load) { // 0x825AA098
+  float level = skid < threshold ? RumblePSMap(skid, range, threshold)
+                                : 1.0f - RumblePSMap(skid, threshold, range + threshold);
+  return powf(level, (1.0f - load) * 2.0f) * load;
+}
+
+float RumblePSDriftSlip(float slip, float grip) { // 0x825AA710; writes normal slip group
+  if (slip < -0.75f) return 1.0f;
+  if (slip > grip && slip < 0.3f) return RumblePSMap(slip, grip, 0.3f) * 0.4f;
+  return slip > 0.3f ? (1.0f - RumblePSMap(slip, 0.3f, 1.0f)) * 0.4f : 0.0f;
+}
+
+float RumblePSDriftSkid(float skid, float range, float threshold) { // 0x825AA870
+  float angle = skid > 1.5707963705062866f ? 3.1415927410125732f - skid : fabsf(skid);
+  if (angle < threshold) return RumblePSMap(angle, range, threshold) * 0.7f;
+  if (angle < 0.785385012626648f)
+    return (1.0f - RumblePSMap(angle, threshold, range + threshold)) * 0.7f + 0.1f;
+  return RumblePSMap(angle, 0.785385012626648f, 0.9599149823188782f);
+}
 
 bool RumbleValidateProStreetUnsafe() {
   const unsigned int feedback[] = {
@@ -30,6 +60,8 @@ bool RumbleValidateProStreetUnsafe() {
   const unsigned char slipCall[] = {0x83,0xC0,0x20};
   const unsigned char roadCall[] = {0x83,0xC0,0x48};
   const unsigned char collisionCall[] = {0x8B,0x53,0x4C};
+  const unsigned char resolve[] = {0x8B,0x44,0x24,0x04,0x85,0xC0,0x74,0x21};
+  const unsigned char vehicle[] = {0xB8,0x4C,0x02,0x9F,0x00,0xC3};
   return *(unsigned int*)RumblePSAddress(0x98BE38) == 0x6C7F20 && // InputDevice slot 9
       *(unsigned int*)RumblePSAddress(0x9FA07C) == 0x4D13F0 &&
       *(unsigned int*)RumblePSAddress(0x9FA324) == 0x4D13F0 &&
@@ -41,7 +73,9 @@ bool RumbleValidateProStreetUnsafe() {
       !memcmp((void*)RumblePSAddress(0x4D10A3), skidCall, sizeof(skidCall)) &&
       !memcmp((void*)RumblePSAddress(0x4D1063), slipCall, sizeof(slipCall)) &&
       !memcmp((void*)RumblePSAddress(0x4D103E), roadCall, sizeof(roadCall)) &&
-      !memcmp((void*)RumblePSAddress(0x4D150D), collisionCall, sizeof(collisionCall));
+      !memcmp((void*)RumblePSAddress(0x4D150D), collisionCall, sizeof(collisionCall)) &&
+      !memcmp((void*)RumblePSAddress(SIM_GETSIMABLE_ADDR), resolve, sizeof(resolve)) &&
+      !memcmp((void*)RumblePSAddress(IVEHICLE_IHANDLE_ADDR), vehicle, sizeof(vehicle));
 }
 
 bool RumbleValidateProStreet() {

@@ -11,6 +11,15 @@ const void* RumbleGetAttributePointer(const void* surface, unsigned int key, uns
   __except (EXCEPTION_EXECUTE_HANDLER) { return NULL; }
 }
 
+bool RumbleReadSurfaceFloat(const void* surface, unsigned int key, float& value) {
+  __try {
+    const float* ptr = (const float*)RumbleGetAttributePointer(surface, key, 0);
+    if (!ptr || !_finite(*ptr)) return false;
+    value = *ptr;
+    return true;
+  } __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
+}
+
 // --- surfaces ---
 
 const void* RumbleSurfaceCollection(const void* surface) {
@@ -112,4 +121,7 @@ struct RumbleWave {
 const unsigned int ATTRIB_KEY_FFB_ROLL = 0xBA1297DA;
 const unsigned int ATTRIB_KEY_FFB_SKID = 0x0C149044;
 const unsigned int ATTRIB_KEY_FFB_SLIP = 0x8FD11D27;
+const unsigned int ATTRIB_KEY_FFB_DRIFT_SKID = 0x35A8EADA;
+const unsigned int ATTRIB_KEY_FFB_BUMP_THRESHOLD = 0xE289A6B0;
+const unsigned int ATTRIB_KEY_FFB_BUMP_GAIN = 0x2D1022A0;
 

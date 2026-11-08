@@ -35,7 +35,7 @@ CONFIG_SETTING(Frontend, Icons, ButtonTexFilename, const char*, "GLOBAL\\Xtended
 
 CONFIG_END()
 CONFIG_BEGIN(Rumble)
-CONFIG_SECTION(Rumble, Target == UG ? "UG1 also requires the in-game Vibration option to be enabled." : (Target == PS ? "ProStreet feedback is experimental; console curves and controller validation are pending." : ""))
+CONFIG_SECTION(Rumble, Target == UG ? "UG1 also requires the in-game Vibration option to be enabled." : (Target == PS ? "ProStreet uses recovered Xbox 360 effect rules with PC surface data; controller comparison is pending." : ""))
 CONFIG_SETTING(Feedback, Rumble, Enabled, bool, true, "Master switch for feedback hooks and controller output.")
 CONFIG_SETTING(Feedback, Rumble, Intensity, float, 1.0f, "Overall strength: 0 = silent, 1 = normal, 2 = double, clamped at the controller limit.")
 CONFIG_SETTING(Feedback, Rumble, LeftMotorScale, float, 1.0f, "Heavy motor strength multiplier, 0 to 2.")

@@ -555,7 +555,7 @@ void InstallGameHooks() {
 #endif
 #endif
 
-#ifdef HAS_CONSOLE_RUMBLE
+#if defined(HAS_CONSOLE_RUMBLE) && !defined(GAME_PROSTREET)
   RumbleInstallPatches();
 #endif
 

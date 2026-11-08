@@ -144,34 +144,6 @@ bool RumbleReadVehicle(RumbleVehicleState& s) {
   }
 }
 
-bool RumbleReadLinearVelocityUnsafe(float* velocity) {
-  void* simable = RumbleGetPlayerSimable();
-  if (!simable) return false;
-  void* body = RumbleFindInterface(simable, IRIGIDBODY_IHANDLE_ADDR);
-  if (!body) return false;
-  memcpy(velocity, RumbleVCall<const float*>(body, 0x24), 3 * sizeof(float));  // IRigidBody::GetLinearVelocity
-  return true;
-}
-
-// the player's current body velocity (world m/s), for the speed change across a collision
-bool RumbleReadLinearVelocity(float* velocity) {
-  __try {
-    return RumbleReadLinearVelocityUnsafe(velocity);
-  } __except (EXCEPTION_EXECUTE_HANDLER) {
-    return false;
-  }
-}
-
-#ifdef GAME_PROSTREET
-bool RumblePSIsShifting() {
-  __try {
-    void* simable = RumbleGetPlayerSimable();
-    void* transmission = simable ? RumbleFindInterface(simable, ITRANSMISSION_IHANDLE_ADDR) : NULL;
-    return transmission && RumbleVCall<bool>(transmission, 0x14); // IsGearChanging
-  } __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
-}
-#endif
-
 #ifdef HAS_CONSOLE_RUMBLE
 // Resolve the contact participants, including traffic/props and participant B.
 // ISimable::GetLinearVelocity fills a vector: MW/CB slot 26, UC slot 24.
