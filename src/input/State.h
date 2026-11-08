@@ -75,7 +75,10 @@ HCURSOR NFSCursor;
 float GetAnalogStickValue(int port, WORD binding) {
   return InputAnalogValue(g_Controllers[port].state.Gamepad, binding);
 }
-uint16_t GetAnalogActivity() { return InputAnalogActivity(g_Controllers[0].state.Gamepad); }
+uint16_t GetAnalogActivity(int port = 0) {
+  if (port < 0 || port >= MAX_CONTROLLERS) port = 0;
+  return InputAnalogActivity(g_Controllers[port].state.Gamepad);
+}
 void InputSetActiveDevice(unsigned int device) {
   LastControlledDevice = device;
   if (bUseDynamicFEngSwitching) bConsoleFEng = device == LASTCONTROLLED_CONTROLLER;

@@ -143,7 +143,7 @@ const char* ControlsTextsPC[] = {
   "Reserved_0xD0", "Reserved_0xD1", "Reserved_0xD2", "Reserved_0xD3",
   "Reserved_0xD4", "Reserved_0xD5", "Reserved_0xD6", "Reserved_0xD7",
   "Reserved_0xD8", "Reserved_0xD9", "Reserved_0xDA", "Sq.Bracket Open ({ [)",
-  "Pipe (| \\)", "Sq.Bracket Close (} ])", "Quotation (\" ')", INPUT_SCANNERS ? "Section (ï¿½ !)" : "Section (§ !)",
+  "Pipe (| \\)", "Sq.Bracket Close (} ])", "Quotation (\" ')", "Section (Â§ !)",
   "Reserved_0xE0", "Ax", "<> (\\\\|)", "IcoHlp",
   "Ico00", "Process", "IcoClr", "Packet",
   "Reserved_0xE8", "Reset", "Jump", "OemPa1",

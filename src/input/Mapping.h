@@ -278,7 +278,7 @@ bool HandleGamepadRemap(uint32_t index, uint32_t isPrimary, int fDeviceIndex) {
   ActionID id = FindPCRemapActionID(index);
   WORD binding = 0;
   if (!g_bRemapClear) {
-    binding = GetAnalogActivity();
+    binding = GetAnalogActivity(fDeviceIndex);
     if (!binding) binding = g_Controllers[fDeviceIndex].state.Gamepad.wButtons;
     if (!binding) return false;
     ClearExistingMap(binding);

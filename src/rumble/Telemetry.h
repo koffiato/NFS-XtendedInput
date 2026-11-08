@@ -48,6 +48,14 @@ void RumbleTelemetryFlush() {
   if (RumbleTelemetryFile) fflush(RumbleTelemetryFile);
 }
 
+void RumbleTelemetryShutdown() {
+  if (RumbleTelemetryFile) {
+    fflush(RumbleTelemetryFile);
+    fclose(RumbleTelemetryFile);
+    RumbleTelemetryFile = NULL;
+  }
+}
+
 void RumbleTelemetryDumpFFBWave(const void* surface, unsigned int key) {
   for (unsigned int i = 0; i < 4; i++) {
     const float* w = (const float*)RumbleGetAttributePointer(surface, key, i);

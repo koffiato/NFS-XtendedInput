@@ -11,11 +11,22 @@ bool InputPadActive(const XINPUT_GAMEPAD& p) {
   return p.wButtons || p.sThumbLX || p.sThumbLY || p.sThumbRX || p.sThumbRY || p.bLeftTrigger || p.bRightTrigger;
 }
 
+inline SHORT CombineAxis(SHORT a, SHORT b) {
+  return (abs((int)b) > abs((int)a)) ? b : a;
+}
+
+inline BYTE CombineTrigger(BYTE a, BYTE b) {
+  return (b > a) ? b : a;
+}
+
 void InputCombinePads(XINPUT_GAMEPAD& a, const XINPUT_GAMEPAD& b) {
   a.wButtons |= b.wButtons;
-  a.sThumbLX |= b.sThumbLX; a.sThumbLY |= b.sThumbLY;
-  a.sThumbRX |= b.sThumbRX; a.sThumbRY |= b.sThumbRY;
-  a.bLeftTrigger |= b.bLeftTrigger; a.bRightTrigger |= b.bRightTrigger;
+  a.sThumbLX = CombineAxis(a.sThumbLX, b.sThumbLX);
+  a.sThumbLY = CombineAxis(a.sThumbLY, b.sThumbLY);
+  a.sThumbRX = CombineAxis(a.sThumbRX, b.sThumbRX);
+  a.sThumbRY = CombineAxis(a.sThumbRY, b.sThumbRY);
+  a.bLeftTrigger = CombineTrigger(a.bLeftTrigger, b.bLeftTrigger);
+  a.bRightTrigger = CombineTrigger(a.bRightTrigger, b.bRightTrigger);
 }
 
 HRESULT UpdateControllerState() {

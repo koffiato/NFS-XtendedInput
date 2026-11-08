@@ -280,11 +280,17 @@ class InputDevice {
     InitProfileSettings();
 #endif
   }
-  virtual void* dtor(bool something) {
+  virtual void* dtor(bool free_memory) {
 #ifdef HAS_RUMBLE
     mFFB.Detach();
 #endif
-    delete (this);
+    if (fDeviceScalar) {
+      delete[] fDeviceScalar;
+      fDeviceScalar = nullptr;
+    }
+    if (free_memory) {
+      ::operator delete(this);
+    }
     return this;
   }
   virtual bool IsConnected() {
@@ -377,10 +383,14 @@ class InputDevice {
       if (bDoPolling) {
         float fresult = 0;
         rdi           = fDeviceIndex;
-        bCurrentVKeyState = InputKeyPressed(0, VKeyBindings_PRIMARY[i]);
-        bCurrentVKeyState_SECONDARY = InputKeyPressed(0, VKeyBindings_SECONDARY[i]);
-
-        bCurrentVKeyState |= bCurrentVKeyState_SECONDARY;
+        bool bCheckKeyboard = (fDeviceIndex == 0) || (fDeviceIndex == 1 && bAllowTwoPlayerKB && KeyboardReadingMode == KB_READINGMODE_UNBUFFERED_RAW);
+        if (bCheckKeyboard) {
+          bCurrentVKeyState = InputKeyPressed(fDeviceIndex, VKeyBindings_PRIMARY[i]);
+          bCurrentVKeyState_SECONDARY = InputKeyPressed(fDeviceIndex, VKeyBindings_SECONDARY[i]);
+          bCurrentVKeyState |= bCurrentVKeyState_SECONDARY;
+        } else {
+          bCurrentVKeyState = false;
+        }
 
         if (bIsActionDebug((ActionID)i)) {
           rdi = 1;  // debug (camera) actions are always read from the second port, but the PC version omits it entirely so this is a workaround

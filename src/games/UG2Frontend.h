@@ -32,7 +32,8 @@ void UpdateFECursorPos()
 
 	float ratio = 480.0 / (windowRect.bottom - windowRect.top); // scaling it to 480 height since that's what FE wants
 
-	if ((MousePos.x >= windowRect.left) || (MousePos.x <= windowRect.right) && (MousePos.y >= windowRect.top) || (MousePos.y <= windowRect.bottom))
+	if (MousePos.x >= windowRect.left && MousePos.x <= windowRect.right &&
+	    MousePos.y >= windowRect.top && MousePos.y <= windowRect.bottom)
 		bMouseInGameWindow = true;
 
 	MousePos.x = MousePos.x - windowRect.left;

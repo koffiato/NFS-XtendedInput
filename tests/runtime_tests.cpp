@@ -296,12 +296,24 @@ void CheckPolling() {
   assert(!InputPadActive(g_Controllers[1].state.Gamepad));
   bXInputOmniMode = true;
   connected[2] = true;
+  connected[3] = true;
   samples[2].Gamepad.wButtons = XINPUT_GAMEPAD_A;
+  samples[2].Gamepad.sThumbLX = -10000;
+  samples[2].Gamepad.bLeftTrigger = 120;
+  samples[3].Gamepad.sThumbLX = 5000;
+  samples[3].Gamepad.bLeftTrigger = 200;
   UpdateControllerState();
   assert(g_Controllers[0].bConnected && g_Controllers[1].bConnected);
   assert(g_Controllers[0].state.Gamepad.wButtons == XINPUT_GAMEPAD_A);
+  assert(g_Controllers[0].state.Gamepad.sThumbLX == -10000);
+  assert(g_Controllers[0].state.Gamepad.bLeftTrigger == 200);
   assert(g_Controllers[1].state.Gamepad.wButtons == XINPUT_GAMEPAD_A);
+  assert(g_Controllers[1].state.Gamepad.sThumbLX == -10000);
+  assert(g_Controllers[1].state.Gamepad.bLeftTrigger == 200);
   connected[2] = false;
+  connected[3] = false;
+  samples[2] = {};
+  samples[3] = {};
   UpdateControllerState();
   assert(!g_Controllers[0].bConnected && !g_Controllers[1].bConnected);
   assert(!InputPadActive(g_Controllers[0].state.Gamepad));
@@ -365,6 +377,10 @@ void CheckBindings() {
   assert(!InputAnalogPressed(pad, XINPUT_GAMEPAD_LS_LEFT_CONFIGDEF, 16000, 51));
   pad.sThumbLX = -16001;
   assert(InputAnalogPressed(pad, XINPUT_GAMEPAD_LS_LEFT_CONFIGDEF, 16000, 51));
+  g_Controllers[1].state.Gamepad.bRightTrigger = 200;
+  assert(GetAnalogActivity(0) == 0);
+  assert(GetAnalogActivity(1) == XINPUT_GAMEPAD_RT_CONFIGDEF);
+  g_Controllers[1].state.Gamepad.bRightTrigger = 0;
 #if INPUT_SCANNERS
   ScannerConfig config = {};
   config.JoyEvent = JOY_EVENT_FENG_SELECT;

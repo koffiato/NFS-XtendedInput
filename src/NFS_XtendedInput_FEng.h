@@ -5,7 +5,7 @@
 //    Need for Speed (Black Box, MW & newer) - Xtended Input plugin
 //    Bringing native XInput to NFS
 //
-//    Copyright (c) 2022–2023 Lovro Plese (Xan/Tenjoin)
+//    Copyright (c) 2022-2023 Lovro Plese (Xan/Tenjoin)
 //    Copyright (c) 2023 Berkay Yigit <mail@berkay.link>
 //
 // clang-format on
@@ -322,7 +322,8 @@ void UpdateFECursorPos() {
 
     float ratio = 480.0 / (windowRect.bottom - windowRect.top);  // scaling it to 480 height since that's what FE wants
 
-    if ((MousePos.x >= windowRect.left) || (MousePos.x <= windowRect.right) && (MousePos.y >= windowRect.top) || (MousePos.y <= windowRect.bottom))
+    if (MousePos.x >= windowRect.left && MousePos.x <= windowRect.right &&
+        MousePos.y >= windowRect.top && MousePos.y <= windowRect.bottom)
       bMouseInGameWindow = true;
 
     MousePos.x = MousePos.x - windowRect.left;
@@ -358,7 +359,9 @@ void UpdateFECursorPos() {
 #endif  // GAME_MW
 
     if (bInDebugWorldCamera) bShowMouse = false;
-    if (bEnableMouseHiding) {
+    if (!bMouseInGameWindow) {
+      if (bUseWin32Cursor) SetCursor(LoadCursor(NULL, IDC_ARROW));
+    } else if (bEnableMouseHiding) {
       if (bUseWin32Cursor) {
         if (bShowMouse)
           SetCursor(NFSCursor);
@@ -684,11 +687,11 @@ void __stdcall cFEng_Service_Hook(int unk1, int unk2) {
   int NextFEPackage = 0;
 
   if (FEPackage) {
-    while (FEPackage != NextFEPackage) {
+    while (FEPackage) {
       FEPackage_ForAllObjects((void*)FEPackage, &cbpointer);
       NextFEPackage = *(int*)(FEPackage + 4);
-      if (NextFEPackage == FEPackage) break;
-      NextFEPackage = FEPackage;
+      if (NextFEPackage == 0 || NextFEPackage == FEPackage) break;
+      FEPackage = NextFEPackage;
     }
   }
 

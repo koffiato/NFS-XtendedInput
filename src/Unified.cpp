@@ -13,6 +13,9 @@ BOOL APIENTRY DllMain(HMODULE, DWORD reason, LPVOID) {
 #if INPUT_SCANNERS
     if (RumbleLog) fclose(RumbleLog);
 #endif
+#if defined(HAS_RUMBLE)
+    RumbleTelemetryShutdown();
+#endif
   }
   return TRUE;
 }

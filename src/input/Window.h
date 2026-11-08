@@ -47,7 +47,7 @@ LRESULT WINAPI CustomWndProc(HWND window, UINT message, WPARAM wParam, LPARAM lP
 }
 
 void InstallWindowHook() {
-#if INPUT_SCANNERS || !defined(NO_FENG)
+#if defined(WNDPROC_POINTER_ADDR)
   GameWndProc = *(LRESULT(WINAPI**)(HWND, UINT, WPARAM, LPARAM))WNDPROC_POINTER_ADDR;
   injector::WriteMemory<uintptr_t>(WNDPROC_POINTER_ADDR, (uintptr_t)&CustomWndProc, true);
 #endif
