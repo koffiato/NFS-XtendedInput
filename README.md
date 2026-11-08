@@ -21,7 +21,7 @@ Current support:
 | Carbon | `CB` | [Xbox 360 feedback and optional impulse triggers](docs/cb-rumble-x360.md) |
 | Undercover | `UC` | Input only; [research](docs/uc-xinput.md) |
 | ProStreet | `PS` | Experimental native feedback; [research](docs/ps-rumble-x360.md) |
-| World | `W` | Input only, experimental |
+| World | `W` | Input only; [research](docs/world-rumble.md) |
 
 ## Packages and configuration
 

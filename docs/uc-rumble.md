@@ -327,3 +327,5 @@ rumble engine.
 | **Debounce Timing Gate** | 150 ms | 150 ms | 150 ms | 150 ms (`0x96` ms) |
 | **Steering Wheel SDK** | DirectInput base | DirectInput base | DirectInput base | **Logitech EZWheelWrapper (10 effects)** |
 | **PC Native Gamepad Rumble**| Stubbed | Stubbed | Stubbed | Stubbed (No `XInputSetState`) |
+
+For the complete reverse-engineering analysis of the Xbox 360 counterpart, see [uc-rumble-x360.md](uc-rumble-x360.md).
