@@ -53,6 +53,7 @@ build.cmd all
 tests\input.cmd
 ```
 
+
 Outputs are written under `build/<target>/`.
 
 Builds generate the commented INIs and event reference for the selected game
