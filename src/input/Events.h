@@ -513,9 +513,9 @@ class InputDevice {
     }
   }
   virtual int  GetNumDeviceScalar() { return MAX_ACTIONID; }
-#ifdef GAME_PROSTREET
+#if defined(GAME_CARBON) || defined(GAME_PROSTREET)
   // Native slot 6 is a controller-capability query. Start/Stop are 7/8;
-  // GetInterfaces must be slot 9 (+0x24), as LocalPlayer::SetPort expects.
+  // GetInterfaces must be slot 9 (+0x24), as LocalPlayer::SetControllerPort expects.
   virtual bool PSControllerCapability() { return true; }
 #endif
   virtual void StartVibration() {
@@ -537,7 +537,7 @@ class InputDevice {
 #endif
   virtual int GetSecondaryDevice() { return 0; }
 #ifndef GAME_MW
-#ifdef GAME_PROSTREET
+#if defined(GAME_CARBON) || defined(GAME_PROSTREET)
   virtual int GetBatteryLife(unsigned int /*query*/) { return 0; }
 #else
   virtual int  GetBatteryLife() { return 0; }
@@ -550,7 +550,7 @@ class InputDevice {
   virtual void* SaveCurrentState() { return NULL; }
   virtual void  RestoreToState(float* unk) { return; }
 #ifndef GAME_MW
-#ifdef GAME_PROSTREET
+#if defined(GAME_CARBON) || defined(GAME_PROSTREET)
   virtual float GetDeviceNoiseAllowance() { return 0.0f; }
 #else
   virtual int GetDeviceNoiseAllowance() { return 0; }

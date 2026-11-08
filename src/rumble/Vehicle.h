@@ -64,18 +64,25 @@ bool RumbleReadVehicleUnsafe(RumbleVehicleState& s) {
 #ifdef GAME_PROSTREET
   if (!susp || !body || !input) return false;
   s.fSpeed     = RumbleVCall<float>(body, 0x2C); // IRigidBody::GetSpeed
-  s.fGas       = RumbleVCall<float>(input, 0x0C);
-  s.fBrake     = RumbleVCall<float>(input, 0x08);
-  s.fHandBrake = RumbleVCall<float>(input, 0x20);
 #else
   void* veh   = RumbleFindInterface(simable, IVEHICLE_IHANDLE_ADDR);
   if (!susp || !body || !veh || !input) return false;
 
   s.fSpeed           = RumbleVCall<float>(veh, IVEHICLE_GET_ABSOLUTE_SPEED_OFFSET);  // IVehicle::GetAbsoluteSpeed
+#endif
+#ifdef GAME_MW
   const char* ctrl   = RumbleVCall<const char*>(input, 0x08);  // IInput::GetControls
   s.fGas             = *(const float*)(ctrl + 0x14);
   s.fBrake           = *(const float*)(ctrl + 0x18);
   s.fHandBrake       = *(const float*)(ctrl + 0x1C);
+#else
+  s.fGas       = RumbleVCall<float>(input, 0x0C);
+  s.fBrake     = RumbleVCall<float>(input, 0x08);
+#ifdef GAME_CARBON
+  s.fHandBrake = RumbleVCall<float>(input, 0x1C);  // 0x20 is GetControlClutch
+#else
+  s.fHandBrake = RumbleVCall<float>(input, 0x20);
+#endif
 #endif
   const float* lin   = RumbleVCall<const float*>(body, 0x24);  // IRigidBody::GetLinearVelocity
   const float* ang   = RumbleVCall<const float*>(body, 0x28);  // IRigidBody::GetAngularVelocity
@@ -170,5 +177,12 @@ bool RumbleMWCollisionVehicle(void* simable) {
   __try { return RumbleFindInterface(simable, IVEHICLE_IHANDLE_ADDR) != NULL; }
   __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
 }
+#ifdef GAME_CARBON
+const float* RumbleSimTimePtr = (const float*)SIM_TIME_ADDR;
+float RumbleSimTime() {
+  __try { return RumbleSimTimePtr && _finite(*RumbleSimTimePtr) ? *RumbleSimTimePtr : 0.0f; }
+  __except (EXCEPTION_EXECUTE_HANDLER) { return 0.0f; }
+}
+#endif
 #endif
 

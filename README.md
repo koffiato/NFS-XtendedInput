@@ -8,8 +8,9 @@ rumble support. It targets Windows 10/11 and 32-bit game executables.
 use their native feedback engines with a small output adapter. UG2 also
 supports impulse triggers.
 
-[Most Wanted](docs/mw-rumble-x360.md) ports Xbox 360 controller feedback using
-native PC physics and surface data. Impulse triggers are an optional extension.
+[Most Wanted](docs/mw-rumble-x360.md) and [Carbon](docs/cb-rumble-x360.md) port
+Xbox 360 controller feedback using native PC physics and surface data. Impulse
+triggers are an optional extension.
 
 Current support:
 
@@ -18,7 +19,7 @@ Current support:
 | Underground | `UG` / [Config-UG](data/Config-UG) | [Native feedback](docs/ug-rumble.md) |
 | Underground 2 | `UG2` / [Config-UG2](data/Config-UG2) | [Native feedback and impulse triggers](docs/ug2-rumble.md) |
 | Most Wanted (2005) | `MW` / [Config-MW](data/Config-MW) | [Xbox 360 feedback and optional impulse triggers](docs/mw-rumble-x360.md) |
-| Carbon | `CB` / [Config-Carbon](data/Config-Carbon) | Input only; [research](docs/cb-rumble-x360.md) |
+| Carbon | `CB` / [Config-Carbon](data/Config-Carbon) | [Xbox 360 feedback and optional impulse triggers](docs/cb-rumble-x360.md) |
 | Undercover | `UC` / [Config-UC](data/Config-UC) | Input only; [research](docs/uc-xinput.md) |
 | ProStreet | `PS` / [Config-ProStreet](data/Config-ProStreet) | Input only; [research](docs/ps-rumble-x360.md) |
 | World | `W` / [Config-World](data/Config-World) | Input only, experimental |

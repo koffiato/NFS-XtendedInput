@@ -1,4 +1,4 @@
-// MW console controller ramps. MIT; see LICENSE and docs/mw-rumble-x360.md.
+// MW and Carbon console controller ramps and waves. MIT; see LICENSE and docs/mw-rumble-x360.md.
 #pragma once
 #include "Core.h"
 
@@ -13,13 +13,69 @@ struct MWRamp {
   }
 };
 
+#ifdef GAME_CARBON
+// Xbox state is {phase, amplitude, frequency, offset}; BeginUpdate clears all but phase.
+struct MWWave {
+  float phase, amplitude, frequency, offset;
+  void Begin() { amplitude = frequency = offset = 0.0f; }
+  float Sample(float seconds) {
+    float v = offset;
+    if (amplitude * frequency > 0.0f) {
+      phase += frequency * seconds;
+      if (phase > 1.0f) phase -= 1.0f;
+      v += amplitude * sinf(6.2831854820251465f * phase);
+    }
+    return v;
+  }
+};
+#endif
+
 struct MWEffects {
   MWRamp collision;
   MWRamp potentialLeft, potentialRight, nos, engineLeft, engineRight, shiftLeft, shiftRight;
+#ifdef GAME_CARBON
+  MWWave draft, drift;
+  float draftScale = 1.0f;
+#endif
   bool nosOn, engineOn, shifting;
   int potential;
   int outputLeft, outputRight;
   double feedbackTime;
+
+#ifdef GAME_CARBON
+  void Begin() {
+    draftScale = 1.0f;
+    draft.Begin();
+    drift.Begin();
+  }
+  void Draft(const void* info, float simTime, bool paused) {
+    if (!info || !*(const unsigned char*)info) return;
+    float wake = *(const float*)((const char*)info + 0x1C);
+    if (!_finite(wake)) return;
+    if (wake < 1.5f) {
+      if (paused) return;
+      float f = 1.0f - wake * (2.0f / 3.0f);
+      draft.frequency = f * 60.0f;
+      draft.amplitude = f * 0.6f + 0.4f;
+      draft.phase = simTime * 1000.0f;
+    } else if (*(const unsigned char*)((const char*)info + 1)) {
+      draftScale = 0.5f;
+    }
+  }
+  void Drift(float slipAngle, float simTime) {
+    if (!_finite(slipAngle)) return;
+    float simTimeMs = simTime * 1000.0f;
+    float a = fabsf(slipAngle);
+    if (!(a > 0.01f)) return;
+    float t1 = (std::min)((a - 0.01f) * 8.16326523f, 1.0f);
+    drift.phase = simTimeMs;
+    drift.amplitude = t1 * 0.6f + 0.4f;
+    drift.frequency = 60.0f;
+    if (!(a > 0.015f)) return;
+    float t2 = (std::min)((a - 0.015f) * 8.24742222f, 1.0f);
+    drift = {simTimeMs, t2 * 0.6f + 0.4f, 60.0f, 0.0f};
+  }
+#endif
 
   void Collision(float strength) {
     if (!(strength > 0)) return;
@@ -65,5 +121,9 @@ struct MWEffects {
     mixer.Add(kRumbleCar, nos.Sample(dt), 0);
     mixer.Add(kRumbleCar, engineLeft.Sample(dt), engineRight.Sample(dt));
     mixer.Add(kRumbleCar, shiftLeft.Sample(dt), shiftRight.Sample(dt));
+#ifdef GAME_CARBON
+    mixer.Add(kRumbleCar, 0, draft.Sample(dt));
+    mixer.Add(kRumbleTyres, 0, drift.Sample(dt));
+#endif
   }
 };

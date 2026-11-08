@@ -226,11 +226,11 @@ int main() {
   bRumbleInstalled = true;
   RumblePorts[0].sent[0] = 100;
 #endif
-#if INPUT_SCANNERS || defined(GAME_MW) || defined(GAME_PROSTREET)
+#if INPUT_SCANNERS || defined(HAS_RUMBLE)
   bRumbleEnabled = true;
 #endif
   assert(CustomWndProc(NULL, WM_KILLFOCUS, 0, 0) == 77);
-#if INPUT_SCANNERS || defined(GAME_MW) || defined(GAME_PROSTREET)
+#if INPUT_SCANNERS || defined(HAS_RUMBLE)
   assert(motorStops > 0);
 #endif
   puts("Shared runtime checks passed.");

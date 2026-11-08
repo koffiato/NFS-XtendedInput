@@ -54,7 +54,7 @@ GAMES = {
              "PC 1.3 rumble adapter retained from the fork. The shared refactor needs in-game controller testing.",
              texture="GLOBAL/XtendedInputButtons.tpk", cursor=True),
         Game("CB", "Carbon", "86c019cd79a1625c4061d5c7b1bd42cca5350c2d2271f8257ec612e752804001",
-             "Input support only. Rumble is not implemented.", texture="GLOBAL/XtendedInputButtons.tpk", cursor=True),
+             "PC 1.4 Xbox 360 controller rumble adapter and optional impulse triggers.", texture="GLOBAL/XtendedInputButtons.tpk", cursor=True),
         Game("UC", "UC", "fd0b42b2688de16917d360897c7da9baf25a7426f318b6ad57e79bc6e780ccc4",
              "Input support only. Rumble is not implemented."),
         Game("PS", "ProStreet", "15ad3e2996cb340aefcbd5c3eb43b7d3524c954657f17dd292fe9435efb9b01a",

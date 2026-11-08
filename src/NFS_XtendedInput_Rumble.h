@@ -10,13 +10,13 @@
 // clang-format on
 */
 
-// Shared MW / ProStreet feedback implementation.
+// Shared MW / Carbon / ProStreet feedback implementation.
 //
 // The game asks InputDevice::GetInterfaces for IFeedback, then supplies native
-// feedback events and collisions (MW DoFFB @ 0x6EE490; PS @ 0x4D0CF0).
+// feedback events and collisions (MW DoFFB @ 0x6EE490; CB @ 0x762000; PS @ 0x4D0CF0).
 // PC controller effect methods are stubs. This implementation drives XInput
-// motors using recovered MW controller rules. ProStreet keeps its experimental
-// collision envelopes. Physical console parity remains unverified.
+// motors using recovered MW and Carbon controller rules. ProStreet keeps its
+// experimental collision envelopes. Physical console parity remains unverified.
 //
 // The game never stops effects on focus loss and keeps a raw pointer to the interface, so:
 // - the object is embedded in InputDevice (same place as the game's own device, +0x2C) and is never deleted
@@ -120,7 +120,7 @@ struct COLLISION_INFO {
 };
 static_assert(sizeof(COLLISION_INFO) == 0x80, "COLLISION_INFO size mismatch");
 
-// Native IFeedback: MW has 15 slots (0x8A7BD4); PS has 21 (0x98BE6C).
+// Native IFeedback: MW has 15 slots (0x8A7BD4); CB has 18 (0x9E2188); PS has 21 (0x98BE6C).
 // packed to 4 so the double member doesn't push the object off +0x2C inside InputDevice
 #pragma pack(push, 4)
 #pragma warning(push)
@@ -357,7 +357,7 @@ class IFeedback {
   }
   virtual void ResumeEffects() {
     mPaused = false;
-    PushMW();
+    PushMW(mLastTriggerLeft, mLastTriggerRight);
   }
   virtual void ResetEffects() {
     if (!HasOutput()) return;
@@ -386,6 +386,9 @@ class IFeedback {
     mShifting       = false;
     mEngineBlown    = false;
     mShiftPotential = SHIFT_POTENTIAL_NONE;
+#endif
+#ifdef GAME_CARBON
+    mMW.Begin();
 #endif
     mWheelArg       = 0;
     for (int i = 0; i < RUMBLE_MAX_WHEELS; i++) mWheelSkid[i] = 0.0f;
@@ -512,6 +515,10 @@ class IFeedback {
     mRoadWave.Sample(dt, roadLeft, roadRight);
     mMixer.Add(kRumbleSurface, roadLeft, roadRight);
     MixTyres(dt);
+#ifdef GAME_CARBON
+    mMixer.fMotor[0] *= mMW.draftScale;
+    mMixer.fMotor[1] *= mMW.draftScale;
+#endif
     int left, right;
     mMixer.Resolve(left, right);
     if (bRumbleTelemetry)
@@ -649,6 +656,17 @@ class IFeedback {
     if (!mPaused) mMW.Shift(shifting && bRumbleGearShift);
 #endif
   }
+
+#ifdef GAME_CARBON
+  virtual void UpdateDrafting(const void* draftInfo) {
+    __try { mMW.Draft(draftInfo, RumbleSimTime(), mPaused); }
+    __except (EXCEPTION_EXECUTE_HANDLER) {}
+  }
+  virtual void UpdateDrift(float slipAngle) {
+    mMW.Drift(slipAngle, RumbleSimTime());
+  }
+  virtual void UpdateSteering(float /*steering*/) {}
+#endif
 
 #ifdef GAME_PROSTREET
   virtual void ReservedPS14(uintptr_t) {}

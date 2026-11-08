@@ -54,6 +54,8 @@ jobs:
           if "${{ matrix.target }}"=="PS" call tests\prostreet.cmd
           if errorlevel 1 exit /b 1
           if "${{ matrix.target }}"=="MW" call tests\mw.cmd
+          if errorlevel 1 exit /b 1
+          if "${{ matrix.target }}"=="CB" call tests\cb.cmd
 
       - name: Package with official release layout
         shell: pwsh
