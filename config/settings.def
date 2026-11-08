@@ -15,8 +15,8 @@ CONFIG_SETTING(Frontend, Input, EnableMouseHiding, bool, true, "Hide an idle men
 
 CONFIG_END()
 CONFIG_BEGIN(Deadzone)
-CONFIG_SECTION(Deadzone, "Stick deadzones are fractions of full travel: 0.08 = 8%. Values range from 0 to 1.")
-CONFIG_SETTING(All, Deadzone, PercentLS, float, 0.08f, "Player 1 left stick.")
+CONFIG_SECTION(Deadzone, "Stick deadzones are fractions of full travel: 0.10 = 10%. Values range from 0 to 1.")
+CONFIG_SETTING(All, Deadzone, PercentLS, float, 0.10f, "Player 1 left stick.")
 CONFIG_SETTING(All, Deadzone, PercentRS, float, PercentLS, "Player 1 right stick.")
 CONFIG_SETTING(All, Deadzone, PercentLS_P2, float, PercentLS, "Player 2 left stick.")
 CONFIG_SETTING(All, Deadzone, PercentRS_P2, float, PercentLS, "Player 2 right stick.")

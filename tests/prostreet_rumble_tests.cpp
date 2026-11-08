@@ -374,13 +374,10 @@ void TestTiming(IFeedback& f, const SimSurface& surface) {
   f.UpdateNOS(true,1);
   Tick(f); Tick(f);
   float nosAge = f.mMW.nos.remaining;
-  // No new EndUpdate or feedback is required for a native ramp to keep aging.
+  // The sampler consumes full positive deltas; stale producers stop output.
   fixedTime += 0.3; f.PollEffects();
-  assert(sent[0].wLeftMotorSpeed > 0);
-  assert(Near(f.mMW.nos.remaining,nosAge-0.3f));
-  // A long poll gap consumes its actual duration; no synthetic delta cap.
-  fixedTime += 1; f.PollEffects();
-  assert(Near(f.mMW.nos.remaining,nosAge-1.3f));
+  assert(sent[0].wLeftMotorSpeed == 0 && Near(f.mMW.nos.remaining, nosAge));
+  f.EndUpdate();
   f.ClearEffects();
 }
 

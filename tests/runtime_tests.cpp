@@ -99,7 +99,7 @@ void CheckSettings() {
 #if defined(GAME_UG2) || defined(HAS_RUMBLE)
   assert(config.ReadInteger("Rumble", "ImpulseTriggers", -1) == 0);
 #endif
-  assert(INPUT_DEADZONE_LS == (WORD)(0.08f * 32767));
+  assert(INPUT_DEADZONE_LS == (WORD)(0.10f * 32767));
   assert(INPUT_DEADZONE_RS == INPUT_DEADZONE_LS);
   assert(INPUT_DEADZONE_LS_P2 == INPUT_DEADZONE_LS);
   assert(INPUT_DEADZONE_RS_P2 == INPUT_DEADZONE_LS);
@@ -123,7 +123,7 @@ void CheckSettings() {
   assert(empty != INVALID_HANDLE_VALUE);
   CloseHandle(empty);
   InitConfig(); // An existing empty file is also a customization to preserve.
-  assert(INPUT_DEADZONE_LS == (WORD)(0.08f * 32767));
+  assert(INPUT_DEADZONE_LS == (WORD)(0.10f * 32767));
   assert(SHIFT_ANALOG_THRESHOLD == (WORD)(ConfigDefaults::Deadzone::Percent_Shifting * 32767));
   WIN32_FILE_ATTRIBUTE_DATA attributes;
   assert(GetFileAttributesExA(config.GetIniPath(), GetFileExInfoStandard, &attributes));

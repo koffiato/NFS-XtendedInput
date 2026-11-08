@@ -48,9 +48,7 @@ struct MWEffects {
   bool nosOn, engineOn, shifting;
   int potential;
   int outputLeft, outputRight;
-#ifndef GAME_PROSTREET
   double feedbackTime;
-#endif
 
 #if defined(GAME_CARBON) || defined(GAME_UC)
   void Begin() {

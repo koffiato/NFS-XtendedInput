@@ -401,9 +401,7 @@ class IFeedback {
   }
 
   virtual void EndUpdate() {
-#ifndef GAME_PROSTREET
     mMW.feedbackTime = RumbleGetTime();
-#endif
   }
   void PollEffects() { MixFrame(); }
 
@@ -414,16 +412,10 @@ class IFeedback {
     float dt = (float)(now - mLastUpdateTime);
     mLastUpdateTime = now;
     // Keep the poll clock moving while disabled, without consuming effect time.
-    if (mPaused || !bRumbleAppActive) {
+    if (mPaused || !bRumbleAppActive || now - mMW.feedbackTime > 0.25) {
       Send(0, 0);
       return;
     }
-#ifndef GAME_PROSTREET
-    if (now - mMW.feedbackTime > 0.25) {
-      Send(0, 0);
-      return;
-    }
-#endif
     // Console Push precedes Run; a nonpositive delta does not sample state.
     PushMW(mLastTriggerLeft, mLastTriggerRight);
     if (!(dt > 0)) return;
