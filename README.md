@@ -20,7 +20,7 @@ Current support:
 | Most Wanted (2005) | `MW` / [Config-MW](data/Config-MW) | [Xbox 360 feedback and optional impulse triggers](docs/mw-rumble-x360.md) |
 | Carbon | `CB` / [Config-Carbon](data/Config-Carbon) | Input only; [research](docs/cb-rumble-x360.md) |
 | Undercover | `UC` / [Config-UC](data/Config-UC) | Input only; [research](docs/uc-xinput.md) |
-| ProStreet | `PS` / [Config-ProStreet](data/Config-ProStreet) | Input and [experimental rumble](docs/ps-rumble.md) |
+| ProStreet | `PS` / [Config-ProStreet](data/Config-ProStreet) | Input only; [research](docs/ps-rumble-x360.md) |
 | World | `W` / [Config-World](data/Config-World) | Input only, experimental |
 
 All seven input targets compile. This does not establish gameplay compatibility.
