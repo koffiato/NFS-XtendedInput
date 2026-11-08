@@ -7,7 +7,7 @@ BOOL APIENTRY DllMain(HMODULE, DWORD reason, LPVOID) {
 #endif
     Init();
   } else if (reason == DLL_PROCESS_DETACH) {
-#if INPUT_SCANNERS || defined(GAME_MW) || defined(GAME_PROSTREET)
+#if INPUT_SCANNERS || defined(HAS_RUMBLE)
     RumbleStopAllPads(true);
 #endif
 #if INPUT_SCANNERS

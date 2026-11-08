@@ -32,7 +32,7 @@ HRESULT UpdateControllerState() {
     connected = true;
     if ((port == 0 || bXInputOmniMode) && InputPadActive(pad)) {
       InputSetActiveDevice(LASTCONTROLLED_CONTROLLER);
-#if defined(GAME_MW) || defined(GAME_PROSTREET)
+#ifdef HAS_RUMBLE
       RumbleLastActivePad = port;
 #endif
     }

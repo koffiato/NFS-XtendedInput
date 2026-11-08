@@ -106,7 +106,7 @@ enum ShiftPotential {
   SHIFT_POTENTIAL_MISS    = 5,
 };
 
-#if defined(GAME_MW) || defined(GAME_PROSTREET)
+#ifdef HAS_RUMBLE
 #include "../NFS_XtendedInput_Rumble.h"
 #endif
 

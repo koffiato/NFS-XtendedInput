@@ -280,7 +280,7 @@ class InputDevice {
   float*        fCurrentValues;
   int           fDeviceIndex;
   float         fControllerCurve;
-#if defined(GAME_MW) || defined(GAME_PROSTREET)
+#ifdef HAS_RUMBLE
   IFeedback mFFB;  // +0x2C, same as the game's own device
 #endif
 #ifdef GAME_PROSTREET
@@ -298,7 +298,7 @@ class InputDevice {
     fPrevValues      = PrevValues[DeviceIndex];
     fCurrentValues   = CurrValues[DeviceIndex];
     fDeviceScalar    = new (std::nothrow) DeviceScalar[MAX_ACTIONID];
-#if defined(GAME_MW) || defined(GAME_PROSTREET)
+#ifdef HAS_RUMBLE
     mFFB.Init(&Padding1, DeviceIndex);
     if (bRumbleEnabled) UTL_Com_Object_IList_Add(&Padding1, (void*)IFEEDBACK_IHANDLE_ADDR, &mFFB);
 #endif
@@ -313,7 +313,7 @@ class InputDevice {
 #endif
   }
   virtual void* dtor(bool something) {
-#if defined(GAME_MW) || defined(GAME_PROSTREET)
+#ifdef HAS_RUMBLE
     mFFB.Detach();
 #endif
     delete (this);
@@ -345,7 +345,7 @@ class InputDevice {
 #endif
   }
   virtual void PollDevice() {
-#ifdef GAME_MW
+#ifdef HAS_CONSOLE_RUMBLE
     mFFB.PollEffects();
 #elif defined(GAME_PROSTREET)
     mFFB.Watchdog();
@@ -522,7 +522,7 @@ class InputDevice {
     // printf("Called InputDevice::StartVibration\n");
   }
   virtual void StopVibration() {
-#ifdef GAME_MW
+#ifdef HAS_CONSOLE_RUMBLE
     if (bRumbleEnabled) mFFB.Send(0, 0);
 #elif defined(GAME_PROSTREET)
     if (bRumbleEnabled) mFFB.PauseEffects();
@@ -530,7 +530,7 @@ class InputDevice {
     // this seems to be only called when the controller is unplugged...
     // printf("Called InputDevice::StopVibration\n");
   }
-#if defined(GAME_MW) || defined(GAME_PROSTREET)
+#ifdef HAS_RUMBLE
   virtual int GetInterfaces() { return bRumbleEnabled ? (int)&mFFB : 0; }
 #else
   virtual int GetInterfaces() { return 0; }
@@ -566,7 +566,7 @@ class InputDevice {
   }
 #endif
 };
-#if defined(GAME_MW) || defined(GAME_PROSTREET)
+#ifdef HAS_RUMBLE
 static_assert(offsetof(InputDevice, mFFB) == 0x2C, "IFeedback must sit at the same offset as in the game's device");
 #endif
 

@@ -25,7 +25,7 @@
 #pragma once
 
 #include "rumble/Settings.h"
-#ifdef GAME_MW
+#ifdef HAS_CONSOLE_RUMBLE
 #include "rumble/MostWanted.h"
 #endif
 #ifdef GAME_PROSTREET
@@ -63,9 +63,10 @@ void RumbleInstallPatches() {
   injector::WriteMemory<uintptr_t>(0x009FA07C, (uintptr_t)&RumblePSCollisionHook, true);
   injector::WriteMemory<uintptr_t>(0x009FA324, (uintptr_t)&RumblePSCollisionHook, true);
 #else
-  // LocalPlayer::OnCollision skips ReportCollision when the save's hidden Rumble byte is 0 (`je` at 0x6F23EA).
+  // LocalPlayer::OnCollision skips ReportCollision when the save's hidden Rumble byte is 0 (`je` at PLAYER_COLLISION_RUMBLE_PATCH_ADDR).
   // The ini is the only switch, so drop that jump; the null-settings check before it stays.
-  if (*(uint16_t*)0x006F23EA == 0x2B74) injector::WriteMemory<uint16_t>(0x006F23EA, 0x9090, true);
+  if (*(uint16_t*)PLAYER_COLLISION_RUMBLE_PATCH_ADDR == 0x2B74)
+    injector::WriteMemory<uint16_t>(PLAYER_COLLISION_RUMBLE_PATCH_ADDR, 0x9090, true);
 #endif
 }
 
@@ -147,7 +148,7 @@ class IFeedback {
 #endif
   bool         mOnWGI;       // last output went through Windows.Gaming.Input (else XInput)
   RumbleMixer  mMixer;
-#ifdef GAME_MW
+#ifdef HAS_CONSOLE_RUMBLE
   MWEffects mMW;
 #endif
 
@@ -227,7 +228,7 @@ class IFeedback {
   }
 
   void ClearEffects() {
-#ifdef GAME_MW
+#ifdef HAS_CONSOLE_RUMBLE
     mMW = {};
 #endif
 #ifdef GAME_PROSTREET
@@ -279,7 +280,7 @@ class IFeedback {
       mLastLeft = mLastRight = mLastTriggerLeft = mLastTriggerRight = -1;
     }
 
-#ifndef GAME_MW
+#ifndef HAS_CONSOLE_RUMBLE
     left  = RumbleRoundToPercent(left);
     right = RumbleRoundToPercent(right);
 #endif
@@ -339,7 +340,7 @@ class IFeedback {
   // never deleted: it's embedded in InputDevice
   virtual void* ScalarDtor(unsigned int /*flags*/) { return this; }
 
-#ifdef GAME_MW
+#ifdef HAS_CONSOLE_RUMBLE
   bool HasOutput() {
     int pad = bXInputOmniMode ? RumbleLastActivePad : mDeviceIndex;
     return RumbleWGI::ShouldUse() || (pad >= 0 && pad < MAX_CONTROLLERS && g_Controllers[pad].bConnected);
@@ -456,7 +457,7 @@ class IFeedback {
     float car = fRumbleCategoryScale[kRumbleCar];
     leftTrigger = mLockupLevel * brake * tyres;
     rightTrigger = (std::max)(mSpinLevel, mSlideLevel) * gas * tyres;
-#ifdef GAME_MW
+#ifdef HAS_CONSOLE_RUMBLE
     float nos = mMW.nos.remaining > 0 ? mMW.nos.floor + (mMW.nos.amplitude-mMW.nos.floor)*mMW.nos.remaining/mMW.nos.duration : 0;
     rightTrigger = (std::max)(rightTrigger, nos * gas * car);
     rightTrigger = (std::max)(rightTrigger, (mMW.shiftLeft.remaining > 0 ? 0.4f : 0) * car);
@@ -483,7 +484,7 @@ class IFeedback {
   }
 #endif
 
-#ifdef GAME_MW
+#ifdef HAS_CONSOLE_RUMBLE
   virtual void EndUpdate() { mMW.feedbackTime = RumbleGetTime(); }
   void PollEffects() { MixFrame(); }
 #else
@@ -495,7 +496,7 @@ class IFeedback {
     double now = RumbleGetTime();
     float dt = (float)(now - mLastUpdateTime);
     mLastUpdateTime = now;
-#ifdef GAME_MW
+#ifdef HAS_CONSOLE_RUMBLE
     // Keep the poll clock moving while disabled, without consuming effect time.
     if (mPaused || !bRumbleAppActive || now - mMW.feedbackTime > 0.25) {
       Send(0, 0);
@@ -600,7 +601,7 @@ class IFeedback {
 
   void AddSlip(const SimSurface& surface, float slip) {
     if (!_finite(slip)) return;
-#ifdef GAME_MW
+#ifdef HAS_CONSOLE_RUMBLE
     if (mPaused) return;
     mSlipWave.Add(&surface, ATTRIB_KEY_FFB_SLIP, slip);
 #else
@@ -611,7 +612,7 @@ class IFeedback {
 
   void AddSkid(bool front, const SimSurface& surface, float skid) {
     if (!_finite(skid)) return;
-#ifdef GAME_MW
+#ifdef HAS_CONSOLE_RUMBLE
     if (mPaused) return;
 #endif
     mSkidWave.Add(&surface, ATTRIB_KEY_FFB_SKID, front ? skid * 0.25f : skid);  // Xbox MW damps the front wheels
@@ -626,25 +627,25 @@ class IFeedback {
   }
   virtual void UpdateShiftPotential(ShiftPotential potential) {
     mShiftPotential = potential;
-#ifdef GAME_MW
+#ifdef HAS_CONSOLE_RUMBLE
     if (!mPaused) mMW.Potential((int)potential);
 #endif
   }
   virtual void UpdateNOS(bool engaged, float /*nosLevel*/) {
     mNOSEngaged = engaged;
-#ifdef GAME_MW
+#ifdef HAS_CONSOLE_RUMBLE
     if (!mPaused) mMW.NOS(engaged);
 #endif
   }
   virtual void UpdateEngineBlown(bool blown) {
     mEngineBlown = blown;
-#ifdef GAME_MW
+#ifdef HAS_CONSOLE_RUMBLE
     if (!mPaused) mMW.Engine(blown);
 #endif
   }
   virtual void UpdateShifting(bool shifting) {
     mShifting = shifting;
-#ifdef GAME_MW
+#ifdef HAS_CONSOLE_RUMBLE
     if (!mPaused) mMW.Shift(shifting && bRumbleGearShift);
 #endif
   }
@@ -671,7 +672,7 @@ class IFeedback {
   static float Length(const float* v) { return sqrtf(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]); }
   static float Clamp01(float v) { return v < 0.0f ? 0.0f : (v > 1.0f ? 1.0f : v); }
 
-#ifdef GAME_MW
+#ifdef HAS_CONSOLE_RUMBLE
   virtual void ReportCollision(const COLLISION_INFO& cinfo, bool iamA) {
     if (!bRumbleEnabled || mPaused) return;
     float ownVelocity[3], otherVelocity[3];
@@ -695,12 +696,12 @@ class IFeedback {
             rearEnd = dot > 0.1f;
           }
           // Retail code reads A's stored speed twice, including when we are B.
-          float rearDelta = Length(cinfo.objAVel) * 0.5f;
+          float rearDelta = Length(cinfo.objAVel) * RUMBLE_REAR_END_VELOCITY_SCALE;
           if (rearEnd && rearDelta > 5) strength = Clamp01((rearDelta - 5) / 20);
           else if (other) {
             float otherDelta[3] = {otherVelocity[0]-before[0], otherVelocity[1]-before[1], otherVelocity[2]-before[2]};
             float liveSpeed = Length(ownVelocity);
-            if (liveSpeed > 2 && Length(otherDelta) > 2) strength = Clamp01((liveSpeed - 20) / 30);
+            if (liveSpeed > 2 && Length(otherDelta) > 2) strength = Clamp01((liveSpeed - 20) / 30) * RUMBLE_CONTACT_SPEED_SCALE;
           }
         }
         break;

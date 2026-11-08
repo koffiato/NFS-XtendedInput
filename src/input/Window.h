@@ -5,11 +5,11 @@
 LRESULT(WINAPI* GameWndProc)(HWND, UINT, WPARAM, LPARAM);
 
 LRESULT WINAPI CustomWndProc(HWND window, UINT message, WPARAM wParam, LPARAM lParam) {
-#if defined(GAME_MW) || defined(GAME_PROSTREET)
+#ifdef HAS_RUMBLE
   if (message == WM_SETFOCUS || message == WM_ACTIVATEAPP) bRumbleAppActive = message == WM_SETFOCUS || wParam != FALSE;
   if (message == WM_KILLFOCUS || message == WM_DESTROY) bRumbleAppActive = false;
 #endif
-#if INPUT_SCANNERS || defined(GAME_MW) || defined(GAME_PROSTREET)
+#if INPUT_SCANNERS || defined(HAS_RUMBLE)
   if (message == WM_KILLFOCUS || message == WM_CLOSE || message == WM_DESTROY || (message == WM_ACTIVATEAPP && !wParam)) RumbleStopAllPads();
 #endif
   switch (message) {

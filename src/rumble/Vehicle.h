@@ -71,7 +71,7 @@ bool RumbleReadVehicleUnsafe(RumbleVehicleState& s) {
   void* veh   = RumbleFindInterface(simable, IVEHICLE_IHANDLE_ADDR);
   if (!susp || !body || !veh || !input) return false;
 
-  s.fSpeed           = RumbleVCall<float>(veh, 0x98);  // IVehicle::GetAbsoluteSpeed
+  s.fSpeed           = RumbleVCall<float>(veh, IVEHICLE_GET_ABSOLUTE_SPEED_OFFSET);  // IVehicle::GetAbsoluteSpeed
   const char* ctrl   = RumbleVCall<const char*>(input, 0x08);  // IInput::GetControls
   s.fGas             = *(const float*)(ctrl + 0x14);
   s.fBrake           = *(const float*)(ctrl + 0x18);
@@ -153,10 +153,10 @@ bool RumblePSIsShifting() {
 }
 #endif
 
-#ifdef GAME_MW
+#ifdef HAS_CONSOLE_RUMBLE
 // Resolve the contact participants, including traffic/props and participant B.
 // ISimable::GetLinearVelocity fills a vector through vtable slot 26 on PC.
-void*(__cdecl* RumbleMWResolveSimable)(void*) = (void*(__cdecl*)(void*))0x0041AD40;
+void*(__cdecl* RumbleMWResolveSimable)(void*) = (void*(__cdecl*)(void*))SIM_GETSIMABLE_ADDR;
 void* RumbleMWCollisionBody(void* handle, float* velocity) {
   __try {
     void* simable = RumbleMWResolveSimable(handle);

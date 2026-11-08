@@ -14,10 +14,10 @@ const void* RumbleGetAttributePointer(const void* surface, unsigned int key, uns
 // --- surfaces ---
 
 const void* RumbleSurfaceCollection(const void* surface) {
-#ifdef GAME_PROSTREET
-  return *(const void* const*)surface;
-#else
+#ifdef GAME_MW
   return *(const void* const*)((const char*)surface + 4);
+#else
+  return *(const void* const*)surface;
 #endif
 }
 
@@ -58,7 +58,7 @@ struct RumbleWave {
   // surface: the SimSurface passed by the game, key: FFB_ROLL / FFB_SKID / FFB_SLIP
   void Add(const void* surface, unsigned int key, float x) {
     if (!_finite(x)) return;
-#ifdef GAME_MW
+#ifdef HAS_CONSOLE_RUMBLE
     const bool single = false;
 #else
     // A non-array PS attribute describes channel zero.
@@ -81,12 +81,12 @@ struct RumbleWave {
     }
   }
 
-  // Advance phases and sum channel pairs. MW retains signed, unclipped values
+  // Advance phases and sum channel pairs. Console retains signed, unclipped values
   // until effects have been combined in the motor mixer.
   void Sample(float dt, float& left, float& right) {
     float v[4];
     for (int ch = 0; ch < 4; ch++) {
-#ifdef GAME_MW
+#ifdef HAS_CONSOLE_RUMBLE
       v[ch] = fOffset[ch];
       if (fAmplitude[ch] * fFrequency[ch] > 0) {
         fPhase[ch] += fFrequency[ch] * dt;
@@ -102,7 +102,7 @@ struct RumbleWave {
     }
     left  = v[0] + v[1];
     right = v[2] + v[3];
-#ifndef GAME_MW
+#ifndef HAS_CONSOLE_RUMBLE
     if (left > 1.0f) left = 1.0f;
     if (right > 1.0f) right = 1.0f;
 #endif

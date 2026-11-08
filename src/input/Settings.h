@@ -38,7 +38,7 @@ void InitConfig() {
 #if !INPUT_SCANNERS && !defined(NO_FENG)
   strcpy_s(ButtonTexFilename, ini.ReadString("Icons", "ButtonTexFilename", ""));
 #endif
-#if defined(GAME_MW) || defined(GAME_PROSTREET)
+#ifdef HAS_RUMBLE
   RumbleLoadSettings([&](const char* key, float fallback) { return ini.ReadFloat("Rumble", key, fallback); });
   bRumbleTelemetry = ini.ReadInteger("Rumble", "Telemetry", 0) != 0;
 #endif
