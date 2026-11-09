@@ -133,7 +133,6 @@ void*(__thiscall* FastMem_Alloc)(void* FastMem, int size, char* debug_str) = (vo
 void* (*FastMem_InitListAllocator)()                               = (void* (*)())FASTMEM_INITLISTALLOCATOR_ADDR;
 void*(__stdcall* FastMem_ListAllocator)(void* CurrentListPos, void* NextListPos,
                                         InputMapEntry* inInputMap) = (void*(__stdcall*)(void*, void*, InputMapEntry*))FASTMEM_LISTALLOCATOR_ADDR;
-void*(__thiscall* STL_List_Add)(void* thethis, int num)            = (void*(__thiscall*)(void*, int))STL_LIST_ADD_ADDR;
 
 void* __stdcall InputMapping_Constructor(InputDevice* device, void* AttribCollection) {
   unsigned int thethis      = 0;
@@ -513,11 +512,7 @@ void InstallGameHooks() {
   UTL_Com_Object_IList_Constructor = (void*(__thiscall*)(void*, unsigned int))UTL_ILIST_CONSTRUCTOR_ADDR;
   Managed_Alloc = (void* (*)(int))MANAGED_ALLOCATOR_ADDR;
 
-  loc_75E375 = 0x75E375 + MainBase;
-  loc_75E363 = 0x75E363 + MainBase;
-  loc_75E237 = 0x75E237 + MainBase;
-  loc_75E225 = 0x75E225 + MainBase;
-  loc_75E25F = 0x75E25F + MainBase;
+  InitializeWorldDeviceScalars();
 
   injector::MakeJMP(0x0075E358 + MainBase, UnscrewWorldDeviceScalars, true);
   injector::MakeJMP(0x0075E217 + MainBase, UnscrewWorldDeviceScalars2, true);
@@ -555,7 +550,7 @@ void InstallGameHooks() {
 #endif
 #endif
 
-#if defined(HAS_CONSOLE_RUMBLE) && !defined(GAME_PROSTREET)
+#if defined(HAS_RUMBLE) && !defined(GAME_PROSTREET)
   RumbleInstallPatches();
 #endif
 

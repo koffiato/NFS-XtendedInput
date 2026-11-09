@@ -3,7 +3,7 @@
 #include "Core.h"
 
 // Xbox state is {remaining, duration, amplitude, floor}, in seconds.
-struct MWRamp {
+struct RumbleRamp {
   float remaining, duration, amplitude, floor;
   void Start(float a, float f, float seconds) { remaining = duration = seconds; amplitude = a; floor = f; }
   float Sample(float seconds) {
@@ -15,7 +15,7 @@ struct MWRamp {
 
 #if defined(GAME_CARBON) || defined(GAME_UC)
 // Xbox state is {phase, amplitude, frequency, offset}.
-struct MWWave {
+struct RumbleOscillator {
   float phase, amplitude, frequency, offset;
   void Begin() {
 #ifdef GAME_UC
@@ -35,18 +35,18 @@ struct MWWave {
 };
 #endif
 
-struct MWEffects {
-  MWRamp collision;
-  MWRamp potentialLeft, potentialRight, nos, engineLeft, engineRight, shiftLeft, shiftRight;
+struct RumbleEffects {
+  RumbleRamp collision;
+  RumbleRamp potentialLeft, potentialRight, nos, engineLeft, engineRight, shiftLeft, shiftRight;
 #if defined(GAME_PROSTREET) || defined(GAME_UC)
-  MWRamp bumpLeft, bumpRight;
+  RumbleRamp bumpLeft, bumpRight;
 #endif
 #ifdef GAME_CARBON
-  MWWave draft;
-  MWWave drift;
+  RumbleOscillator draft;
+  RumbleOscillator drift;
 #endif
 #ifdef GAME_UC
-  MWWave driftLeft, driftRight;
+  RumbleOscillator driftLeft, driftRight;
 #endif
 #ifdef GAME_CARBON
   float draftScale = 1.0f;

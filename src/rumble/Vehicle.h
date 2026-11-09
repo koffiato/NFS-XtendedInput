@@ -144,13 +144,12 @@ bool RumbleReadVehicle(RumbleVehicleState& s) {
   }
 }
 
-#ifdef HAS_CONSOLE_RUMBLE
 // Resolve the contact participants, including traffic/props and participant B.
 // ISimable::GetLinearVelocity fills a vector: MW/CB slot 26, UC slot 24.
-void*(__cdecl* RumbleMWResolveSimable)(void*) = (void*(__cdecl*)(void*))SIM_GETSIMABLE_ADDR;
-void* RumbleMWCollisionBody(void* handle, float* velocity) {
+void*(__cdecl* RumbleResolveSimable)(void*) = (void*(__cdecl*)(void*))SIM_GETSIMABLE_ADDR;
+void* RumbleCollisionBody(void* handle, float* velocity) {
   __try {
-    void* simable = RumbleMWResolveSimable(handle);
+    void* simable = RumbleResolveSimable(handle);
     if (!simable) return NULL;
 #ifdef GAME_UC
     RumbleVCall<void>(simable, 0x60, velocity); // native collision calls at 0x696537 / 0x6965C4
@@ -161,7 +160,7 @@ void* RumbleMWCollisionBody(void* handle, float* velocity) {
     return simable;
   } __except (EXCEPTION_EXECUTE_HANDLER) { return NULL; }
 }
-bool RumbleMWCollisionVehicle(void* simable) {
+bool RumbleCollisionVehicle(void* simable) {
   __try { return RumbleFindInterface(simable, IVEHICLE_IHANDLE_ADDR) != NULL; }
   __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
 }
@@ -171,6 +170,5 @@ float RumbleSimTime() {
   __try { return RumbleSimTimePtr && _finite(*RumbleSimTimePtr) ? *RumbleSimTimePtr : 0.0f; }
   __except (EXCEPTION_EXECUTE_HANDLER) { return 0.0f; }
 }
-#endif
 #endif
 

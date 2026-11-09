@@ -320,7 +320,7 @@ Collisions are routed through `LocalPlayer::OnCollision` (`0x00777080`, Slot 0 o
 2. **Device VTable Alignment:**
    - For `GAME_WORLD`, ensure `InputDevice::GetInterfaces()` sits at **Slot 8 (`+0x20`)**, NOT Slot 9. Remove `PSControllerCapability()` for target `W`.
 3. **`IFeedback` Implementation:**
-   - NFS World uses the exact **18-slot** Carbon layout. The existing Carbon console effect engine (`MWEffects`, `MWRamp`, `MWWave`, `draft`, `drift`, road noise, slip/skid curves) can be shared directly with NFS World.
+   - NFS World uses the exact **18-slot** Carbon layout. The existing Carbon console effect engine (`RumbleEffects`, `RumbleRamp`, `RumbleOscillator`, `draft`, `drift`, road noise, slip/skid curves) can be shared directly with NFS World.
 4. **ASLR Address Handling:**
    - Wrap all game addresses with `MainBase` offsets, as `nfsw.exe` relocates dynamically.
 5. **Collision Gatekeeper Bypass:**

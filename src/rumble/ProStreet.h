@@ -1,4 +1,4 @@
-// ProStreet PC bindings and Xbox 360 callback input transforms.
+// ProStreet PC bindings and native feedback validation.
 #pragma once
 
 // The native GameDevice has a 21-slot IFeedback at +0x2C. Its road callback is
@@ -12,37 +12,6 @@ struct RumblePSVector { float x, y, z; };
 static_assert(sizeof(RumblePSVector) == 12, "PS collision argument size");
 struct COLLISION_INFO;
 void __fastcall RumblePSCollisionHook(void*, void*, const COLLISION_INFO&);
-
-// Xbox helper 0x82141608. Unlike a division-only ramp, degenerate ranges
-// return zero (including negative/zero spans supplied by tyre physics).
-float RumblePSMap(float x, float lo, float hi) {
-  return hi - lo > 0.000001f ? RumbleClamp((x - lo) / (hi - lo)) : 0.0f;
-}
-
-float RumblePSSlip(float slip, float grip) { // 0x825AA1E0
-  if (slip < -0.75f) return 1.0f;
-  return slip > grip ? RumblePSMap(slip, grip, 2.0f) * 0.5f : 0.0f;
-}
-
-float RumblePSSkid(float skid, float range, float threshold, float load) { // 0x825AA098
-  float level = skid < threshold ? RumblePSMap(skid, range, threshold)
-                                : 1.0f - RumblePSMap(skid, threshold, range + threshold);
-  return powf(level, (1.0f - load) * 2.0f) * load;
-}
-
-float RumblePSDriftSlip(float slip, float grip) { // 0x825AA710; writes normal slip group
-  if (slip < -0.75f) return 1.0f;
-  if (slip > grip && slip < 0.3f) return RumblePSMap(slip, grip, 0.3f) * 0.4f;
-  return slip > 0.3f ? (1.0f - RumblePSMap(slip, 0.3f, 1.0f)) * 0.4f : 0.0f;
-}
-
-float RumblePSDriftSkid(float skid, float range, float threshold) { // 0x825AA870
-  float angle = skid > 1.5707963705062866f ? 3.1415927410125732f - skid : fabsf(skid);
-  if (angle < threshold) return RumblePSMap(angle, range, threshold) * 0.7f;
-  if (angle < 0.785385012626648f)
-    return (1.0f - RumblePSMap(angle, threshold, range + threshold)) * 0.7f + 0.1f;
-  return RumblePSMap(angle, 0.785385012626648f, 0.9599149823188782f);
-}
 
 bool RumbleValidateProStreetUnsafe() {
   const unsigned int feedback[] = {

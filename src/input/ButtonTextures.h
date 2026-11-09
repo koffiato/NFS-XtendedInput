@@ -12,8 +12,8 @@
 */
 
 #pragma once
-#include "NFS_XtendedInput.h"
-#include "input/Controls.h"
+#include "State.h"
+#include "Controls.h"
 
 #define XBONE_A_HASH             NFS_HASH("XBONE_A")
 #define XBONE_B_HASH             NFS_HASH("XBONE_B")

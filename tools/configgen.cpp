@@ -22,11 +22,11 @@
 #include "../src/input/Bindings.h"
 #include "../src/input/Keyboard.h"
 #if defined(GAME_UG)
-#include "../src/games/UGEvents.h"
+#include "../src/input/UGEvents.h"
 #elif defined(GAME_UG2)
-#include "../src/games/UG2Events.h"
+#include "../src/input/UG2Events.h"
 #else
-#include "../src/NFS_XtentedInput_ActionID.h"
+#include "../src/input/Actions.h"
 #endif
 #pragma comment(lib, "advapi32.lib")
 

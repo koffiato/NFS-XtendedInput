@@ -24,7 +24,9 @@ DWORD WINAPI TestSetState(DWORD pad, XINPUT_VIBRATION* v) {
 #pragma section(".game", read, write)
 __declspec(allocate(".game")) char gameArena[0x1000000] = {};
 #define RUMBLE_PS_IMAGE_BASE ((uintptr_t)gameArena)
+#ifndef GAME_PROSTREET
 #define GAME_PROSTREET
+#endif
 #include "../src/Main.hpp"
 
 void __fastcall TestListCtor(void*, void*, int) {}
@@ -146,20 +148,20 @@ void TestCollisionListener(IFeedback& f) {
   hit.objB = simable.handle;
   f.ClearEffects(); f.ResumeEffects();
   RumblePSCollisionHook(listener, NULL, hit);
-  assert(f.mMW.collision.amplitude > 0);
+  assert(f.mEffects.collision.amplitude > 0);
   Tick(f); Tick(f);
   assert(sent[0].wLeftMotorSpeed > 0 && sent[0].wRightMotorSpeed == 0);
   assert(originalCollisions == 0);
   // The reversed participant order works too.
   hit.objA = simable.handle; hit.objB = NULL; f.ClearEffects();
   RumblePSCollisionHook(listener, NULL, hit);
-  assert(f.mMW.collision.amplitude > 0);
+  assert(f.mEffects.collision.amplitude > 0);
   hit.objA = (void*)0x999; f.ClearEffects();
   RumblePSCollisionHook(listener, NULL, hit);
-  assert(f.mMW.collision.amplitude == 0); // stale/unrelated contact
+  assert(f.mEffects.collision.amplitude == 0); // stale/unrelated contact
   hit.objA = simable.handle; f.PauseEffects();
   RumblePSCollisionHook(listener, NULL, hit);
-  assert(f.mMW.collision.amplitude == 0);
+  assert(f.mEffects.collision.amplitude == 0);
   *(void**)((char*)listener+4) = NULL;
   RumblePSCollisionHook(listener, NULL, hit);
   assert(originalCollisions == 1); // foreign/native devices keep the original handler
@@ -199,30 +201,30 @@ int CheckConsoleReference(const char* path) {
     if (kind == 'C') {
       int slot,enabled,previous,value; file >> slot >> enabled >> previous >> value;
       f.mPaused = !enabled;
-      if (slot == 10) f.mMW.potential = previous;
-      else if (slot == 11) f.mMW.nosOn = previous != 0;
-      else if (slot == 12) f.mMW.engineOn = previous != 0;
-      else f.mMW.shifting = previous != 0;
-      MWRamp* ramps[] = {&f.mMW.collision,NULL,&f.mMW.potentialLeft,&f.mMW.potentialRight,
-        &f.mMW.nos,NULL,&f.mMW.engineLeft,&f.mMW.engineRight,&f.mMW.shiftLeft,&f.mMW.shiftRight,
-        &f.mMW.bumpLeft,&f.mMW.bumpRight};
+      if (slot == 10) f.mEffects.potential = previous;
+      else if (slot == 11) f.mEffects.nosOn = previous != 0;
+      else if (slot == 12) f.mEffects.engineOn = previous != 0;
+      else f.mEffects.shifting = previous != 0;
+      RumbleRamp* ramps[] = {&f.mEffects.collision,NULL,&f.mEffects.potentialLeft,&f.mEffects.potentialRight,
+        &f.mEffects.nos,NULL,&f.mEffects.engineLeft,&f.mEffects.engineRight,&f.mEffects.shiftLeft,&f.mEffects.shiftRight,
+        &f.mEffects.bumpLeft,&f.mEffects.bumpRight};
       for (auto* ramp : ramps) {
-        MWRamp seed; file >> seed.remaining >> seed.duration >> seed.amplitude >> seed.floor;
+        RumbleRamp seed; file >> seed.remaining >> seed.duration >> seed.amplitude >> seed.floor;
         if (ramp) *ramp = seed;
       }
       if (slot == 10) RumbleVCall<void>(&f,0x28,(ShiftPotential)value);
       else if (slot == 11) RumbleVCall<void>(&f,0x2C,value != 0,1.0f);
       else RumbleVCall<void>(&f,slot*4,value != 0);
       for (auto* ramp : ramps) {
-        MWRamp target; file >> target.remaining >> target.duration >> target.amplitude >> target.floor;
-        MWRamp current = ramp ? *ramp : MWRamp{};
+        RumbleRamp target; file >> target.remaining >> target.duration >> target.amplitude >> target.floor;
+        RumbleRamp current = ramp ? *ramp : RumbleRamp{};
         if (!(Near(current.remaining,target.remaining) && Near(current.duration,target.duration) &&
               Near(current.amplitude,target.amplitude) && Near(current.floor,target.floor))) {
           printf("Car ramp reference mismatch, case %d slot %d\n",cases,slot); return 1;
         }
       }
       int cached; file >> cached;
-      actual = (float)(slot == 10 ? f.mMW.potential : slot == 11 ? f.mMW.nosOn : slot == 12 ? f.mMW.engineOn : f.mMW.shifting);
+      actual = (float)(slot == 10 ? f.mEffects.potential : slot == 11 ? f.mEffects.nosOn : slot == 12 ? f.mEffects.engineOn : f.mEffects.shifting);
       expected = (float)cached;
     } else if (kind == 'R') {
       file >> x >> expected; RumbleVCall<void>(&f,0x18,true,(SimSurface*)surface,x);
@@ -231,7 +233,7 @@ int CheckConsoleReference(const char* path) {
       unsigned int wheel; float remaining,duration,amplitude,floor;
       file >> wheel >> x >> bumpThreshold >> bumpGain >> remaining >> duration >> amplitude >> floor;
       f.UpdateRoadNoise(wheel,x,*(SimSurface*)surface);
-      MWRamp& ramp = (wheel & 1) ? f.mMW.bumpRight : f.mMW.bumpLeft;
+      RumbleRamp& ramp = (wheel & 1) ? f.mEffects.bumpRight : f.mEffects.bumpLeft;
       if (!(Near(ramp.remaining,remaining) && Near(ramp.duration,duration) && Near(ramp.floor,floor))) {
         printf("Bump reference mismatch, case %d wheel %u signal %g threshold %g gain %g: {%g,%g,%g,%g} vs {%g,%g,%g,%g}\n",
           cases,wheel,x,bumpThreshold,bumpGain,ramp.remaining,ramp.duration,ramp.amplitude,ramp.floor,remaining,duration,amplitude,floor);
@@ -248,15 +250,15 @@ int CheckConsoleReference(const char* path) {
           waves[group]->fFrequency[ch]=freq; waves[group]->fOffset[ch]=offset;
         }
       }
-      MWRamp* ramps[] = {&f.mMW.collision,NULL,&f.mMW.potentialLeft,&f.mMW.potentialRight,
-        &f.mMW.nos,NULL,&f.mMW.engineLeft,&f.mMW.engineRight,&f.mMW.shiftLeft,&f.mMW.shiftRight,
-        &f.mMW.bumpLeft,&f.mMW.bumpRight};
+      RumbleRamp* ramps[] = {&f.mEffects.collision,NULL,&f.mEffects.potentialLeft,&f.mEffects.potentialRight,
+        &f.mEffects.nos,NULL,&f.mEffects.engineLeft,&f.mEffects.engineRight,&f.mEffects.shiftLeft,&f.mEffects.shiftRight,
+        &f.mEffects.bumpLeft,&f.mEffects.bumpRight};
       for (auto* ramp : ramps) {
-        MWRamp value; file >> value.remaining >> value.duration >> value.amplitude >> value.floor;
+        RumbleRamp value; file >> value.remaining >> value.duration >> value.amplitude >> value.floor;
         if (ramp) *ramp = value;
       }
       float left,right; file >> left >> right;
-      f.mMixer.Begin(); f.mMW.Mix(dt,f.mMixer); f.MixTyres(dt);
+      f.mMixer.Begin(); f.mEffects.Mix(dt,f.mMixer); f.MixTyres(dt);
       int actualLeft,actualRight; f.mMixer.Resolve(actualLeft,actualRight);
       assert(abs(actualLeft-RumbleMixer::ToMotor(left,1)) <= 2);
       assert(abs(actualRight-RumbleMixer::ToMotor(right,1)) <= 2);
@@ -287,15 +289,15 @@ void TestCarEffects(IFeedback& f) {
   f.ClearEffects(); f.ResumeEffects();
   f.UpdateShiftPotential(SHIFT_POTENTIAL_PERFECT);
   f.UpdateShifting(true); f.UpdateEngineBlown(true);
-  f.mMixer.Begin(); f.mMW.Mix(0.01f,f.mMixer);
+  f.mMixer.Begin(); f.mEffects.Mix(0.01f,f.mMixer);
   int left,right; f.mMixer.Resolve(left,right);
   assert(left == 0 && right == 0); // console samples these ramps but discards the result
-  assert(Near(f.mMW.shiftRight.remaining,0.49f));
+  assert(Near(f.mEffects.shiftRight.remaining,0.49f));
   f.UpdateNOS(true,1);
-  f.mMixer.Begin(); f.mMW.Mix(1,f.mMixer); f.mMixer.Resolve(left,right);
+  f.mMixer.Begin(); f.mEffects.Mix(1,f.mMixer); f.mMixer.Resolve(left,right);
   assert(left == RumbleMixer::ToMotor(0.75f,1) && right == 0);
-  f.UpdateNOS(true,1); assert(Near(f.mMW.nos.remaining,1));
-  f.UpdateNOS(false,0); assert(f.mMW.nos.remaining == 0);
+  f.UpdateNOS(true,1); assert(Near(f.mEffects.nos.remaining,1));
+  f.UpdateNOS(false,0); assert(f.mEffects.nos.remaining == 0);
   f.ClearEffects();
 }
 
@@ -304,51 +306,51 @@ void TestCollisionRules(IFeedback& f) {
   hit.normal[0] = 1; hit.closingVel[0] = 100;
   hit.objAVel[0] = velocity[0] = 30;
   f.ClearEffects(); f.ReportCollision(hit,true,{100,0,0});
-  assert(f.mMW.collision.amplitude == 0); // no closing-normal or by-value-vector fallback
+  assert(f.mEffects.collision.amplitude == 0); // no closing-normal or by-value-vector fallback
   hit.flags = 3; hit.objAVel[0] = 27.5f;
-  f.ReportCollision(hit,true,{}); assert(Near(f.mMW.collision.amplitude,0.5f));
+  f.ReportCollision(hit,true,{}); assert(Near(f.mEffects.collision.amplitude,0.5f));
   f.ClearEffects(); hit.flags = 1; hit.objB = (void*)0x5678;
   hit.objAVel[0] = 30; hit.objBVel[0] = 25;
-  f.ReportCollision(hit,true,{}); assert(Near(f.mMW.collision.amplitude,0.125f));
+  f.ReportCollision(hit,true,{}); assert(Near(f.mEffects.collision.amplitude,0.125f));
   f.ClearEffects(); hit.objA = (void*)0x5678; hit.objB = (void*)0x1234;
   velocity[0] = 25; otherVelocity[0] = 30;
-  f.ReportCollision(hit,false,{}); assert(Near(f.mMW.collision.amplitude,0.125f));
+  f.ReportCollision(hit,false,{}); assert(Near(f.mEffects.collision.amplitude,0.125f));
   f.ClearEffects(); hit.objA = (void*)0x1234; hit.objB = (void*)0x5678;
   hit.objAVel[0] = velocity[0] = 40; hit.objBVel[0] = otherVelocity[0] = 0;
   hit.objBVel[1] = otherVelocity[1] = 10;
-  f.ReportCollision(hit,true,{}); assert(Near(f.mMW.collision.amplitude,0.5f));
+  f.ReportCollision(hit,true,{}); assert(Near(f.mEffects.collision.amplitude,0.5f));
   velocity[0] = 30; otherVelocity[0] = 25; otherVelocity[1] = 0;
   f.ClearEffects();
 }
 
 void TestConsoleInputs(IFeedback& f, const SimSurface& surface) {
-  assert(Near(RumblePSSlip(-0.8f,0.2f),1));
-  assert(Near(RumblePSSlip(-0.75f,0.2f),0));
-  assert(Near(RumblePSSlip(0.2f,0.2f),0));
-  assert(Near(RumblePSSlip(1.1f,0.2f),0.25f));
-  assert(Near(RumblePSSkid(0.2f,0.1f,0.2f,0.5f),0.5f));
-  assert(Near(RumblePSSkid(0.25f,0.1f,0.2f,0.5f),0.25f));
-  assert(Near(RumblePSSkid(3.14159f,0.1f,0.2f,0.5f),0));
-  assert(Near(RumblePSDriftSlip(0.2f,0.1f),0.2f));
-  assert(Near(RumblePSDriftSlip(0.3f,0.1f),0)); // exact peak boundary has a retail discontinuity
-  assert(Near(RumblePSDriftSkid(0.2f,0.1f,0.2f),0.8f));
-  assert(Near(RumblePSDriftSkid(0.96f,0.1f,0.2f),1));
-  assert(RumblePSMap(1,1,1) == 0 && RumblePSMap(1,2,1) == 0);
+  assert(Near(RumbleTyreSlip(-0.8f,0.2f),1));
+  assert(Near(RumbleTyreSlip(-0.75f,0.2f),0));
+  assert(Near(RumbleTyreSlip(0.2f,0.2f),0));
+  assert(Near(RumbleTyreSlip(1.1f,0.2f),0.25f));
+  assert(Near(RumbleTyreSkid(0.2f,0.1f,0.2f,0.5f),0.5f));
+  assert(Near(RumbleTyreSkid(0.25f,0.1f,0.2f,0.5f),0.25f));
+  assert(Near(RumbleTyreSkid(3.14159f,0.1f,0.2f,0.5f),0));
+  assert(Near(RumbleTyreDriftSlip(0.2f,0.1f),0.2f));
+  assert(Near(RumbleTyreDriftSlip(0.3f,0.1f),0)); // exact peak boundary has a retail discontinuity
+  assert(Near(RumbleTyreDriftSkid(0.2f,0.1f,0.2f),0.8f));
+  assert(Near(RumbleTyreDriftSkid(0.96f,0.1f,0.2f),1));
+  assert(RumbleTyreMap(1,1,1) == 0 && RumbleTyreMap(1,2,1) == 0);
 
   f.ClearEffects(); f.ResumeEffects(); f.BeginUpdate();
   RumbleVCall<void>(&f,0x48,1u,0.5f,&surface);
   assert(f.mRoadWave.fFrequency[0] == 0); // no speed-based roll substitution
-  assert(Near(f.mMW.bumpRight.amplitude,0.4f) && f.mMW.bumpLeft.remaining == 0);
-  assert(Near(f.mMW.bumpRight.Sample(0.15f),0.25f)); // 300ms, floor .1
+  assert(Near(f.mEffects.bumpRight.amplitude,0.4f) && f.mEffects.bumpLeft.remaining == 0);
+  assert(Near(f.mEffects.bumpRight.Sample(0.15f),0.25f)); // 300ms, floor .1
   RumbleVCall<void>(&f,0x48,3u,0.3f,&surface);
-  assert(Near(f.mMW.bumpRight.amplitude,0.24f) && Near(f.mMW.bumpRight.remaining,0.3f));
+  assert(Near(f.mEffects.bumpRight.amplitude,0.24f) && Near(f.mEffects.bumpRight.remaining,0.3f));
   RumbleVCall<void>(&f,0x48,0u,0.25f,&surface);
-  assert(f.mMW.bumpLeft.remaining == 0); // strict threshold
+  assert(f.mEffects.bumpLeft.remaining == 0); // strict threshold
   RumbleVCall<void>(&f,0x48,2u,0.5f,&surface);
-  assert(Near(f.mMW.bumpLeft.amplitude,0.4f));
-  f.mMW.bumpLeft = {}; f.mMW.bumpRight = {};
+  assert(Near(f.mEffects.bumpLeft.amplitude,0.4f));
+  f.mEffects.bumpLeft = {}; f.mEffects.bumpRight = {};
   RumbleVCall<void>(&f,0x48,4u,10.0f,&surface);
-  assert(f.mMW.bumpLeft.remaining == 0 && f.mMW.bumpRight.remaining == 0);
+  assert(f.mEffects.bumpLeft.remaining == 0 && f.mEffects.bumpRight.remaining == 0);
   RumbleVCall<void>(&f,0x40,&surface,0.2f,0.1f,0.2f);
   assert(lastWaveKey == ATTRIB_KEY_FFB_DRIFT_SKID);
   RumbleVCall<void>(&f,0x3C,&surface,0.2f,0.1f);
@@ -361,22 +363,22 @@ void TestTiming(IFeedback& f, const SimSurface& surface) {
   f.UpdateRoadNoise(1,0.5f,surface);
   Tick(f);
   assert(sent[0].wLeftMotorSpeed == 0 && sent[0].wRightMotorSpeed == 0);
-  int pending = f.mMW.outputRight;
-  assert(pending > 0 && f.mMW.outputLeft == 0);
+  int pending = f.mEffects.outputRight;
+  assert(pending > 0 && f.mEffects.outputLeft == 0);
   Tick(f); assert(sent[0].wRightMotorSpeed == pending);
-  float age = f.mMW.bumpRight.remaining;
+  float age = f.mEffects.bumpRight.remaining;
   f.PauseEffects(); assert(!sent[0].wRightMotorSpeed);
-  fixedTime += 0.1; f.PollEffects(); assert(f.mMW.bumpRight.remaining == age);
+  fixedTime += 0.1; f.PollEffects(); assert(f.mEffects.bumpRight.remaining == age);
   f.ResumeEffects(); assert(sent[0].wRightMotorSpeed > 0);
   bRumbleAppActive = false; f.PollEffects(); assert(!sent[0].wRightMotorSpeed);
   bRumbleAppActive = true;
   f.ClearEffects(); f.ResumeEffects();
   f.UpdateNOS(true,1);
   Tick(f); Tick(f);
-  float nosAge = f.mMW.nos.remaining;
+  float nosAge = f.mEffects.nos.remaining;
   // The sampler consumes full positive deltas; stale producers stop output.
   fixedTime += 0.3; f.PollEffects();
-  assert(sent[0].wLeftMotorSpeed == 0 && Near(f.mMW.nos.remaining, nosAge));
+  assert(sent[0].wLeftMotorSpeed == 0 && Near(f.mEffects.nos.remaining, nosAge));
   f.EndUpdate();
   f.ClearEffects();
 }
@@ -388,15 +390,15 @@ void TestRemainingSlots(IFeedback& f, const SimSurface& surface) {
   RumbleVCall<void>(&f,0x10);
   RumbleVCall<void>(&f,0x18,true,&surface,50.0f); // slot 6 is implemented even though DoFFB uses 18
   assert(f.mRoadWave.fFrequency[0] > 0);
-  f.mMW.collision.Start(0.5f,0,0.5f);
+  f.mEffects.collision.Start(0.5f,0,0.5f);
   RumbleVCall<void>(&f,0x24,0.4f,0.9f,0.7f); // RPM: telemetry only
   RumbleVCall<void>(&f,0x38,(uintptr_t)123); // reserved slot 14
   RumbleVCall<void>(&f,0x44,0.5f); // steering: native controller no-op
-  assert(f.mMW.collision.amplitude == 0.5f);
+  assert(f.mEffects.collision.amplitude == 0.5f);
   RumbleVCall<void>(&f,0x14);
-  assert(f.mMW.collision.amplitude == 0.5f); // native EndUpdate is a no-op
+  assert(f.mEffects.collision.amplitude == 0.5f); // native EndUpdate is a no-op
   RumbleVCall<void>(&f,0x0C); // Reset clears collision/output, pauses, preserves surface phases
-  assert(f.mPaused && f.mMW.collision.amplitude == 0);
+  assert(f.mPaused && f.mEffects.collision.amplitude == 0);
   assert(f.mRoadWave.fPhase[0] == 0.125f);
   assert(RumbleVCall<int>(&f,0x50) == 5); // PC-only device query, not an Xbox effect slot
   f.ClearEffects(); f.ResumeEffects();
@@ -458,7 +460,7 @@ int main(int argc, char** argv) {
   Attrib_Instance_GetAttributePointer = (decltype(Attrib_Instance_GetAttributePointer))TestAttribute;
   TestVehicle();
   simableTable[26] = CollisionVelocity;
-  RumbleMWResolveSimable = Resolve;
+  RumbleResolveSimable = Resolve;
   g_Controllers[0].bConnected = true;
 
   InputDevice device(0);
@@ -491,7 +493,7 @@ int main(int argc, char** argv) {
   f.mMixer.Begin(); f.MixTyres(0.016f);
   int actualLeft, actualRight; f.mMixer.Resolve(actualLeft, actualRight);
   assert(actualLeft == RumbleMixer::ToMotor(nativeLeft,1) && actualRight == RumbleMixer::ToMotor(nativeRight,1));
-  assert(Near(f.mMW.bumpLeft.amplitude,0.4f)); // native scalar drives an indexed ramp
+  assert(Near(f.mEffects.bumpLeft.amplitude,0.4f)); // native scalar drives an indexed ramp
   RumbleVCall<void>(&f, 0x40, (void*)surface, 18.0f, 1.0f, 1.0f); // drift skid
   assert(f.mWheelSkid[2] == 18);
   RumbleVCall<void>(&f, 0x2C, true, 1.0f); // NOS
@@ -506,7 +508,7 @@ int main(int argc, char** argv) {
   hit.flags = 2; hit.normal[0] = 1; hit.closingVel[0] = 20; hit.objA = (void*)0x1234;
   RumblePSVector delta = {20, 0, 0};
   RumbleVCall<void>(&f, 0x4C, &hit, true, delta); // 20 stack bytes, including by-value vector
-  assert(f.mMW.collision.amplitude > 0);
+  assert(f.mEffects.collision.amplitude > 0);
   assert(RumbleVCall<int>(&f, 0x50) == 5); // final slot returns an int
   TestCollisionListener(f);
   TestPSTyreUnits(f,surface);
@@ -524,7 +526,7 @@ int main(int argc, char** argv) {
   assert(f.mSlipWave.fFrequency[0] == 0); // malformed live records cannot poison output
   bumpGain = (std::numeric_limits<float>::quiet_NaN)();
   f.UpdateRoadNoise(0,0.5f,*(SimSurface*)surface);
-  assert(f.mMW.bumpLeft.remaining == 0);
+  assert(f.mEffects.bumpLeft.remaining == 0);
   assert(!RumbleGetAttributePointer(NULL, ATTRIB_KEY_FFB_ROLL, 0));
   assert(RumbleTelemetrySurfaceId(NULL) == -1);
   assert(RumbleTelemetrySurfaceId((void*)1) == -1);

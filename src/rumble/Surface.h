@@ -1,4 +1,4 @@
-// Native MW/ProStreet surface records and sampled feedback waves. MIT; see LICENSE.
+// Native surface records and console feedback waves for the later games. MIT; see LICENSE.
 #pragma once
 #include "Core.h"
 #include <cstring>
@@ -37,8 +37,7 @@ struct RumbleWaveRecord {
 };
 
 // Copy the native record before mixing: missing/invalid PC attributes are
-// silent, and never become NaNs or invalid motor values. PS uses its own live
-// Attrib::Instance reader, not an MW collection/layout cast.
+// silent, and never become NaNs or invalid motor values.
 bool RumbleReadWaveRecord(const void* surface, unsigned int key, unsigned int index, RumbleWaveRecord& out) {
   __try {
     const void* ptr = RumbleGetAttributePointer(surface, key, index);
@@ -74,14 +73,7 @@ struct RumbleWave {
   // surface: the SimSurface passed by the game, key: FFB_ROLL / FFB_SKID / FFB_SLIP
   void Add(const void* surface, unsigned int key, float x) {
     if (!_finite(x)) return;
-#ifdef HAS_CONSOLE_RUMBLE
-    const bool single = false;
-#else
-    // A non-array PS attribute describes channel zero.
-    const void* first = RumbleGetAttributePointer(surface, key, 0);
-    bool single = first && RumbleGetAttributePointer(surface, key, 1) == first;
-#endif
-    for (unsigned int ch = 0; ch < (single ? 1u : 4u); ch++) {
+    for (unsigned int ch = 0; ch < 4; ch++) {
       RumbleWaveRecord record;
       if (!RumbleReadWaveRecord(surface, key, ch, record)) continue;
       const RumbleWaveRecord* w = &record;
@@ -102,26 +94,15 @@ struct RumbleWave {
   void Sample(float dt, float& left, float& right) {
     float v[4];
     for (int ch = 0; ch < 4; ch++) {
-#ifdef HAS_CONSOLE_RUMBLE
       v[ch] = fOffset[ch];
       if (fAmplitude[ch] * fFrequency[ch] > 0) {
         fPhase[ch] += fFrequency[ch] * dt;
         if (fPhase[ch] > 1) fPhase[ch] -= 1;
         v[ch] += fAmplitude[ch] * sinf(6.2831854820251465f * fPhase[ch]);
       }
-#else
-      fPhase[ch] += fFrequency[ch] * dt;
-      fPhase[ch] -= floorf(fPhase[ch]);
-      v[ch] = fOffset[ch] + fAmplitude[ch] * sinf(6.2831853f * fPhase[ch]);
-      if (v[ch] < 0.0f) v[ch] = 0.0f;
-#endif
     }
     left  = v[0] + v[1];
     right = v[2] + v[3];
-#ifndef HAS_CONSOLE_RUMBLE
-    if (left > 1.0f) left = 1.0f;
-    if (right > 1.0f) right = 1.0f;
-#endif
   }
 };
 

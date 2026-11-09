@@ -1,30 +1,5 @@
-// Undercover Xbox 360 callback transforms. Addresses use the memory-layout XexTool dump.
+// Undercover native collision attribute bindings.
 #pragma once
-
-float RumbleUCMap(float x, float lo, float hi) { // 0x821E10F8
-  return hi - lo > 0.000001f ? RumbleClamp((x - lo) / (hi - lo)) : 0.0f;
-}
-float RumbleUCSlip(float slip, float grip) { // 0x82610D30
-  if (slip < -0.75f) return 1.0f;
-  return slip > grip ? RumbleUCMap(slip, grip, 2.0f) * 0.5f : 0.0f;
-}
-float RumbleUCSkid(float skid, float range, float threshold, float load) { // 0x82610BE8
-  float level = skid < threshold ? RumbleUCMap(skid, range, threshold)
-                                : 1.0f - RumbleUCMap(skid, threshold, range + threshold);
-  return powf(level, (1.0f - load) * 2.0f) * load;
-}
-float RumbleUCDriftSlip(float slip, float grip) { // 0x82611338
-  if (slip < -0.75f) return 1.0f;
-  if (slip > grip && slip < 0.3f) return RumbleUCMap(slip, grip, 0.3f) * 0.4f;
-  return slip > 0.3f ? (1.0f - RumbleUCMap(slip, 0.3f, 1.0f)) * 0.4f : 0.0f;
-}
-float RumbleUCDriftSkid(float skid, float range, float threshold) { // 0x826114A8
-  float angle = skid > 1.5707963705062866f ? 3.1415927410125732f - skid : fabsf(skid);
-  if (angle < threshold) return RumbleUCMap(angle, range, threshold) * 0.7f;
-  if (angle < 0.785385012626648f)
-    return (1.0f - RumbleUCMap(angle, threshold, range + threshold)) * 0.7f + 0.1f;
-  return RumbleUCMap(angle, 0.785385012626648f, 0.9599149823188782f);
-}
 
 // Native PC ReportCollision obtains this same feedback collection. Construct a
 // real Attrib::Instance so inherited attributes and collection references work.

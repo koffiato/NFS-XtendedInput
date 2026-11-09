@@ -34,7 +34,7 @@ class EmbeddedConfigurationTests(unittest.TestCase):
     def test_changed_settings_bindings_or_event_tables_require_rebuilding(self):
         game = GAMES["MW"]
         binary = pe_binary(config_resources(self.root, game))
-        for name in ("config/settings.def", "config/bindings.csv", "src/NFS_XtentedInput_ActionID.h"):
+        for name in ("config/settings.def", "config/bindings.csv", "src/input/Actions.h"):
             with self.subTest(source=name):
                 path = self.root / name
                 before = path.read_bytes()

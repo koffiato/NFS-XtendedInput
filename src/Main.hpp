@@ -15,27 +15,24 @@
 #pragma comment(lib, "winmm.lib")
 #define MINI_CASE_SENSITIVE
 #include <mINI/src/mini/ini.h>
-#include "NFS_XtendedInput.h"
+#include "input/State.h"
 #include "input/Config.h"
+#include "input/Addresses.h"
 #if INPUT_SCANNERS
 #ifdef GAME_UG
-#include "games/UG.h"
-#include "games/UGButtons.h"
-#include "games/UGEvents.h"
-#include "games/UGFrontend.h"
+#include "input/UGEvents.h"
+#include "input/UGFrontend.h"
 #else
-#include "games/UG2.h"
-#include "games/UG2Events.h"
-#include "games/UG2Frontend.h"
+#include "input/UG2Events.h"
+#include "input/UG2Frontend.h"
 #endif
 #else
-#include "NFS_XtentedInput_ActionID.h"
-#include "Definitions.h"
+#include "input/Actions.h"
 #if defined(GAME_CARBON) || defined(GAME_PROSTREET)
 float FEActivationFloat = 0.999999f;
 #endif
 #ifndef NO_FENG
-#include "NFS_XtendedInput_FEng.h"
+#include "input/NativeFrontend.h"
 #endif
 void*(__thiscall* UTL_Com_Object_IList_Constructor)(void* thethis, unsigned int unk) = (void*(__thiscall*)(void*, unsigned int))UTL_ILIST_CONSTRUCTOR_ADDR;
 void(__thiscall* DebugWorldCameraMover_Update)(void* thethis, float unk)             = (void(__thiscall*)(void*, float))DebugWorldCameraMover_Update_Addr;
@@ -54,7 +51,11 @@ void __stdcall DummyFuncStd(BOOL) {}
 #include "input/Poll.h"
 #include "input/Frontend.h"
 #include "input/Mapping.h"
-#include "input/Events.h"
+#if INPUT_SCANNERS
+#include "input/Scanners.h"
+#else
+#include "input/Device.h"
+#endif
 #include "input/Settings.h"
 #include "input/Hooks.h"
 

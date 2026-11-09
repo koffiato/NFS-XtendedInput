@@ -1,6 +1,8 @@
 // Recovered MW controller behavior; native interfaces, clock and output are mocked.
 #define NOMINMAX
+#ifndef GAME_MW
 #define GAME_MW
+#endif
 #include <Windows.h>
 #include <XInput.h>
 #include <cassert>
@@ -66,13 +68,13 @@ COLLISION_INFO Contact(int flags = 2) {
 }
 int main() {
   bodyTable[26] = (void*)Velocity;
-  RumbleMWResolveSimable = Resolve;
+  RumbleResolveSimable = Resolve;
   UTL_Com_Object_IList_Find = (decltype(UTL_Com_Object_IList_Find))Find;
   Attrib_Instance_GetAttributePointer = (decltype(Attrib_Instance_GetAttributePointer))Attribute;
-  MWRamp ramp = {};
+  RumbleRamp ramp = {};
   ramp.Start(1, 0.5f, 2);
   assert(Near(ramp.Sample(0.5f), 0.875f));
-  MWEffects effects = {};
+  RumbleEffects effects = {};
   effects.NOS(true);
   effects.nos.Sample(0.5f);
   effects.NOS(true);
@@ -113,22 +115,22 @@ int main() {
   Reset(feedback);
   feedback.UpdateNOS(true, 1);
   Tick(feedback);
-  assert(sent.wLeftMotorSpeed == 0 && feedback.mMW.outputLeft > 0);
+  assert(sent.wLeftMotorSpeed == 0 && feedback.mEffects.outputLeft > 0);
   Tick(feedback);
   assert(sent.wLeftMotorSpeed > 0 && sent.wRightMotorSpeed == 0);
   // No secondary shift query: only the native callback starts this ramp.
   feedback.UpdateEngineBlown(false);
   Tick(feedback);
-  assert(feedback.mMW.shiftLeft.remaining == 0);
+  assert(feedback.mEffects.shiftLeft.remaining == 0);
   feedback.UpdateShifting(true);
-  assert(Near(feedback.mMW.shiftLeft.remaining, 0.5f));
-  assert(Near(feedback.mMW.shiftRight.remaining, 0.5f));
+  assert(Near(feedback.mEffects.shiftLeft.remaining, 0.5f));
+  assert(Near(feedback.mEffects.shiftRight.remaining, 0.5f));
 
   Reset(feedback);
   COLLISION_INFO hit = Contact();
   bodies[0].velocity[0] = 15;
   feedback.ReportCollision(hit, true);
-  assert(Near(feedback.mMW.collision.remaining, 0.5f));
+  assert(Near(feedback.mEffects.collision.remaining, 0.5f));
   Tick(feedback);
   Tick(feedback);
   // Retail fixed-stream output, before the second 10 ms sample.
@@ -137,15 +139,15 @@ int main() {
   assert(sent.wLeftMotorSpeed == 0 && sent.wRightMotorSpeed == 0);
   // Weak retriggers preserve amplitude/duration but extend remaining time.
   Reset(feedback);
-  feedback.mMW.Collision(0.5f);
-  feedback.mMW.collision.Sample(0.4f);
-  feedback.mMW.Collision(0.2f);
-  assert(Near(feedback.mMW.collision.remaining, 0.2f));
-  assert(Near(feedback.mMW.collision.duration, 0.5f));
-  assert(Near(feedback.mMW.collision.amplitude, 0.5f));
-  feedback.mMW.Collision(0.8f);
-  assert(Near(feedback.mMW.collision.remaining, 0.8f));
-  assert(Near(feedback.mMW.collision.duration, 0.8f));
+  feedback.mEffects.Collision(0.5f);
+  feedback.mEffects.collision.Sample(0.4f);
+  feedback.mEffects.Collision(0.2f);
+  assert(Near(feedback.mEffects.collision.remaining, 0.2f));
+  assert(Near(feedback.mEffects.collision.duration, 0.5f));
+  assert(Near(feedback.mEffects.collision.amplitude, 0.5f));
+  feedback.mEffects.Collision(0.8f);
+  assert(Near(feedback.mEffects.collision.remaining, 0.8f));
+  assert(Near(feedback.mEffects.collision.duration, 0.8f));
 
   // Sliding flags do not suppress the native collision or add a scrape motor.
   Reset(feedback);
@@ -157,10 +159,10 @@ int main() {
   // Closing speed alone cannot invent a hit when measured delta is zero.
   Reset(feedback);
   feedback.ReportCollision(hit, true);
-  assert(feedback.mMW.collision.remaining == 0);
+  assert(feedback.mEffects.collision.remaining == 0);
   hit = Contact(3); bodies[0].velocity[0] = 2.5f;
   feedback.ReportCollision(hit, true);
-  assert(Near(feedback.mMW.collision.amplitude, 0.5f));
+  assert(Near(feedback.mEffects.collision.amplitude, 0.5f));
 
   // Rear-end strength uses A's stored speed for either ownership choice.
   for (int owner = 0; owner < 2; ++owner) {
@@ -169,7 +171,7 @@ int main() {
     hit.objAVel[0] = bodies[0].velocity[0] = 20;
     hit.objBVel[0] = bodies[1].velocity[0] = 40;
     feedback.ReportCollision(hit, owner == 0);
-    assert(Near(feedback.mMW.collision.amplitude, 0.25f));
+    assert(Near(feedback.mEffects.collision.amplitude, 0.25f));
   }
   Reset(feedback);
   hit = Contact(1);
@@ -177,23 +179,23 @@ int main() {
   hit.objBVel[0] = bodies[1].velocity[0] = -20;
   bodies[1].vehicle = false;
   feedback.ReportCollision(hit, true);
-  assert(Near(feedback.mMW.collision.amplitude, 2.0f/3));
+  assert(Near(feedback.mEffects.collision.amplitude, 2.0f/3));
   Reset(feedback);
   hit = Contact(); hit.objA = NULL;
   feedback.ReportCollision(hit, true);
-  assert(feedback.mMW.collision.remaining == 0);
+  assert(feedback.mEffects.collision.remaining == 0);
   bodies[0].velocity[0] = 15;
   hit.objA = (void*)1; hit.objB = NULL;
   feedback.ReportCollision(hit, true);
-  assert(Near(feedback.mMW.collision.amplitude, 0.5f));
+  assert(Near(feedback.mEffects.collision.amplitude, 0.5f));
 
   Reset(feedback);
   feedback.UpdateNOS(true, 1);
-  feedback.mMW.Collision(0.5f);
+  feedback.mEffects.Collision(0.5f);
   feedback.mRoadWave.fPhase[0] = 0.25f;
   feedback.mRoadWave.fAmplitude[0] = 1;
   Tick(feedback);
-  MWEffects before = feedback.mMW;
+  RumbleEffects before = feedback.mEffects;
   RumbleWave beforeRoad = feedback.mRoadWave;
   feedback.PauseEffects();
   assert(sent.wLeftMotorSpeed == 0 && sent.wRightMotorSpeed == 0);
@@ -208,26 +210,26 @@ int main() {
   feedback.UpdateTireSkid(true, *(SimSurface*)surface, 10);
   fixedTime += 0.1;
   feedback.PollEffects();
-  assert(!memcmp(&before, &feedback.mMW, sizeof(before)));
+  assert(!memcmp(&before, &feedback.mEffects, sizeof(before)));
   assert(!memcmp(&beforeRoad, &feedback.mRoadWave, sizeof(beforeRoad)));
   feedback.ResumeEffects();
   assert(sent.wLeftMotorSpeed == before.outputLeft);
   Tick(feedback);
-  assert(Near(feedback.mMW.nos.remaining, before.nos.remaining - 0.01f));
+  assert(Near(feedback.mEffects.nos.remaining, before.nos.remaining - 0.01f));
   // Reset clears only volumes and collision; paused event flags/ramp survive.
-  before = feedback.mMW;
+  before = feedback.mEffects;
   feedback.ResetEffects();
-  assert(feedback.mPaused && feedback.mMW.collision.remaining == 0);
-  assert(feedback.mMW.outputLeft == 0 && feedback.mMW.outputRight == 0);
-  assert(feedback.mMW.nosOn && Near(feedback.mMW.nos.remaining, before.nos.remaining));
+  assert(feedback.mPaused && feedback.mEffects.collision.remaining == 0);
+  assert(feedback.mEffects.outputLeft == 0 && feedback.mEffects.outputRight == 0);
+  assert(feedback.mEffects.nosOn && Near(feedback.mEffects.nos.remaining, before.nos.remaining));
   assert(feedback.mRoadWave.fAmplitude[0] == 1);
   feedback.ResumeEffects();
   feedback.UpdateNOS(true, 1);
-  assert(Near(feedback.mMW.nos.remaining, before.nos.remaining));
-  before = feedback.mMW;
+  assert(Near(feedback.mEffects.nos.remaining, before.nos.remaining));
+  before = feedback.mEffects;
   g_Controllers[0].bConnected = false;
   feedback.ResetEffects();
-  assert(!feedback.mPaused && !memcmp(&before, &feedback.mMW, sizeof(before)));
+  assert(!feedback.mPaused && !memcmp(&before, &feedback.mEffects, sizeof(before)));
   g_Controllers[0].bConnected = true;
 
   // BeginUpdate clears wave parameters even when disabled, retaining phase/ramps.
@@ -235,7 +237,7 @@ int main() {
   feedback.BeginUpdate();
   assert(feedback.mRoadWave.fAmplitude[0] == 0);
   assert(feedback.mRoadWave.fPhase[0] == beforeRoad.fPhase[0]);
-  assert(Near(feedback.mMW.nos.remaining, before.nos.remaining));
+  assert(Near(feedback.mEffects.nos.remaining, before.nos.remaining));
   feedback.ResumeEffects();
   attributeQueries = 0;
   feedback.UpdateRoadNoise(true, *(SimSurface*)surface, 10);
@@ -244,18 +246,18 @@ int main() {
   Reset(feedback);
   feedback.UpdateNOS(true, 1);
   Tick(feedback, 0.15);
-  assert(Near(feedback.mMW.nos.remaining, 1.85f));
-  before = feedback.mMW;
+  assert(Near(feedback.mEffects.nos.remaining, 1.85f));
+  before = feedback.mEffects;
   feedback.PollEffects();
-  assert(!memcmp(&before, &feedback.mMW, sizeof(before)));
+  assert(!memcmp(&before, &feedback.mEffects, sizeof(before)));
   fixedTime += 0.3;
   feedback.PollEffects();
-  assert(sent.wLeftMotorSpeed == 0 && Near(feedback.mMW.nos.remaining, 1.85f));
+  assert(sent.wLeftMotorSpeed == 0 && Near(feedback.mEffects.nos.remaining, 1.85f));
   feedback.EndUpdate();
   bRumbleAppActive = false;
   fixedTime += 0.01;
   feedback.PollEffects();
-  assert(sent.wLeftMotorSpeed == 0 && Near(feedback.mMW.nos.remaining, 1.85f));
+  assert(sent.wLeftMotorSpeed == 0 && Near(feedback.mEffects.nos.remaining, 1.85f));
   bRumbleAppActive = true;
   feedback.Send(1, 2);
   assert(sent.wLeftMotorSpeed == 1 && sent.wRightMotorSpeed == 2);

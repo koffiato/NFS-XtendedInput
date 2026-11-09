@@ -1,6 +1,8 @@
 // Recovered Undercover controller feedback and native interface wiring tests.
 #define NOMINMAX
+#ifndef GAME_UC
 #define GAME_UC
+#endif
 #define RUMBLE_TESTING
 #include <Windows.h>
 #include <XInput.h>
@@ -323,20 +325,20 @@ void CheckNativeMixerVectors() {
     for (RumbleWave* wave : {&f.mRoadWave, &f.mSkidWave, &f.mSlipWave, &f.mCollisionWave})
       for (int ch = 0; ch < 4; ++ch)
         seedWave(wave->fPhase[ch], wave->fAmplitude[ch], wave->fFrequency[ch], wave->fOffset[ch]);
-    for (MWWave* wave : {&f.mMW.driftLeft, &f.mMW.driftRight})
+    for (RumbleOscillator* wave : {&f.mEffects.driftLeft, &f.mEffects.driftRight})
       seedWave(wave->phase, wave->amplitude, wave->frequency, wave->offset);
-    for (MWRamp* ramp : {&f.mMW.potentialLeft, &f.mMW.potentialRight, &f.mMW.nos,
-                        &f.mMW.engineLeft, &f.mMW.engineRight, &f.mMW.shiftLeft,
-                        &f.mMW.shiftRight, &f.mMW.bumpLeft, &f.mMW.bumpRight}) {
+    for (RumbleRamp* ramp : {&f.mEffects.potentialLeft, &f.mEffects.potentialRight, &f.mEffects.nos,
+                        &f.mEffects.engineLeft, &f.mEffects.engineRight, &f.mEffects.shiftLeft,
+                        &f.mEffects.shiftRight, &f.mEffects.bumpLeft, &f.mEffects.bumpRight}) {
       ramp->remaining = (next()%4+1)/8.0f;
       ramp->duration = 0.5f;
       ramp->amplitude = (next()%97)/128.0f;
       ramp->floor = (next()%33)/256.0f;
     }
     Tick(f, milliseconds/1000.0);
-    if (abs(f.mMW.outputLeft-expectedLeft) > 2 || abs(f.mMW.outputRight-expectedRight) > 2) {
+    if (abs(f.mEffects.outputLeft-expectedLeft) > 2 || abs(f.mEffects.outputRight-expectedRight) > 2) {
       printf("Native mixer vector %u: got %d/%d, expected %d/%d\n", seed,
-             f.mMW.outputLeft,f.mMW.outputRight,expectedLeft,expectedRight);
+             f.mEffects.outputLeft,f.mEffects.outputRight,expectedLeft,expectedRight);
       assert(false);
     }
     ++cases;
@@ -354,7 +356,7 @@ int main() {
   RumbleUCFindCollection = FindCollection;
   RumbleUCConstructInstance = (decltype(RumbleUCConstructInstance))ConstructInstance;
   RumbleUCDestroyInstance = (decltype(RumbleUCDestroyInstance))DestroyInstance;
-  RumbleMWResolveSimable = Resolve;
+  RumbleResolveSimable = Resolve;
   RumbleSimTimePtr = &simTime;
   UTL_Com_Object_IList_Find = (decltype(UTL_Com_Object_IList_Find))Find;
   Attrib_Instance_GetAttributePointer = (decltype(Attrib_Instance_GetAttributePointer))Attribute;
@@ -410,15 +412,15 @@ int main() {
 
   // Slot 10: UpdateShiftPotential
   vUpdateShiftPotential(&feedback, SHIFT_POTENTIAL_PERFECT);
-  assert(feedback.mMW.potential == (int)SHIFT_POTENTIAL_PERFECT);
+  assert(feedback.mEffects.potential == (int)SHIFT_POTENTIAL_PERFECT);
 
   // Slot 12: UpdateEngineBlown
   vUpdateEngineBlown(&feedback, true);
-  assert(feedback.mMW.engineOn == true);
+  assert(feedback.mEffects.engineOn == true);
 
   // Slot 13: UpdateShifting
   vUpdateShifting(&feedback, true);
-  assert(feedback.mMW.shifting == true);
+  assert(feedback.mEffects.shifting == true);
 
   // Native BeginUpdate clears phases as well as parameters in all six wave
   // groups. The executable audit independently executes its stores for 3 ports.
@@ -426,15 +428,15 @@ int main() {
   for (RumbleWave* wave : {&feedback.mRoadWave, &feedback.mSkidWave,
                           &feedback.mSlipWave, &feedback.mCollisionWave})
     for (int ch = 0; ch < 4; ++ch) wave->fPhase[ch] = 0.25f*(ch+1);
-  feedback.mMW.driftLeft = feedback.mMW.driftRight = {0.75f,0.5f,60,0.1f};
-  feedback.mMW.nos.Start(1, 0.5f, 1.25f);
+  feedback.mEffects.driftLeft = feedback.mEffects.driftRight = {0.75f,0.5f,60,0.1f};
+  feedback.mEffects.nos.Start(1, 0.5f, 1.25f);
   vBeginUpdate(&feedback);
   for (RumbleWave* wave : {&feedback.mRoadWave, &feedback.mSkidWave,
                           &feedback.mSlipWave, &feedback.mCollisionWave})
     for (int ch = 0; ch < 4; ++ch)
       assert(!wave->fPhase[ch] && !wave->fFrequency[ch] && !wave->fAmplitude[ch] && !wave->fOffset[ch]);
-  assert(!feedback.mMW.driftLeft.phase && !feedback.mMW.driftRight.phase);
-  assert(Near(feedback.mMW.nos.remaining, 1.25f)); // ramp times survive Begin
+  assert(!feedback.mEffects.driftLeft.phase && !feedback.mEffects.driftRight.phase);
+  assert(Near(feedback.mEffects.nos.remaining, 1.25f)); // ramp times survive Begin
 
   // Stream consecutive producer frames at varying rates, checking the previous
   // frame's Push and this frame's Run independently. A continuously integrated
@@ -452,21 +454,21 @@ int main() {
     float phase = (float)dt*4;
     int expected = (int)((0.1f+0.6f*sinf(6.2831854820251465f*phase))*65535);
     assert(abs((int)sent.wLeftMotorSpeed-previous) <= 1 && !sent.wRightMotorSpeed);
-    assert(abs(feedback.mMW.outputLeft-expected) <= 1);
+    assert(abs(feedback.mEffects.outputLeft-expected) <= 1);
     assert(Near(feedback.mRoadWave.fPhase[0], phase));
     previous = expected;
   }
 
   // Literal console transform vectors, including strict piecewise boundaries.
-  assert(Near(RumbleUCSlip(-0.751f, 0.1f), 1));
-  assert(Near(RumbleUCSlip(-0.75f, 0.1f), 0));
-  assert(Near(RumbleUCSlip(1.1f, 0.2f), 0.25f));
-  assert(Near(RumbleUCSkid(0.2f, 0.1f, 0.3f, 0.5f), 0.25f));
-  assert(Near(RumbleUCMap(1, 2, 2), 0));
-  assert(Near(RumbleUCDriftSlip(0.2f, 0.1f), 0.2f));
-  assert(Near(RumbleUCDriftSlip(0.3f, 0.1f), 0));
-  assert(Near(RumbleUCDriftSlip(0.65f, 0.1f), 0.2f));
-  assert(Near(RumbleUCDriftSkid(0.2f, 0.1f, 0.3f), 0.35f));
+  assert(Near(RumbleTyreSlip(-0.751f, 0.1f), 1));
+  assert(Near(RumbleTyreSlip(-0.75f, 0.1f), 0));
+  assert(Near(RumbleTyreSlip(1.1f, 0.2f), 0.25f));
+  assert(Near(RumbleTyreSkid(0.2f, 0.1f, 0.3f, 0.5f), 0.25f));
+  assert(Near(RumbleTyreMap(1, 2, 2), 0));
+  assert(Near(RumbleTyreDriftSlip(0.2f, 0.1f), 0.2f));
+  assert(Near(RumbleTyreDriftSlip(0.3f, 0.1f), 0));
+  assert(Near(RumbleTyreDriftSlip(0.65f, 0.1f), 0.2f));
+  assert(Near(RumbleTyreDriftSkid(0.2f, 0.1f, 0.3f), 0.35f));
 
   // Each tyre callback evaluates its native surface key using normalized input.
   record = {0,0,0,0,0,1,0,1};
@@ -488,25 +490,25 @@ int main() {
   Reset(feedback);
   simTime = 0;
   vUpdateDriftSlip(&feedback, true, 0.4f, 1.0f);
-  assert(Near(feedback.mMW.driftLeft.amplitude, 0.4f));
-  assert(Near(feedback.mMW.driftRight.frequency, 90));
+  assert(Near(feedback.mEffects.driftLeft.amplitude, 0.4f));
+  assert(Near(feedback.mEffects.driftRight.frequency, 90));
   Tick(feedback, 0.0025);
   Tick(feedback, 0.0025);
   int driftMotor = (int)(0.4f * sinf(6.2831854820251465f * 0.225f) * 65535.0f);
   assert(abs((int)sent.wLeftMotorSpeed - driftMotor) <= 1);
   assert(sent.wLeftMotorSpeed == sent.wRightMotorSpeed);
   feedback.BeginUpdate();
-  assert(!feedback.mMW.driftLeft.amplitude && !feedback.mMW.driftLeft.phase);
+  assert(!feedback.mEffects.driftLeft.amplitude && !feedback.mEffects.driftLeft.phase);
   simTime = 2.5f;
   vUpdateDriftSlip(&feedback, true, -0.2f, 0.5f);
-  assert(Near(feedback.mMW.driftLeft.phase, 2500));
-  assert(Near(feedback.mMW.driftLeft.amplitude, 0.1f));
-  assert(Near(feedback.mMW.driftLeft.frequency, 75));
+  assert(Near(feedback.mEffects.driftLeft.phase, 2500));
+  assert(Near(feedback.mEffects.driftLeft.amplitude, 0.1f));
+  assert(Near(feedback.mEffects.driftLeft.frequency, 75));
   vUpdateDriftSlip(&feedback, false, 1, 1);
-  assert(!feedback.mMW.driftLeft.phase && !feedback.mMW.driftRight.amplitude);
+  assert(!feedback.mEffects.driftLeft.phase && !feedback.mEffects.driftRight.amplitude);
   feedback.PauseEffects();
   vUpdateDriftSlip(&feedback, true, 1, 1);
-  assert(!feedback.mMW.driftLeft.amplitude);
+  assert(!feedback.mEffects.driftLeft.amplitude);
 
   // Xbox Run advances shift/potential/engine ramps but omits their samples.
   Reset(feedback);
@@ -515,20 +517,20 @@ int main() {
   vUpdateShifting(&feedback, true);
   Tick(feedback); Tick(feedback);
   assert(!sent.wLeftMotorSpeed && !sent.wRightMotorSpeed);
-  assert(feedback.mMW.shiftLeft.remaining < 0.5f);
+  assert(feedback.mEffects.shiftLeft.remaining < 0.5f);
 
   // Slot 18: strict threshold, parity routing, later wheel replaces earlier.
   auto vBump = (void(__thiscall*)(IFeedback*, unsigned int, float, const SimSurface&))vtable[18];
   Reset(feedback);
   vBump(&feedback, 0, 0.2f, roadSurface);
-  assert(!feedback.mMW.bumpLeft.remaining);
+  assert(!feedback.mEffects.bumpLeft.remaining);
   vBump(&feedback, 0, 1.0f, roadSurface);
   vBump(&feedback, 2, 0.6f, roadSurface);
   vBump(&feedback, 1, 0.8f, roadSurface);
   vBump(&feedback, 4, 100.0f, roadSurface);
-  assert(Near(feedback.mMW.bumpLeft.amplitude, 0.3f));
-  assert(Near(feedback.mMW.bumpRight.amplitude, 0.4f));
-  assert(Near(feedback.mMW.bumpLeft.duration, 0.3f) && Near(feedback.mMW.bumpLeft.floor, 0.1f));
+  assert(Near(feedback.mEffects.bumpLeft.amplitude, 0.3f));
+  assert(Near(feedback.mEffects.bumpRight.amplitude, 0.4f));
+  assert(Near(feedback.mEffects.bumpLeft.duration, 0.3f) && Near(feedback.mEffects.bumpLeft.floor, 0.1f));
   Tick(feedback); Tick(feedback);
   assert(abs((int)sent.wLeftMotorSpeed - (int)((0.3f-0.2f/30)*65535)) <= 1);
 
@@ -542,7 +544,7 @@ int main() {
     vReportCollision(&feedback, hit, owner == 0, RumbleUCVector{1,2,3});
     assert(lastKey == 0xAEF4FB7D);
     assert(Near(feedback.mCollisionWave.fAmplitude[0], 10*mph/200));
-    assert(!instances && !feedback.mMW.collision.remaining);
+    assert(!instances && !feedback.mEffects.collision.remaining);
   }
   Reset(feedback);
   COLLISION_INFO hit = Contact(1);

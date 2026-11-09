@@ -13,8 +13,8 @@
 #include "../src/input/Analog.h"
 
 #ifdef GAME_PROSTREET
-#include "../src/NFS_XtendedInput.h"
-#include "../src/NFS_XtentedInput_ActionID.h"
+#include "../src/input/State.h"
+#include "../src/input/Actions.h"
 #include "../src/input/Controls.h"
 #else
 #include "../src/input/Controls.h"

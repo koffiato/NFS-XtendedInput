@@ -367,6 +367,146 @@ void CheckKeyboard() {
   asyncKeys['B'] = 0;
 }
 
+#if INPUT_SCANNERS
+void CheckScannerSteering() {
+  alignas(float) char driver[REALDRIVER_STEER_OFFSET + sizeof(float)] = {};
+  auto steer = [&](int port) {
+    RealDriver_JoyHandler_Steer(port, 0, 0, driver);
+    return *(float*)(driver + REALDRIVER_STEER_OFFSET);
+  };
+  SteerLeftVKey = 'L';
+  SteerRightVKey = 'R';
+  SteerLeftAxis = XINPUT_GAMEPAD_LS_LEFT_CONFIGDEF;
+  SteerRightAxis = XINPUT_GAMEPAD_LS_RIGHT_CONFIGDEF;
+  SteerLeftButton = XINPUT_GAMEPAD_A;
+  SteerRightButton = XINPUT_GAMEPAD_B;
+  g_Controllers[0] = g_Controllers[1] = {};
+  memset(VKeyStates, 0, sizeof(VKeyStates));
+  memset(asyncKeys, 0, sizeof(asyncKeys));
+
+  KeyboardReadingMode = KB_READINGMODE_UNBUFFERED_RAW;
+  VKeyStates[0]['L'] = VKeyStates[1]['R'] = 1;
+  assert(steer(0) == 1 && steer(1) == -1); // Independent raw keyboards.
+  VKeyStates[0]['R'] = 1;
+  assert(steer(0) == 0); // Opposite keys cancel.
+  VKeyStates[0]['R'] = 0;
+
+  KeyboardReadingMode = KB_READINGMODE_BUFFERED;
+  assert(steer(0) == 0 && steer(1) == 0); // Low bit is not a buffered press.
+  VKeyStates[0]['L'] = 0x80;
+  assert(steer(0) == 1 && steer(1) == 1); // Both ports use the shared buffer.
+
+  KeyboardReadingMode = KB_READINGMODE_UNBUFFERED_ASYNC;
+  asyncKeys['R'] = 1;
+  assert(steer(0) == 0 && steer(1) == 0); // Ignore the async transition bit.
+  asyncKeys['R'] = (SHORT)0x8000;
+  assert(steer(0) == -1 && steer(1) == -1);
+  asyncKeys['R'] = 0;
+  SteerLeftVKey = SteerRightVKey = 0;
+  asyncKeys[0] = (SHORT)0x8000;
+  assert(steer(0) == 0 && steer(1) == 0); // Unbound keys stay inactive.
+  asyncKeys[0] = 0;
+
+  g_Controllers[0].state.Gamepad.sThumbLX = -32768;
+  assert(steer(0) == 1 && steer(1) == 0); // Clamp the negative stick endpoint.
+  g_Controllers[0].state.Gamepad.sThumbLX = 32767;
+  g_Controllers[0].state.Gamepad.wButtons = XINPUT_GAMEPAD_B;
+  assert(steer(0) == -1); // Analog and digital steering saturate together.
+  g_Controllers[0].state.Gamepad.wButtons = XINPUT_GAMEPAD_A;
+  assert(steer(0) == 0);
+  g_Controllers[0] = {};
+}
+
+void CheckScannerAxes() {
+  const WORD bindings[] = {XINPUT_GAMEPAD_LS_X_CONFIGDEF, XINPUT_GAMEPAD_RS_X_CONFIGDEF,
+                           XINPUT_GAMEPAD_LS_Y_CONFIGDEF, XINPUT_GAMEPAD_RS_Y_CONFIGDEF};
+  SHORT XINPUT_GAMEPAD::* const axes[] = {&XINPUT_GAMEPAD::sThumbLX, &XINPUT_GAMEPAD::sThumbRX,
+                                        &XINPUT_GAMEPAD::sThumbLY, &XINPUT_GAMEPAD::sThumbRY};
+  const SHORT samples[] = {-32768, -16384, 0, 16384, 32767};
+  const BYTE expected[] = {1, 65, 128, 191, 255};
+  for (int port = 0; port < 2; ++port) {
+    void* joystick = port ? (void*)JOY2_ADDR : NULL;
+    for (int axis = 0; axis < 4; ++axis) {
+      for (int sample = 0; sample < 5; ++sample) {
+        g_Controllers[0] = g_Controllers[1] = {};
+        g_Controllers[port].state.Gamepad.*axes[axis] = samples[sample];
+        ScannerConfig config = {};
+        config.JoyEvent = JOY_EVENT_CARSEL_ORBIT_LEFTRIGHT;
+        config.BitmaskStuff = bindings[axis];
+        EventStates[port][config.JoyEvent] = 0xFFFF;
+        assert(Scanner_Analog(NULL, NULL, 0, &config, joystick) == (int)(config.JoyEvent | expected[sample] << 8));
+        assert(Scanner_Analog(NULL, NULL, 0, &config, joystick) == 0);
+
+        config.JoyEvent = JOY_EVENT_CARSEL_ORBIT_UPDOWN;
+        EventStates[port][config.JoyEvent] = 0xFFFF;
+        BYTE inverted = (BYTE)-expected[sample];
+        assert(Scanner_Analog(NULL, NULL, 0, &config, joystick) == (int)(config.JoyEvent | inverted << 8));
+
+        for (unsigned int event : {JOY_EVENT_DRAG_RACE_CHANGE_LANE_LEFT_ANALOG, JOY_EVENT_DRAG_RACE_CHANGE_LANE_RIGHT_ANALOG}) {
+          config.JoyEvent = event;
+          EventStates[port][event] = 0;
+          const bool left = event == JOY_EVENT_DRAG_RACE_CHANGE_LANE_LEFT_ANALOG;
+          const int dragAxis = (int)expected[sample] - 128;
+          const int encoded = (left ? dragAxis < 0 : dragAxis > 0) ? (int)(event | (BYTE)dragAxis << 8) : 0;
+          assert(Scanner_Analog_DragSteer(NULL, NULL, 0, &config, joystick) == encoded);
+          assert(Scanner_Analog_DragSteer(NULL, NULL, 0, &config, joystick) == 0);
+        }
+      }
+    }
+  }
+  g_Controllers[0] = g_Controllers[1] = {};
+}
+#endif
+
+#if !INPUT_SCANNERS && !defined(NO_FENG)
+#if defined(GAME_CARBON) || defined(GAME_PROSTREET)
+const char* printedTitle = nullptr;
+void* TestTitleObject(char* package, unsigned int hash) {
+  assert(package == SplashPkgName && hash == 0xC4DF3FF2);
+  return (void*)0x1234;
+}
+int TestTitlePrint(void* object, const char* text, ...) {
+  assert(object == (void*)0x1234);
+  printedTitle = text;
+  return 0;
+}
+#endif
+
+void CheckTitleScreen() {
+  bool previousConsole = bConsoleFEng;
+  unsigned int previousIcons = ControllerIconMode;
+  const char* expected[] = {"Press MENU or A button", "Press OPTIONS or X button", "Press START or A button",
+                            "Press START or X button", "Press + button", "Press START or A button"};
+  for (unsigned int mode = 0; mode < 6; ++mode) {
+    ControllerIconMode = mode;
+    bConsoleFEng = false;
+    assert(!strcmp(TitleScreenPrompt(), "CLICK or ENTER to continue"));
+    bConsoleFEng = true;
+    assert(!strcmp(TitleScreenPrompt(), expected[mode]));
+  }
+  ControllerIconMode = 999;
+  assert(!strcmp(TitleScreenPrompt(), "Press MENU or A button"));
+#if defined(GAME_CARBON) || defined(GAME_PROSTREET)
+  // Exercise the separately compiled title module through replaceable native bindings.
+  auto previousFind = FEngFindObject_Title;
+  auto previousPrint = FE_String_Printf;
+  FEngFindObject_Title = TestTitleObject;
+  FE_String_Printf = TestTitlePrint;
+  ControllerIconMode = CONTROLLERICON_PS4;
+  for (bool console : {false, true}) {
+    bConsoleFEng = console;
+    printedTitle = nullptr;
+    SetTitleScreenText();
+    assert(printedTitle && !strcmp(printedTitle, console ? "Press OPTIONS or X button" : "CLICK or ENTER to continue"));
+  }
+  FEngFindObject_Title = previousFind;
+  FE_String_Printf = previousPrint;
+#endif
+  bConsoleFEng = previousConsole;
+  ControllerIconMode = previousIcons;
+}
+#endif
+
 void CheckBindings() {
   XINPUT_GAMEPAD pad = {};
   pad.bLeftTrigger = 51;
@@ -417,7 +557,12 @@ int main() {
   CheckPolling();
   CheckKeyboard();
   CheckBindings();
+#if !INPUT_SCANNERS && !defined(NO_FENG)
+  CheckTitleScreen();
+#endif
 #if INPUT_SCANNERS
+  CheckScannerSteering();
+  CheckScannerAxes();
   bRumbleInstalled = true;
   RumblePorts[0].sent[0] = 100;
 #endif

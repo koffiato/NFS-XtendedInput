@@ -21,7 +21,9 @@ if errorlevel 1 (popd & exit /b 1)
 rc /nologo /fo"build\tests\default-%~1.res" "build\tests\config-%~1\DefaultConfig.rc"
 if errorlevel 1 (popd & exit /b 1)
 set "CONFIG_RESOURCE=build\tests\default-%~1.res"
-cl /nologo /Od /RTC1 /EHsc /std:c++14 /D_CRT_SECURE_NO_WARNINGS /D%GAME% /Isrc\inc /Isrc\_vs tests\runtime_tests.cpp %CONFIG_RESOURCE% /Fo"build\tests\runtime-%~1.obj" /Fe"build\tests\runtime-%~1.exe" /link /BASE:0x2000000 /DYNAMICBASE /MACHINE:X86 /SUBSYSTEM:CONSOLE user32.lib winmm.lib
+call scripts\sources.cmd
+if not exist "build\tests\runtime-%~1" mkdir "build\tests\runtime-%~1"
+cl /nologo /Od /RTC1 /EHsc /std:c++14 /D_CRT_SECURE_NO_WARNINGS /D%GAME% /Isrc\inc /Isrc\_vs tests\runtime_tests.cpp %RUNTIME_SOURCES% %CONFIG_RESOURCE% /Fo"build\tests\runtime-%~1/" /Fe"build\tests\runtime-%~1.exe" /link /BASE:0x2000000 /DYNAMICBASE /MACHINE:X86 /SUBSYSTEM:CONSOLE user32.lib winmm.lib
 if errorlevel 1 (popd & exit /b 1)
 build\tests\runtime-%~1.exe
 set "RESULT=%errorlevel%"

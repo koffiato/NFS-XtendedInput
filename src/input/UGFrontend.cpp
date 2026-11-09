@@ -1,10 +1,13 @@
-#pragma once
-#define GAMEFLOWMANAGER_STATUS_ADDR 0x0077A920
-#define FEMOUSECURSOR_BUTTONPRESS_ADDR 0x007064B0
-#define FEMOUSECURSOR_CARORBIT_X_ADDR 0x007064A4
-#define FEMOUSECURSOR_CARORBIT_Y_ADDR 0x007064A8
-
-#define CFENG_PINSTANCE_ADDR 0x0073578C
+// UG native frontend implementation. MIT; see LICENSE.
+#include "Target.h"
+#ifdef GAME_UG
+#include "../_vs/stdafx.h"
+#include "State.h"
+#include "Addresses.h"
+#include "UGFrontend.h"
+#include "UGButtonTextures.h"
+#include <cstdlib>
+#include <cstring>
 
 enum ResourceFileType
 {
@@ -26,7 +29,6 @@ char CurrentSplashText[64];
 
 void* (*CreateResourceFile)(char* filename, int ResType, int unk1, int unk2, int unk3) = (void* (*)(char*, int, int, int, int))0x004482F0;
 void(*ServiceResourceLoading)() = (void(*)())0x004483C0;
-unsigned int(*GetTextureInfo)(unsigned int hash, int unk, int unk2) = (unsigned int(*)(unsigned int, int, int))0x005461C0;
 
 
 unsigned int ResourceFile_BeginLoading_Addr = 0x00448110;
@@ -368,3 +370,4 @@ void __declspec(naked) FEngGlobalCave()
 		jmp FEngGlobalCaveExit
 	}
 }
+#endif

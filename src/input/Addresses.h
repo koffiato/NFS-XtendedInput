@@ -11,17 +11,118 @@
 // clang-format on
 */
 
-#ifndef XTENDEDINPUT_DEFINITIONS_H
-#define XTENDEDINPUT_DEFINITIONS_H
+// Native addresses and layout constants for the selected game.
 #pragma once
-#include "input/Target.h"
+#include "Target.h"
 
-#include "NFS_XtendedInput.h"
+#ifdef GAME_UG
+#define FE_WINDOWS_KEY_CODE_ADDR 0x007363B1
+#define GAMEFLOWMANAGER_STATUS_ADDR 0x0077A920
+#define CURRENT_MENUPKG_ADDR 0x72CDD0
+#define FEMOUSECURSOR_BUTTONPRESS_ADDR 0x007064B0
+#define FEMOUSECURSOR_CARORBIT_X_ADDR 0x007064A4
+#define FEMOUSECURSOR_CARORBIT_Y_ADDR 0x007064A8
+#define NUMSCANNERCONFIGS_ADDR 0x00704140
+#define JOYSTICKTYPE_P1_ADDR 0x007306C4
+#define JOYSTICKTYPE_P2_ADDR 0x007306C5
+#define DEVICE_COUNT_ADDR 0x736504
+#define GAME_HWND_ADDR 0x00736380
+#define JOY2_ADDR 0x73B3EC
 
-// unbuffered -- calls GetAsyncKeyState during scanning process itself -- probably more taxing, but very good input latency (default)
-#define KB_READINGMODE_UNBUFFERED_ASYNC 0
-// buffered -- calls GetKeyboardState right after reading joypads, updates VKeyStates
-#define KB_READINGMODE_BUFFERED 1
+// functions
+#define INITJOY_ADDR 0x005741C0
+
+// injection addresses
+#define ACTUALREADJOYDATA_CALL_ADDR1 0x0040A7B5
+#define ACTUALREADJOYDATA_CALL_ADDR2 0x0040164C
+#define ACTUALREADJOYDATA_CALL_ADDR3 0x00401921
+
+#define EVENTGEN_JMP_ADDR_ENTRY 0x004071B8
+#define EVENTGEN_JMP_ADDR_EXIT 0x004075D1
+
+#define FENG_SENDMSG_HOOK_ADDR 0x004F7C08
+
+#define DINPUTENUM_JMP_ADDR_ENTRY 0x00405695
+#define DINPUTENUM_JMP_ADDR_EXIT 0x004056AA
+
+#define JOYBUFFER_JMP_ADDR_ENTRY 0x00405992
+#define JOYBUFFER_JMP_ADDR_EXIT 0x00405BD6
+
+#define SCANNERCONFIG_POINTER_ADDR 0x00574A22
+
+#define INITJOY_CALL_ADDR 0x00447271
+
+
+#define WNDPROC_POINTER_ADDR 0x4088FC
+
+#define STEER_HANDLER_ADDR1 0x00461213
+#define STEER_HANDLER_ADDR2 0x00461229
+#define REALDRIVER_STEER_OFFSET 0x28C
+
+#define CONFIG_JOY_INDEX_ADDR 0x00736344
+#define CFENG_PINSTANCE_ADDR 0x0073578C
+#endif
+
+#ifdef GAME_UG2
+#define GAMEFLOWMANAGER_STATUS_ADDR 0x008654A4
+#define JOYSTICKTYPE_P1_ADDR 0x00864788
+#define JOYSTICKTYPE_P2_ADDR 0x00864789
+#define NUMSCANNERCONFIGS_ADDR 0x007FE770
+#define DEVICE_COUNT_ADDR 0x00870764
+#define GAME_HWND_ADDR 0x00870990
+#define JOY2_ADDR 0x865768
+
+// functions
+#define INITJOY_ADDR 0x00579550
+#define FE_SENDKEY_ADDR 0x0055DBD0
+
+
+// injection addresses
+#define INITJOY_CALL_ADDR 0x0057ED80
+
+#define ACTUALREADJOYDATA_CALL_ADDR1 0x005D2C97
+
+#define EVENTGEN_JMP_ADDR_ENTRY 0x005C19D7
+#define EVENTGEN_JMP_ADDR_EXIT 0x005C20D4
+
+
+#define DINPUTENUM_JMP_ADDR_ENTRY 0x005D04B3
+#define DINPUTENUM_JMP_ADDR_EXIT 0x005D04C8
+
+#define JOYBUFFER_JMP_ADDR_ENTRY 0x005CFD7D
+#define JOYBUFFER_JMP_ADDR_EXIT 0x5CFFDE
+
+#define SCANNERCONFIG_POINTER_ADDR 0x00572149
+
+#define WNDPROC_POINTER_ADDR 0x5D25A5
+
+#define FINDSCANNERCONFIG_ADDR 0x00572120
+
+
+#define STEER_HANDLER_ADDR1 0x0041E083
+#define STEER_HANDLER_ADDR2 0x0041E09A
+#define REALDRIVER_STEER_OFFSET 0x2C8
+
+#define DISABLE_WHEEL_ADDR 0x005D2C83
+
+#define FEMOUSECURSOR_X_ADDR 0x008763D4
+#define FEMOUSECURSOR_Y_ADDR 0x008763D8
+#define FEMOUSECURSOR_BUTTONPRESS_ADDR 0x008763F1
+#define FEMOUSECURSOR_BUTTONPRESS2_ADDR 0x008763F2
+#define FEMOUSECURSOR_BUTTONPRESS3_ADDR 0x008763F3
+
+#define FEMOUSECURSOR_BUTTON2PRESS_ADDR 0x008763F7
+#define FEMOUSECURSOR_BUTTON2PRESS2_ADDR 0x008763F8
+#define FEMOUSECURSOR_BUTTON2PRESS3_ADDR 0x008763F9
+
+#define FEMOUSECURSOR_BUTTON3PRESS_ADDR 0x008763F4
+#define FEMOUSECURSOR_BUTTON3PRESS2_ADDR 0x008763F5
+#define FEMOUSECURSOR_BUTTON3PRESS3_ADDR 0x008763F6
+
+#define FEMOUSECURSOR_CARORBIT_X_ADDR 0x008763E4
+#define FEMOUSECURSOR_CARORBIT_Y_ADDR 0x008763E8
+#define FEMOUSE_MOUSEWHEEL_ADDR 0x008763EC
+#endif
 
 #ifdef GAME_MW
 #define NO_PROFILE_SETTINGS
@@ -78,7 +179,6 @@
 #define FASTMEM_ALLOC_ADDR             0x005D29D0
 #define FASTMEM_INITLISTALLOCATOR_ADDR 0x00635060
 #define FASTMEM_LISTALLOCATOR_ADDR     0x00635250
-#define STL_LIST_ADD_ADDR              0x645F10
 
 #define INIT_LIST_ALLOC_SIZE 0x24
 
@@ -89,7 +189,6 @@
 #define FENG_FINDOBJECT_ADDR   0x00524850
 #define FENG_SETVISIBLE_ADDR   0x00514CC0
 #define FENG_SETINVISIBLE_ADDR 0x00514C70
-#define FENG_SETLANGHASH_ADDR  0x00515C00
 
 #define CREATERESOURCEFILE_ADDR     0x0065FD30
 #define RESFILE_BEGINLOADING_ADDR   0x006616F0
@@ -128,7 +227,7 @@
 #define PRESS_START_HOOK_ADDR 0x005A3147
 
 #define DEBUGWORLDCAMERAMOVER_UPDATE_VT_ADDR 0x00894E08
-unsigned int DebugWorldCameraMover_Update_Addr = 0x0047E7B0;
+extern unsigned int DebugWorldCameraMover_Update_Addr;
 
 #define DEBUGWORLDCAMERAMOVER_CAVE1_ENTRY    0x0047E98E
 #define DEBUGWORLDCAMERAMOVER_CAVE1_EXIT     0x0047E9B9
@@ -256,95 +355,20 @@ enum FEButtonTex {
   FE_TEX_HASH_COUNT
 };
 
-unsigned int FE_DefaultButtonTexHashes[FE_TEX_HASH_COUNT] = {0,
-                                                             FE_ACCEPT_TEX_HASH,
-                                                             FE_CANCEL_TEX_HASH,
-                                                             FE_BUTTON4_TEX_HASH,
-                                                             FE_BUTTON5_TEX_HASH,
-                                                             FE_LTRIGGER_TEX_HASH,
-                                                             FE_RTRIGGER_TEX_HASH,
-                                                             FE_START_TEX_HASH,
-                                                             FE_SELECT_TEX_HASH,
-                                                             FE_BUTTON1_TEX_HASH,
-                                                             FE_BUTTON2_TEX_HASH,
-                                                             FE_BUTTON3_TEX_HASH,
-                                                             FE_RANALOG_TEX_HASH,
-                                                             FE_RANALOG_UP_TEX_HASH,
-                                                             FE_RANALOG_UP_SWEDISH_TEX_HASH,
-                                                             FE_RANALOG_UP_FRENCH_TEX_HASH,
-                                                             FE_RANALOG_DOWN_TEX_HASH,
-                                                             FE_RANALOG_DOWN_SWEDISH_TEX_HASH,
-                                                             FE_RANALOG_DOWN_FRENCH_TEX_HASH,
-                                                             FE_LANALOG_TEX_HASH,
-                                                             FE_LANALOG_UP_TEX_HASH,
-                                                             FE_LANALOG_UP_SWEDISH_TEX_HASH,
-                                                             FE_LANALOG_UP_FRENCH_TEX_HASH,
-                                                             FE_LANALOG_DOWN_TEX_HASH,
-                                                             FE_LANALOG_DOWN_SWEDISH_TEX_HASH,
-                                                             FE_LANALOG_DOWN_FRENCH_TEX_HASH,
-                                                             FE_DPAD_TEX_HASH,
-                                                             FE_DPAD_UPDOWN_TEX_HASH,
-                                                             FE_DPAD_LEFTRIGHT_TEX_HASH,
-                                                             FE_DPAD_UP_TEX_HASH,
-                                                             FE_DPAD_DOWN_TEX_HASH,
-                                                             FE_DPAD_LEFT_TEX_HASH,
-                                                             FE_DPAD_RIGHT_TEX_HASH};
+extern unsigned int FE_DefaultButtonTexHashes[FE_TEX_HASH_COUNT];
 
-bool cFEng_IsPackageInControl_Fast(unsigned int pkg_name_hash);
-int (*FEPrintf)(const char* pkg_name, void* FEObject, const char* format, ...) = (int (*)(const char*, void*, const char*, ...))FEPRINTF_ADDRESS;
-void* (*FEngFindObject_Title)(char* pkg_name, unsigned int obj_hash)           = (void* (*)(char*, unsigned int))FENG_FINDOBJECT_ADDR;
+extern int (*FEPrintf)(const char* pkg_name, void* FEObject, const char* format, ...);
+extern void* (*FEngFindObject_Title)(char* pkg_name, unsigned int obj_hash);
 
 #define WS_SPLASH_FNG_HASH 0x40E2717D
 #define SPLASH_FNG_HASH    0xAFEF0EB4
 
-char* SplashPkgName   = "MW_LS_Splash.fng";
-char* WSSplashPkgName = "WS_MW_LS_Splash.fng";
+extern char* SplashPkgName;
+extern char* WSSplashPkgName;
 
-int TitleScreenVisible() {
-  if ((*(int*)GAMEFLOWMANAGER_STATUS_ADDR == 3)) {
-    if (cFEng_IsPackageInControl_Fast(SPLASH_FNG_HASH)) return 1;
-    if (cFEng_IsPackageInControl_Fast(WS_SPLASH_FNG_HASH)) return 2;
-  }
-  return 0;
-}
 
-void SetTitleScreenText() {
-  int   title_screen_type = TitleScreenVisible();
-  int   obj_hash          = 0xC6CC55A4;
-  char* pkg_name          = SplashPkgName;
-  char* splash_txt        = FE_SPLASH_TEXT_PC;
 
-  if (title_screen_type) {
-    if (title_screen_type == 2) {
-      obj_hash = 0xC4DF3FF2;
-      pkg_name = WSSplashPkgName;
-    }
 
-    if (bConsoleFEng) {
-      switch (ControllerIconMode) {
-        case CONTROLLERICON_PS3:
-          splash_txt = FE_SPLASH_TEXT_PS3;
-          break;
-        case CONTROLLERICON_XB360MW:
-        case CONTROLLERICON_XBOX360:
-          splash_txt = FE_SPLASH_TEXT_XBOX360;
-          break;
-        case CONTROLLERICON_PS4:
-          splash_txt = FE_SPLASH_TEXT_PS4;
-          break;
-        case CONTROLLERICON_SWITCH:
-          splash_txt = FE_SPLASH_TEXT_SWITCH;
-          break;
-        case CONTROLLERICON_XBOXONE:
-        default:
-          splash_txt = FE_SPLASH_TEXT_XBOX;
-          break;
-      }
-    }
-
-    FEPrintf(pkg_name, FEngFindObject_Title(pkg_name, obj_hash), splash_txt);
-  }
-}
 #endif
 
 #ifdef GAME_CARBON
@@ -413,7 +437,6 @@ void SetTitleScreenText() {
 #define FENG_FINDOBJECT_ADDR 0x005A0250
 // Carbon and Pro Street use a bit of a different FE logic...
 #define FENG_SETOBJECTVISIBILITY_ADDR 0x00570460
-#define FENG_SETLANGHASH_ADDR         0x005A0830
 
 #define FEPACKAGE_FORALLOBJ_ADDR                0x005EC910
 #define FEPACKAGE_FINDOBJBYHASH_ADDR            0x005F3760
@@ -474,7 +497,6 @@ void SetTitleScreenText() {
 #define SELECTCAR_SETHROTATESPEED_ADDR   0x00488F70
 #define SELECTCAR_SETVROTATESPEED_ADDR   0x00488F40
 #define SELECTCAR_SETZOOMSPEED_ADDR      0x00488FA0
-#define FEGARAGEMAIN_ZOOMCAMERAVIEW_ADDR 0x0083EEF0
 #define SELECTCAROBJ_OFFSET              0x28
 
 #define PRESS_START_HOOK_ADDR 0x008577B6
@@ -484,7 +506,7 @@ void SetTitleScreenText() {
 #define FEPHOTOMODE_HANDLERTRIGGER_HOOK_ADDR   0x009D308C
 
 #define DEBUGWORLDCAMERAMOVER_UPDATE_VT_ADDR 0x009C7A10
-unsigned int DebugWorldCameraMover_Update_Addr = 0x004932A0;
+extern unsigned int DebugWorldCameraMover_Update_Addr;
 
 #define DEBUGWORLDCAMERAMOVER_CAVE1_ENTRY    0x004934AD
 #define DEBUGWORLDCAMERAMOVER_CAVE1_EXIT     0x004934D8
@@ -613,80 +635,16 @@ enum FEButtonTex {
   FE_TEX_HASH_COUNT
 };
 
-unsigned int FE_DefaultButtonTexHashes[FE_TEX_HASH_COUNT] = {
-    0,
-    FE_ACCEPT_TEX_HASH,
-    FE_CANCEL_TEX_HASH,
-    FE_BUTTON4_TEX_HASH,
-    FE_BUTTON5_TEX_HASH,
-    FE_LTRIGGER_TEX_HASH,
-    FE_RTRIGGER_TEX_HASH,
-    FE_BUTTON0_TEX_HASH,
-    FE_START_TEX_HASH,
-    FE_SELECT_TEX_HASH,
-    FE_BUTTON1_TEX_HASH,
-    FE_BUTTON2_TEX_HASH,
-    FE_BUTTON3_TEX_HASH,
-    FE_RANALOG_TEX_HASH,
-    FE_RANALOG_UP_TEX_HASH,
-    FE_RANALOG_UP_SWEDISH_TEX_HASH,
-    FE_RANALOG_UP_FRENCH_TEX_HASH,
-    FE_RANALOG_DOWN_TEX_HASH,
-    FE_RANALOG_DOWN_SWEDISH_TEX_HASH,
-    FE_RANALOG_DOWN_FRENCH_TEX_HASH,
-    FE_LANALOG_TEX_HASH,
-    FE_LANALOG_UP_TEX_HASH,
-    FE_LANALOG_UP_SWEDISH_TEX_HASH,
-    FE_LANALOG_UP_FRENCH_TEX_HASH,
-    FE_LANALOG_DOWN_TEX_HASH,
-    FE_LANALOG_DOWN_SWEDISH_TEX_HASH,
-    FE_LANALOG_DOWN_FRENCH_TEX_HASH,
-    FE_DPAD_TEX_HASH,
-    FE_DPAD_UPDOWN_TEX_HASH,
-    FE_DPAD_LEFTRIGHT_TEX_HASH,
-    FE_DPAD_UP_TEX_HASH,
-    FE_DPAD_DOWN_TEX_HASH,
-    FE_DPAD_LEFT_TEX_HASH,
-    FE_DPAD_RIGHT_TEX_HASH,
-};
+extern unsigned int FE_DefaultButtonTexHashes[FE_TEX_HASH_COUNT];
 
-bool cFEng_IsPackageInControl_Fast(unsigned int pkg_name_hash);
-int (*FE_String_Printf)(void* FEObject, const char* fmt, ...)        = (int (*)(void*, const char*, ...))FE_STRING_PRINTF_ADDRESS;
-void* (*FEngFindObject_Title)(char* pkg_name, unsigned int obj_hash) = (void* (*)(char*, unsigned int))FENG_FINDOBJECT_ADDR;
+extern int (*FE_String_Printf)(void* FEObject, const char* fmt, ...);
+extern void* (*FEngFindObject_Title)(char* pkg_name, unsigned int obj_hash);
 
-char* SplashPkgName = "DEMO_SPLASH.fng";
+extern char* SplashPkgName;
 
-void SetTitleScreenText() {
-  int   obj_hash   = 0xC4DF3FF2;
-  char* pkg_name   = SplashPkgName;
-  char* splash_txt = FE_SPLASH_TEXT_PC;
 
-  if (bConsoleFEng) {
-    switch (ControllerIconMode) {
-      case CONTROLLERICON_PS3:
-        splash_txt = FE_SPLASH_TEXT_PS3;
-        break;
-      case CONTROLLERICON_XB360MW:
-      case CONTROLLERICON_XBOX360:
-        splash_txt = FE_SPLASH_TEXT_XBOX360;
-        break;
-      case CONTROLLERICON_PS4:
-        splash_txt = FE_SPLASH_TEXT_PS4;
-        break;
-      case CONTROLLERICON_SWITCH:
-        splash_txt = FE_SPLASH_TEXT_SWITCH;
-        break;
-      case CONTROLLERICON_XBOXONE:
-      default:
-        splash_txt = FE_SPLASH_TEXT_XBOX;
-        break;
-    }
-  }
 
-  FE_String_Printf(FEngFindObject_Title(pkg_name, obj_hash), splash_txt);
-}
-
-void (*InitProfileSettings)() = (void (*)())0x00679BF0;
+extern void (*InitProfileSettings)();
 
 #define DALMANAGER_PROFILENAME_TYPEVAL 6044
 #define DALMANAGER_ADDR                0x00A8AD30
@@ -805,7 +763,6 @@ void (*InitProfileSettings)() = (void (*)())0x00679BF0;
 #define SELECTCAR_SETHROTATESPEED_ADDR   0x00647010
 #define SELECTCAR_SETVROTATESPEED_ADDR   0x00646FE0
 #define SELECTCAR_SETZOOMSPEED_ADDR      0x00647040
-#define FEGARAGEMAIN_ZOOMCAMERAVIEW_ADDR 0x007CB7C0
 #define SELECTCAROBJ_OFFSET              0xD0
 
 #define FEPHOTOMODE_HANDLESCREENTICK_HOOK_ADDR 0x005A791C
@@ -815,7 +772,7 @@ void (*InitProfileSettings)() = (void (*)())0x00679BF0;
 #define PRESS_START_HOOK_ADDR 0x007E2CA0
 
 #define DEBUGWORLDCAMERAMOVER_UPDATE_VT_ADDR 0x009817BC
-unsigned int DebugWorldCameraMover_Update_Addr = 0x00651BA0;
+extern unsigned int DebugWorldCameraMover_Update_Addr;
 
 #define DEBUGWORLDCAMERAMOVER_CAVE1_ENTRY    0x00651DFA
 #define DEBUGWORLDCAMERAMOVER_CAVE1_EXIT     0x00651E27
@@ -946,80 +903,16 @@ enum FEButtonTex {
   FE_TEX_HASH_COUNT
 };
 
-unsigned int FE_DefaultButtonTexHashes[FE_TEX_HASH_COUNT] = {
-    0,
-    FE_ACCEPT_TEX_HASH,
-    FE_CANCEL_TEX_HASH,
-    FE_BUTTON4_TEX_HASH,
-    FE_BUTTON5_TEX_HASH,
-    FE_LTRIGGER_TEX_HASH,
-    FE_RTRIGGER_TEX_HASH,
-    FE_BUTTON0_TEX_HASH,
-    FE_START_TEX_HASH,
-    FE_SELECT_TEX_HASH,
-    FE_BUTTON1_TEX_HASH,
-    FE_BUTTON2_TEX_HASH,
-    FE_BUTTON3_TEX_HASH,
-    FE_RANALOG_TEX_HASH,
-    FE_RANALOG_UP_TEX_HASH,
-    FE_RANALOG_UP_SWEDISH_TEX_HASH,
-    FE_RANALOG_UP_FRENCH_TEX_HASH,
-    FE_RANALOG_DOWN_TEX_HASH,
-    FE_RANALOG_DOWN_SWEDISH_TEX_HASH,
-    FE_RANALOG_DOWN_FRENCH_TEX_HASH,
-    FE_LANALOG_TEX_HASH,
-    FE_LANALOG_UP_TEX_HASH,
-    FE_LANALOG_UP_SWEDISH_TEX_HASH,
-    FE_LANALOG_UP_FRENCH_TEX_HASH,
-    FE_LANALOG_DOWN_TEX_HASH,
-    FE_LANALOG_DOWN_SWEDISH_TEX_HASH,
-    FE_LANALOG_DOWN_FRENCH_TEX_HASH,
-    FE_DPAD_TEX_HASH,
-    FE_DPAD_UPDOWN_TEX_HASH,
-    FE_DPAD_LEFTRIGHT_TEX_HASH,
-    FE_DPAD_UP_TEX_HASH,
-    FE_DPAD_DOWN_TEX_HASH,
-    FE_DPAD_LEFT_TEX_HASH,
-    FE_DPAD_RIGHT_TEX_HASH,
-};
+extern unsigned int FE_DefaultButtonTexHashes[FE_TEX_HASH_COUNT];
 
-bool cFEng_IsPackageInControl_Fast(unsigned int pkg_name_hash);
-int (*FE_String_Printf)(void* FEObject, const char* fmt, ...)        = (int (*)(void*, const char*, ...))FE_STRING_PRINTF_ADDRESS;
-void* (*FEngFindObject_Title)(char* pkg_name, unsigned int obj_hash) = (void* (*)(char*, unsigned int))FENG_FINDOBJECT_ADDR;
+extern int (*FE_String_Printf)(void* FEObject, const char* fmt, ...);
+extern void* (*FEngFindObject_Title)(char* pkg_name, unsigned int obj_hash);
 
-char* SplashPkgName = "Splash.fng";
+extern char* SplashPkgName;
 
-void SetTitleScreenText() {
-  int   obj_hash   = 0xC4DF3FF2;
-  char* pkg_name   = SplashPkgName;
-  char* splash_txt = FE_SPLASH_TEXT_PC;
 
-  if (bConsoleFEng) {
-    switch (ControllerIconMode) {
-      case CONTROLLERICON_PS3:
-        splash_txt = FE_SPLASH_TEXT_PS3;
-        break;
-      case CONTROLLERICON_XB360MW:
-      case CONTROLLERICON_XBOX360:
-        splash_txt = FE_SPLASH_TEXT_XBOX360;
-        break;
-      case CONTROLLERICON_PS4:
-        splash_txt = FE_SPLASH_TEXT_PS4;
-        break;
-      case CONTROLLERICON_SWITCH:
-        splash_txt = FE_SPLASH_TEXT_SWITCH;
-        break;
-      case CONTROLLERICON_XBOXONE:
-      default:
-        splash_txt = FE_SPLASH_TEXT_XBOX;
-        break;
-    }
-  }
 
-  FE_String_Printf(FEngFindObject_Title(pkg_name, obj_hash), splash_txt);
-}
-
-void (*InitProfileSettings)() = (void (*)())0x006A56C0;
+extern void (*InitProfileSettings)();
 
 #define DALMANAGER_PROFILENAME_TYPEVAL 6050
 #define DALMANAGER_ADDR                0x00A50AD0
@@ -1066,7 +959,7 @@ void (*InitProfileSettings)() = (void (*)())0x006A56C0;
 #define DINPUT_KILL_ADDR 0x0069A5B1
 
 #define DEADZONE_FLOAT_POINTER_ADDR 0x69C8C7
-float smallfloat = 0.000001f;
+extern float smallfloat;
 #define SMALL_FLOAT_ADDR &smallfloat
 
 #define INPUTMAPPING_CONSTRUCTOR_CALL_ADDR   0x0069D370
@@ -1075,10 +968,10 @@ float smallfloat = 0.000001f;
 #define FENGHUD_JOYHANDLER_JMP_FROM 0x005CDA4A
 #define FENGHUD_JOYHANDLER_JMP_TO   0x005CD81D
 
-void (*InitProfileSettings)() = (void (*)())0x006774C0;
+extern void (*InitProfileSettings)();
 
 #define DEBUGWORLDCAMERAMOVER_UPDATE_VT_ADDR 0x00BE4448
-unsigned int DebugWorldCameraMover_Update_Addr = 0x004E4040;
+extern unsigned int DebugWorldCameraMover_Update_Addr;
 
 #define DEBUGWORLDCAMERAMOVER_CAVE1_ENTRY    0x004E4269
 #define DEBUGWORLDCAMERAMOVER_CAVE1_EXIT     0x004E429E
@@ -1100,7 +993,7 @@ unsigned int DebugWorldCameraMover_Update_Addr = 0x004E4040;
 #endif
 
 #ifdef GAME_WORLD
-unsigned int MainBase;
+extern unsigned int MainBase;
 
 #define NO_PROFILE_SETTINGS
 #define NO_QUIT_BUTTON
@@ -1119,15 +1012,14 @@ unsigned int MainBase;
 #define DINPUT_KILL_ADDR (0x0075C16B + MainBase)
 
 #define DEADZONE_FLOAT_POINTER_ADDR (0x75E26D + MainBase)
-float smallfloat = 0.000001f;
+extern float smallfloat;
 #define SMALL_FLOAT_ADDR &smallfloat
 
 #define INPUTMAPPING_CONSTRUCTOR_CALL_ADDR   (0x0075EB43 + MainBase)
 #define INPUTDEVICE_FACTORY_INITIALIZER_ADDR (0xB10F9D + MainBase)
 
 #define DEBUGWORLDCAMERAMOVER_UPDATE_VT_ADDR (0x00BD3DC0 + MainBase)
-unsigned int DebugWorldCameraMover_Update_Addr;
-unsigned int DebugWorldCameraMover_Update_VT_Addr;
+extern unsigned int DebugWorldCameraMover_Update_Addr;
 
 #define DEBUGWORLDCAMERAMOVER_CAVE1_ENTRY    (0x007DBC92 + MainBase)
 #define DEBUGWORLDCAMERAMOVER_CAVE1_EXIT     (0x007DBCF1 + MainBase)
@@ -1150,5 +1042,3 @@ unsigned int DebugWorldCameraMover_Update_VT_Addr;
 
 #define DEBUGWORLDCAMERAMOVER_MMX
 #endif
-
-#endif  // XTENDEDINPUT_DEFINITIONS_H

@@ -1,6 +1,8 @@
 // Recovered Carbon controller behavior; native interfaces, clock and output are mocked.
 #define NOMINMAX
+#ifndef GAME_CARBON
 #define GAME_CARBON
+#endif
 #define RUMBLE_TESTING
 #include <Windows.h>
 #include <XInput.h>
@@ -162,7 +164,7 @@ void* testSimable = &simable;
 void* TestGetPlayerSimable() { return testSimable; }
 void* __fastcall FindVehicleInterface(void*, void*, void* handle) {
   // Literal handles recovered from the native constructors, independent of
-  // Definitions.h: 0x6DB9F0 registers suspension; 0x6DB810 is transmission.
+  // input/Addresses.h: 0x6DB9F0 registers suspension; 0x6DB810 is transmission.
   switch ((uintptr_t)handle) {
     case 0x00403CE0: return &suspension;
     case 0x00403750: return &rigidBody;
@@ -215,7 +217,7 @@ int main() {
   CheckDeviceFeedback();
   CheckVehicleReader();
   bodyTable[26] = (void*)Velocity;
-  RumbleMWResolveSimable = Resolve;
+  RumbleResolveSimable = Resolve;
   RumbleSimTimePtr = &simTime;
   UTL_Com_Object_IList_Find = (decltype(UTL_Com_Object_IList_Find))Find;
   Attrib_Instance_GetAttributePointer = (decltype(Attrib_Instance_GetAttributePointer))Attribute;
@@ -242,28 +244,28 @@ int main() {
   DraftInfo draft = {};
   vUpdateDrafting(&feedback, NULL);
   vUpdateDrafting(&feedback, &draft);
-  assert(feedback.mMW.draft.amplitude == 0 && feedback.mMW.draftScale == 1.0f);
+  assert(feedback.mEffects.draft.amplitude == 0 && feedback.mEffects.draftScale == 1.0f);
 
   draft.enabled = 1;
   draft.wakeTime = 0.75f;  // f = 1 - 0.75 * (2/3) = 0.5
   vUpdateDrafting(&feedback, &draft);
-  assert(Near(feedback.mMW.draft.phase, 2500.0f));
-  assert(Near(feedback.mMW.draft.amplitude, 0.7f));
-  assert(Near(feedback.mMW.draft.frequency, 30.0f));
-  assert(Near(feedback.mMW.draftScale, 1.0f));
+  assert(Near(feedback.mEffects.draft.phase, 2500.0f));
+  assert(Near(feedback.mEffects.draft.amplitude, 0.7f));
+  assert(Near(feedback.mEffects.draft.frequency, 30.0f));
+  assert(Near(feedback.mEffects.draftScale, 1.0f));
 
   // Paused drafting ignores the < 1.5s wave write, but still writes the >= 1.5s 0.5x scale.
   Reset(feedback);
   feedback.PauseEffects();
   vUpdateDrafting(&feedback, &draft);
-  assert(feedback.mMW.draft.amplitude == 0);
+  assert(feedback.mEffects.draft.amplitude == 0);
   draft.wakeTime = 1.5f;
   draft.inSlipstream = 0;
   vUpdateDrafting(&feedback, &draft);
-  assert(Near(feedback.mMW.draftScale, 1.0f));
+  assert(Near(feedback.mEffects.draftScale, 1.0f));
   draft.inSlipstream = 1;
   vUpdateDrafting(&feedback, &draft);
-  assert(Near(feedback.mMW.draftScale, 0.5f));
+  assert(Near(feedback.mEffects.draftScale, 0.5f));
 
   // Verify draftScale halves motor output before clamping, and BeginUpdate restores 1.0f.
   feedback.ResumeEffects();
@@ -273,31 +275,31 @@ int main() {
   // NOS after 10 ms is 0.9975; scaled by 0.5 is 0.49875 -> 32685.
   assert(abs((int)sent.wLeftMotorSpeed - 32685) <= 1 && sent.wRightMotorSpeed == 0);
   vBeginUpdate(&feedback);
-  assert(Near(feedback.mMW.draftScale, 1.0f));
-  assert(feedback.mMW.draft.amplitude == 0 && feedback.mMW.draft.frequency == 0);
+  assert(Near(feedback.mEffects.draftScale, 1.0f));
+  assert(feedback.mEffects.draft.amplitude == 0 && feedback.mEffects.draft.frequency == 0);
 
   // Slot 15: UpdateDrift two-stage threshold and paused behavior.
   Reset(feedback);
-  feedback.mMW.drift.offset = 0.25f;
+  feedback.mEffects.drift.offset = 0.25f;
   vUpdateDrift(&feedback, 0.01f);
-  assert(feedback.mMW.drift.amplitude == 0 && Near(feedback.mMW.drift.offset, 0.25f));
+  assert(feedback.mEffects.drift.amplitude == 0 && Near(feedback.mEffects.drift.offset, 0.25f));
 
   // First stage: 0.01 < |slipAngle| <= 0.015 preserves offset and uses 8.16326523 scale.
   vUpdateDrift(&feedback, -0.0125f);
   float expectedT1 = (0.0125f - 0.01f) * 8.16326523f;
-  assert(Near(feedback.mMW.drift.phase, 2500.0f));
-  assert(Near(feedback.mMW.drift.amplitude, expectedT1 * 0.6f + 0.4f));
-  assert(Near(feedback.mMW.drift.frequency, 60.0f));
-  assert(Near(feedback.mMW.drift.offset, 0.25f));
+  assert(Near(feedback.mEffects.drift.phase, 2500.0f));
+  assert(Near(feedback.mEffects.drift.amplitude, expectedT1 * 0.6f + 0.4f));
+  assert(Near(feedback.mEffects.drift.frequency, 60.0f));
+  assert(Near(feedback.mEffects.drift.offset, 0.25f));
 
   // Second stage: |slipAngle| > 0.015 zeroes offset (copying +0x140) and uses 8.24742222 scale.
   feedback.PauseEffects();  // Xbox 0x8244AED0 writes drift wave even while paused.
   simTime = 0.0f;
   vUpdateDrift(&feedback, 0.075625f);  // (0.075625 - 0.015) * 8.24742222 = 0.5
-  assert(Near(feedback.mMW.drift.phase, 0.0f));
-  assert(Near(feedback.mMW.drift.amplitude, 0.7f));
-  assert(Near(feedback.mMW.drift.frequency, 60.0f));
-  assert(Near(feedback.mMW.drift.offset, 0.0f));
+  assert(Near(feedback.mEffects.drift.phase, 0.0f));
+  assert(Near(feedback.mEffects.drift.amplitude, 0.7f));
+  assert(Near(feedback.mEffects.drift.frequency, 60.0f));
+  assert(Near(feedback.mEffects.drift.offset, 0.0f));
   feedback.ResumeEffects();
   Tick(feedback, 0.0025);  // phase = 60 * 0.0025 = 0.15; sin(2*pi*0.15) * 0.7
   Tick(feedback, 0.0025);
@@ -312,7 +314,7 @@ int main() {
     hit.objBVel[0] = bodies[1].velocity[0] = 40;
     vReportCollision(&feedback, hit, owner == 0);
     // rearDelta = 40 * 0.25 = 10 -> (10 - 5) / 20 = 0.25
-    assert(Near(feedback.mMW.collision.amplitude, 0.25f));
+    assert(Near(feedback.mEffects.collision.amplitude, 0.25f));
   }
   Reset(feedback);
   COLLISION_INFO hit = Contact(1);
@@ -321,7 +323,7 @@ int main() {
   bodies[1].vehicle = false;
   vReportCollision(&feedback, hit, true);
   // ((40 - 20) / 30) * 0.75 = 0.5
-  assert(Near(feedback.mMW.collision.amplitude, 0.5f));
+  assert(Near(feedback.mEffects.collision.amplitude, 0.5f));
 
   puts("Carbon device hookup, motor output and effect checks passed");
   return 0;

@@ -25,7 +25,8 @@ if errorlevel 1 (popd & exit /b 1)
 rc /nologo /fo"%OUTPUT%\DefaultConfig.res" "%OUTPUT%\config\DefaultConfig.rc"
 if errorlevel 1 (popd & exit /b 1)
 set "CONFIG_RESOURCE=%OUTPUT%\DefaultConfig.res"
-cl /nologo /LD /O2 /MD /EHsc /std:c++14 /W3 /DWIN32 /DNDEBUG /D_WINDOWS /D_USRDLL /D_CRT_SECURE_NO_WARNINGS /D%GAME% /Isrc\inc /Isrc\_vs src\Unified.cpp %CONFIG_RESOURCE% /Fo"%OUTPUT%\Unified.obj" /link /IMPLIB:"%OUTPUT%\%NAME%.lib" /OUT:"%OUTPUT%\%NAME%.asi" /MACHINE:X86 /SUBSYSTEM:WINDOWS user32.lib winmm.lib
+call scripts\sources.cmd
+cl /nologo /LD /O2 /MD /EHsc /std:c++14 /W3 /DWIN32 /DNDEBUG /D_WINDOWS /D_USRDLL /D_CRT_SECURE_NO_WARNINGS /D%GAME% /Isrc\inc /Isrc\_vs src\Unified.cpp %RUNTIME_SOURCES% %CONFIG_RESOURCE% /Fo"%OUTPUT%/" /link /IMPLIB:"%OUTPUT%\%NAME%.lib" /OUT:"%OUTPUT%\%NAME%.asi" /MACHINE:X86 /SUBSYSTEM:WINDOWS user32.lib winmm.lib
 set "RESULT=%errorlevel%"
 popd
 exit /b %RESULT%

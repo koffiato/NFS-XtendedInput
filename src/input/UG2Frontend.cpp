@@ -1,27 +1,16 @@
-#pragma once
+// UG2 native frontend implementation. MIT; see LICENSE.
+#include "Target.h"
+#ifdef GAME_UG2
+#include "../_vs/stdafx.h"
+#include "State.h"
+#include "Addresses.h"
+#include "UG2Frontend.h"
 
 #include <windows.h>
 #include <timeapi.h>
 #pragma comment(lib,"winmm.lib")
-#define GAME_HWND_ADDR 0x00870990
 
-#define FEMOUSECURSOR_X_ADDR 0x008763D4
-#define FEMOUSECURSOR_Y_ADDR 0x008763D8
-#define FEMOUSECURSOR_BUTTONPRESS_ADDR 0x008763F1
-#define FEMOUSECURSOR_BUTTONPRESS2_ADDR 0x008763F2
-#define FEMOUSECURSOR_BUTTONPRESS3_ADDR 0x008763F3
-
-#define FEMOUSECURSOR_BUTTON2PRESS_ADDR 0x008763F7
-#define FEMOUSECURSOR_BUTTON2PRESS2_ADDR 0x008763F8
-#define FEMOUSECURSOR_BUTTON2PRESS3_ADDR 0x008763F9
-
-#define FEMOUSECURSOR_BUTTON3PRESS_ADDR 0x008763F4
-#define FEMOUSECURSOR_BUTTON3PRESS2_ADDR 0x008763F5
-#define FEMOUSECURSOR_BUTTON3PRESS3_ADDR 0x008763F6
-
-#define FEMOUSECURSOR_CARORBIT_X_ADDR 0x008763E4
-#define FEMOUSECURSOR_CARORBIT_Y_ADDR 0x008763E8
-#define FEMOUSE_MOUSEWHEEL_ADDR 0x008763EC
+void(*FESendKeystroke)(unsigned int key) = (void(*)(unsigned int))FE_SENDKEY_ADDR;
 
 void UpdateFECursorPos()
 {
@@ -107,3 +96,4 @@ void UpdateFECursorPos()
 		*(bool*)FEMOUSECURSOR_BUTTON3PRESS3_ADDR = false;
 	}
 }
+#endif

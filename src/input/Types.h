@@ -106,7 +106,7 @@ enum ShiftPotential {
 };
 
 #ifdef HAS_RUMBLE
-#include "../NFS_XtendedInput_Rumble.h"
+#include "../rumble/Feedback.h"
 #endif
 
 enum InputUpdateType {

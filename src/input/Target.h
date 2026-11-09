@@ -9,9 +9,6 @@
 #if defined(GAME_MW) || defined(GAME_CARBON) || defined(GAME_PROSTREET) || defined(GAME_UC)
 #define HAS_RUMBLE 1
 #endif
-#if defined(GAME_MW) || defined(GAME_CARBON) || defined(GAME_PROSTREET) || defined(GAME_UC)
-#define HAS_CONSOLE_RUMBLE 1
-#endif
 #if defined(GAME_UC) || defined(GAME_WORLD)
 #define NO_FENG
 #endif

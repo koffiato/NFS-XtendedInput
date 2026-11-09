@@ -12,10 +12,15 @@
 */
 
 #pragma once
-#include "NFS_XtendedInput.h"
-#include "NFS_XtendedInputButtons.h"
+#include "State.h"
+#include "NativeFrontendAPI.h"
+#include "TitleScreen.h"
+#ifdef GAME_CARBON
+#include "CarbonFrontend.h"
+#endif
+#include "ButtonTextures.h"
 
-#include "Definitions.h"
+#include "Addresses.h"
 
 #include <windows.h>
 #include <timeapi.h>
@@ -26,60 +31,6 @@ unsigned int ButtonTexHashes[FE_TEX_HASH_COUNT];
 bool         bLoadedConsoleButtonTex = false;
 char         ButtonTexFilename[128];
 
-enum FEObjType {
-  FE_None         = 0,
-  FE_Image        = 1,
-  FE_String       = 2,
-  FE_Model        = 3,
-  FE_List         = 4,
-  FE_Group        = 5,
-  FE_CodeList     = 6,
-  FE_Movie        = 7,
-  FE_Effect       = 8,
-  FE_ColoredImage = 9,
-  FE_AnimImage    = 10,
-  FE_SimpleImage  = 11,
-  FE_MultiImage   = 12,
-  FE_UserMin      = 256,
-};
-
-enum FEObject_Flags {
-  FF_HideInEdit            = -2147483648,
-  FF_AffectAllScripts      = 0x40000000,
-  FF_PerspectiveProjection = 0x20000000,
-  FF_IsButton              = 0x10000000,
-  FF_ObjectLocked          = 0x8000000,
-  FF_IgnoreButton          = 0x4000000,
-  FF_Dirty                 = 0x2000000,
-  FF_DirtyTransform        = 0x1000000,
-  FF_DirtyColor            = 0x800000,
-  FF_DirtyCode             = 0x400000,
-  FF_CodeSuppliedResource  = 0x200000,
-  FF_UsesLibraryObject     = 0x100000,
-  FF_DontNavigate          = 0x80000,
-  FF_SaveStaticTracks      = 0x40000,
-  FF_MouseObject           = 0x20000,
-};
-
-struct FEObject {
-  void*          pDestructorCallback;
-  long           Padding[2];
-  unsigned long  GUID;
-  unsigned long  NameHash;
-  char*          pName;
-  FEObjType      Type;
-  unsigned long  Flags;
-  unsigned short RenderContext;
-  unsigned short ResourceIndex;
-  unsigned long  Handle;
-  unsigned long  UserParam;
-  unsigned char* pData;
-  unsigned long  DataSize;
-  int            Responses;
-  int            Scripts;
-  void*          pCurrentScript;
-  void*          Cached;
-};
 #ifdef GAME_MW
 #define FE_CONTROL_FLAG_PC 0x8
 #else
@@ -92,9 +43,6 @@ struct FEObject {
 int(__thiscall* _cFEng_FindPackage)(void* cFEng, char* pkg)         = (int(__thiscall*)(void*, char*))CFENG_FINDPACKAGE_ADDR;
 FEObject* (*FEngFindObject)(char* pkg_name, unsigned int obj_hash)  = (FEObject * (*)(char*, unsigned int)) FENG_FINDOBJECT_ADDR;
 
-#ifdef GAME_MW
-void (*FEngSetLanguageHash)(void* FEObject, unsigned int langhash) = (void (*)(void*, unsigned int))FENG_SETLANGHASH_ADDR;
-#endif
 void* (*CreateResourceFile)(char* filename, int ResFileType, int unk1, int unk2, int unk3) = (void* (*)(char*, int, int, int, int))CREATERESOURCEFILE_ADDR;
 void(__thiscall* ResourceFile_BeginLoading)(void* ResourceFile, void* callback, void* unk) = (void(__thiscall*)(void*, void*, void*))RESFILE_BEGINLOADING_ADDR;
 void (*ServiceResourceLoading)()                                                           = (void (*)())SERVICERESOURCELOADING_ADDR;
@@ -215,8 +163,6 @@ void(__thiscall* SelectCarCameraMover_SetVRotateSpeed)(void* SelectCarCameraMove
                                                        bool activate)                 = (void(__thiscall*)(void*, float, bool))SELECTCAR_SETVROTATESPEED_ADDR;
 void(__thiscall* SelectCarCameraMover_SetZoomSpeed)(void* SelectCarCameraMover, float speed,
                                                     bool activate)                    = (void(__thiscall*)(void*, float, bool))SELECTCAR_SETZOOMSPEED_ADDR;
-void(__thiscall* FeGarageMain_ZoomCameraView)(void* FEGarageMain, float speed,
-                                              bool activate)                          = (void(__thiscall*)(void*, float, bool))FEGARAGEMAIN_ZOOMCAMERAVIEW_ADDR;
 void(__thiscall* FEngine_ProcessPadsForPackage)(void* FEngine, void* FEPackage)       = (void(__thiscall*)(void*, void*))FENGINE_PROCESSPADSFORPACKAGE_ADDR;
 #ifdef GAME_CARBON
 void*(__thiscall* FEPackage_FindObjectByHash)(void* FEPackage, unsigned int namehash) = (void*(__thiscall*)(void*, unsigned int))FEPACKAGE_FINDOBJBYHASH_ADDR;
@@ -288,12 +234,6 @@ void FEngSetVisible_Name(char* pkg_name, unsigned int obj_hash) {
   if (obj) FEngSetVisible(obj);
 }
 
-
-void* FEngSetTextureHash_CheckObj(FEObject* inobj, unsigned int obj_hash, unsigned int tex_hash) {
-  if (inobj->NameHash == obj_hash) FEngSetTextureHash((int)inobj, tex_hash);
-
-  return inobj;
-}
 
 #pragma runtime_checks("", restore)
 
@@ -671,10 +611,6 @@ bool __stdcall MouseStateArrayOffsetUpdater_Callback_Hook(FEObject* inobj) {
 
 #else
 
-struct FEObjectCallbackStruct {
-  void* Destructor;
-  void* Function;
-};
 
 void __stdcall cFEng_Service_Hook(int unk1, int unk2) {
   unsigned int thethis = 0;
@@ -697,96 +633,7 @@ void __stdcall cFEng_Service_Hook(int unk1, int unk2) {
 
   return cFEng_Service((void*)thethis, unk1, unk2);
 }
-#ifdef GAME_CARBON
-// world map fixes for Carbon
-void __stdcall FEngine_ProcessPadsForPackage_Hook(void* FEPackage) {
-  unsigned int thethis = 0;
-  _asm mov     thethis, ecx;
 
-  if (cFEng_IsPackageInControl_Fast(WORLDMAPMAIN_FNG_NAMEHASH) || cFEng_IsPackageInControl_Fast(WORLDMAPQUICKLIST_FNG_NAMEHASH) ||
-      cFEng_IsPackageInControl_Fast(WORLDMAPWORLDVIEW_FNG_NAMEHASH)) {
-    FEObjectCallbackStruct callback  = {NULL, &FEObjectCallback_Function};
-    void*                  cbpointer = &callback;
-
-    FEPackage_ForAllObjects(FEPackage, &cbpointer);
-  }
-  return FEngine_ProcessPadsForPackage((void*)thethis, FEPackage);
-}
-
-void* __stdcall FEPackage_FindObjectByHash_Hide_Hook(unsigned int namehash) {
-  unsigned int thethis = 0;
-  _asm mov     thethis, ecx;
-
-  FEngSetInvisible(FEPackage_FindObjectByHash((void*)thethis, WORLDMAP_BUTTONGROUP_CONSOLE));
-
-  return FEPackage_FindObjectByHash((void*)thethis, namehash);
-}
-
-void* __stdcall FEPackage_FindObjectByHash_Show_Hook(unsigned int namehash) {
-  unsigned int thethis = 0;
-  _asm mov     thethis, ecx;
-
-  FEngSetVisible(FEPackage_FindObjectByHash((void*)thethis, WORLDMAP_BUTTONGROUP_CONSOLE));
-
-  return FEPackage_FindObjectByHash((void*)thethis, namehash);
-}
-
-bool bQuickListFocused = false;
-
-void __stdcall FEWorldMapStateManager_HandleScreenTick_Hook() {
-  unsigned int thethis = 0;
-  _asm mov     thethis, ecx;
-
-  if ((*(int*)GAMEFLOWMANAGER_STATUS_ADDR == 3) && *(int*)WORLDMAP_INSTANCE_ADDR) {
-    // change text from "Free Roam" to "Back" during FE for the console UI element
-    FE_String_Printf(FEngFindObject(*(char**)(*(int*)WORLDMAP_INSTANCE_ADDR + 0xC), 0x0EF36117), GetLocalizedString(0x8CD567B8));
-    FE_String_Printf(FEngFindObject(*(char**)(*(int*)WORLDMAP_INSTANCE_ADDR + 0xC), 0xE2DACDBC), GetLocalizedString(0x8CD567B8));
-  }
-
-  if (bUseDynamicFEngSwitching) {
-    if (bQuickListFocused && *(int*)WORLDMAP_INSTANCE_ADDR && cFEng_IsPackageInControl_Fast(WORLDMAPQUICKLIST_FNG_NAMEHASH)) {
-      FEngSetInvisible(FEngFindObject(*(char**)(*(int*)WORLDMAP_INSTANCE_ADDR + 0xC), WORLDMAP_BUTTONGROUP_CONSOLE));
-      FEngSetInvisible(FEngFindObject(*(char**)(*(int*)WORLDMAP_INSTANCE_ADDR + 0xC), WORLDMAP_BUTTONGROUP_PC));
-    } else if (*(int*)WORLDMAP_INSTANCE_ADDR) {
-      if (bConsoleFEng)
-        FEngSetVisible(FEngFindObject(*(char**)(*(int*)WORLDMAP_INSTANCE_ADDR + 0xC), WORLDMAP_BUTTONGROUP_CONSOLE));
-      else
-        FEngSetVisible(FEngFindObject(*(char**)(*(int*)WORLDMAP_INSTANCE_ADDR + 0xC), WORLDMAP_BUTTONGROUP_PC));
-    }
-  }
-
-  return FEWorldMapStateManager_HandleScreenTick((void*)thethis);
-}
-
-void __stdcall WorldMap_SetQuickListInFocus_Hook() {
-  unsigned int thethis = 0;
-  _asm mov     thethis, ecx;
-
-  bQuickListFocused = true;
-
-  return WorldMap_SetQuickListInFocus((void*)thethis);
-}
-
-void __stdcall WorldMap_UnfocusQuickList_Hook() {
-  unsigned int thethis = 0;
-  _asm mov     thethis, ecx;
-
-  bQuickListFocused = false;
-
-  if (bConsoleFEng)
-    FEngSetVisible(FEngFindObject(*(char**)(*(int*)WORLDMAP_INSTANCE_ADDR + 0xC), WORLDMAP_BUTTONGROUP_CONSOLE));
-  else
-    FEngSetVisible(FEngFindObject(*(char**)(*(int*)WORLDMAP_INSTANCE_ADDR + 0xC), WORLDMAP_BUTTONGROUP_PC));
-
-  return WorldMap_UnfocusQuickList((void*)thethis);
-}
-
-void FEPrintf_Hook_WorldMap(char* pkg_name, unsigned int object_hash, char* fmt, char* str) {
-  FE_String_Printf(FEngFindObject(*(char**)(*(int*)WORLDMAP_INSTANCE_ADDR + 0xC), 0xCB235910), str);
-  FE_String_Printf(FEngFindObject(*(char**)(*(int*)WORLDMAP_INSTANCE_ADDR + 0xC), 0x300B8082), str);
-}
-
-#endif  // GAME_CARBON
 
 #ifdef GAME_PROSTREET
 void __stdcall FEngine_ProcessPadsForPackage_Hook(void* FEPackage) {
