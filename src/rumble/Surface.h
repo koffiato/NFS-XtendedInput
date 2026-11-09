@@ -61,7 +61,14 @@ struct RumbleWave {
   float fOffset[4];
 
   void Begin() {
-    for (int ch = 0; ch < 4; ch++) fFrequency[ch] = fAmplitude[ch] = fOffset[ch] = 0.0f;
+    for (int ch = 0; ch < 4; ch++) {
+#ifdef GAME_UC
+      // UC BeginUpdate (0x82610A48) zeroes all four fields, including phase.
+      // Keeping MW/CB's phase continuity changes UC's frame-to-frame texture.
+      fPhase[ch] = 0.0f;
+#endif
+      fFrequency[ch] = fAmplitude[ch] = fOffset[ch] = 0.0f;
+    }
   }
 
   // surface: the SimSurface passed by the game, key: FFB_ROLL / FFB_SKID / FFB_SLIP

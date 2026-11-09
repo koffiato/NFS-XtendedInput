@@ -14,10 +14,15 @@ struct MWRamp {
 };
 
 #if defined(GAME_CARBON) || defined(GAME_UC)
-// Xbox state is {phase, amplitude, frequency, offset}; BeginUpdate clears all but phase.
+// Xbox state is {phase, amplitude, frequency, offset}.
 struct MWWave {
   float phase, amplitude, frequency, offset;
-  void Begin() { amplitude = frequency = offset = 0.0f; }
+  void Begin() {
+#ifdef GAME_UC
+    phase = 0.0f; // UC clears the complete wave record; Carbon preserves phase.
+#endif
+    amplitude = frequency = offset = 0.0f;
+  }
   float Sample(float seconds) {
     float v = offset;
     if (amplitude * frequency > 0.0f) {
@@ -33,14 +38,15 @@ struct MWWave {
 struct MWEffects {
   MWRamp collision;
   MWRamp potentialLeft, potentialRight, nos, engineLeft, engineRight, shiftLeft, shiftRight;
-#ifdef GAME_PROSTREET
+#if defined(GAME_PROSTREET) || defined(GAME_UC)
   MWRamp bumpLeft, bumpRight;
 #endif
 #ifdef GAME_CARBON
   MWWave draft;
-#endif
-#if defined(GAME_CARBON) || defined(GAME_UC)
   MWWave drift;
+#endif
+#ifdef GAME_UC
+  MWWave driftLeft, driftRight;
 #endif
 #ifdef GAME_CARBON
   float draftScale = 1.0f;
@@ -55,8 +61,11 @@ struct MWEffects {
 #ifdef GAME_CARBON
     draftScale = 1.0f;
     draft.Begin();
-#endif
     drift.Begin();
+#endif
+#ifdef GAME_UC
+    driftLeft.Begin(); driftRight.Begin();
+#endif
   }
 #ifdef GAME_CARBON
   void Draft(const void* info, float simTime, bool paused) {
@@ -73,7 +82,6 @@ struct MWEffects {
       draftScale = 0.5f;
     }
   }
-#endif
   void Drift(float slipAngle, float simTime) {
     if (!_finite(slipAngle)) return;
     float simTimeMs = simTime * 1000.0f;
@@ -87,6 +95,16 @@ struct MWEffects {
     float t2 = (std::min)((a - 0.015f) * 8.24742222f, 1.0f);
     drift = {simTimeMs, t2 * 0.6f + 0.4f, 60.0f, 0.0f};
   }
+#endif
+#ifdef GAME_UC
+  void Drift(bool active, float angle, float lateral, float simTime) {
+    if (!active) { driftLeft = driftRight = {}; return; }
+    if (!_finite(angle) || !_finite(lateral)) return;
+    driftLeft.phase = driftRight.phase = simTime * 1000.0f;
+    driftLeft.amplitude = driftRight.amplitude = angle * 0.5f + 0.2f;
+    driftLeft.frequency = driftRight.frequency = lateral * 30.0f + 60.0f;
+  }
+#endif
 #endif
 
   void Collision(float strength) {
@@ -129,9 +147,9 @@ struct MWEffects {
   }
   void Mix(float dt, RumbleMixer& mixer) {
     mixer.Add(kRumbleImpacts, collision.Sample(dt), 0);
-#ifdef GAME_PROSTREET
-    // Retail PS Run (0x825A8CE0) advances these ramps but discards their
-    // results. Only collision, NOS and indexed bumps reach the motor maxima.
+#if defined(GAME_PROSTREET) || defined(GAME_UC)
+    // Retail PS/UC Run advances these ramps but discards their
+    // results. NOS and indexed bumps reach the motor maxima.
     potentialLeft.Sample(dt); potentialRight.Sample(dt);
     engineLeft.Sample(dt); engineRight.Sample(dt);
     shiftLeft.Sample(dt); shiftRight.Sample(dt);
@@ -144,9 +162,10 @@ struct MWEffects {
     mixer.Add(kRumbleCar, nos.Sample(dt), 0);
 #ifdef GAME_CARBON
     mixer.Add(kRumbleCar, 0, draft.Sample(dt));
-#endif
-#if defined(GAME_CARBON) || defined(GAME_UC)
     mixer.Add(kRumbleTyres, 0, drift.Sample(dt));
+#endif
+#ifdef GAME_UC
+    mixer.Add(kRumbleTyres, driftLeft.Sample(dt), driftRight.Sample(dt));
 #endif
   }
 };

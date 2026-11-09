@@ -54,9 +54,32 @@ void* __fastcall Find(void* list, void*, void* handle) {
 }
 
 RumbleWaveRecord record = {2.0f, 0.6f, 0.3f, 0.0f, 2.0f, 0.6f, 0.3f, 20.0f};
-const void* __fastcall Attribute(const void*, void*, unsigned int, unsigned int index) {
+unsigned int lastKey = 0;
+int instances = 0;
+bool collectionPresent = true;
+bool collisionStereo = false;
+float bumpThreshold = 0.2f, bumpGain = 0.5f;
+RumbleWaveRecord collisionRecord = {0, 0, 0, 0, 0, 1, 0, 200};
+const void* __fastcall Attribute(const void*, void*, unsigned int key, unsigned int index) {
+  lastKey = key;
+  if (key == ATTRIB_KEY_FFB_BUMP_THRESHOLD) return &bumpThreshold;
+  if (key == ATTRIB_KEY_FFB_BUMP_GAIN) return &bumpGain;
+  if (key == 0x751D40E5 || key == 0x96A192E8 || key == 0x7125C7EC ||
+      key == 0xAEF4FB7D || key == 0x1C2333F7 || key == 0x3C714126)
+    return (index == 0 || (collisionStereo && index == 2)) ? &collisionRecord : NULL;
   return index == 0 ? &record : NULL;
 }
+void* __cdecl FindCollection(unsigned int cls, unsigned int name) {
+  assert(cls == 0xD93FC53A && name == 0xEEC2271A);
+  return collectionPresent ? &collisionRecord : NULL;
+}
+void* __fastcall ConstructInstance(void* instance, void*, void* collection, unsigned int flags) {
+  assert(collection == &collisionRecord && flags == 0);
+  ++instances;
+  return instance;
+}
+void __fastcall DestroyInstance(void*, void*) { --instances; }
+
 
 void Reset(IFeedback& f) {
   fixedTime = 10.0;
@@ -273,16 +296,70 @@ void CheckVehicleReader() {
   RumbleGetPlayerSimableOverride = NULL;
 }
 
+void CheckNativeMixerVectors() {
+  FILE* file = fopen("tests/fixtures/uc-console-mixer.txt", "r");
+  assert(file);
+  char line[256];
+  int cases = 0;
+  while (fgets(line, sizeof(line), file)) {
+    if (line[0] == '#') continue;
+    unsigned int seed;
+    float milliseconds;
+    int expectedLeft, expectedRight;
+    assert(sscanf(line, "%u %f %d %d", &seed, &milliseconds, &expectedLeft, &expectedRight) == 4);
+    unsigned int rng = seed;
+    auto next = [&]() -> unsigned int {
+      rng = rng*1664525u+1013904223u;
+      return (rng >> 16) & 0xFFFFu;
+    };
+    auto seedWave = [&](float& phase, float& amplitude, float& frequency, float& offset) {
+      phase = 0;
+      amplitude = (next()%33)/128.0f;
+      frequency = (next()%97)/4.0f;
+      offset = ((int)(next()%33)-8)/128.0f;
+    };
+    IFeedback f;
+    Reset(f);
+    for (RumbleWave* wave : {&f.mRoadWave, &f.mSkidWave, &f.mSlipWave, &f.mCollisionWave})
+      for (int ch = 0; ch < 4; ++ch)
+        seedWave(wave->fPhase[ch], wave->fAmplitude[ch], wave->fFrequency[ch], wave->fOffset[ch]);
+    for (MWWave* wave : {&f.mMW.driftLeft, &f.mMW.driftRight})
+      seedWave(wave->phase, wave->amplitude, wave->frequency, wave->offset);
+    for (MWRamp* ramp : {&f.mMW.potentialLeft, &f.mMW.potentialRight, &f.mMW.nos,
+                        &f.mMW.engineLeft, &f.mMW.engineRight, &f.mMW.shiftLeft,
+                        &f.mMW.shiftRight, &f.mMW.bumpLeft, &f.mMW.bumpRight}) {
+      ramp->remaining = (next()%4+1)/8.0f;
+      ramp->duration = 0.5f;
+      ramp->amplitude = (next()%97)/128.0f;
+      ramp->floor = (next()%33)/256.0f;
+    }
+    Tick(f, milliseconds/1000.0);
+    if (abs(f.mMW.outputLeft-expectedLeft) > 2 || abs(f.mMW.outputRight-expectedRight) > 2) {
+      printf("Native mixer vector %u: got %d/%d, expected %d/%d\n", seed,
+             f.mMW.outputLeft,f.mMW.outputRight,expectedLeft,expectedRight);
+      assert(false);
+    }
+    ++cases;
+  }
+  fclose(file);
+  assert(cases == 64);
+}
+
 int main() {
   CheckControlsMenuWheelProbe();
   CheckDeviceFeedback();
   CheckVehicleReader();
 
   bodyTable[24] = (void*)Velocity; // native UC collision reads [vtable+0x60], not MW's +0x68
+  RumbleUCFindCollection = FindCollection;
+  RumbleUCConstructInstance = (decltype(RumbleUCConstructInstance))ConstructInstance;
+  RumbleUCDestroyInstance = (decltype(RumbleUCDestroyInstance))DestroyInstance;
   RumbleMWResolveSimable = Resolve;
   RumbleSimTimePtr = &simTime;
   UTL_Com_Object_IList_Find = (decltype(UTL_Com_Object_IList_Find))Find;
   Attrib_Instance_GetAttributePointer = (decltype(Attrib_Instance_GetAttributePointer))Attribute;
+
+  CheckNativeMixerVectors();
 
   const void* surface[2] = {(const void*)0x12345678, (const void*)0x87654321};
   assert(RumbleSurfaceCollection(surface) == (const void*)0x12345678);
@@ -306,7 +383,7 @@ int main() {
   auto vUpdateEngineBlown  = (void(__thiscall*)(IFeedback*, bool))vtable[12];
   auto vUpdateShifting     = (void(__thiscall*)(IFeedback*, bool))vtable[13];
   auto vUpdateDriftSlip    = (void(__thiscall*)(IFeedback*, bool, float, float))vtable[14];
-  auto vReservedUC15       = (void(__thiscall*)(IFeedback*, uintptr_t, uintptr_t, uintptr_t))vtable[15];
+  auto vDriftTyreSlip      = (void(__thiscall*)(IFeedback*, const SimSurface&, float, float))vtable[15];
   auto vUpdateSteering     = (void(__thiscall*)(IFeedback*, float))vtable[17];
   // Literal native signature: 0x7BADF7 reserves 12 bytes for a by-value vector,
   // then 0x7BAE1B/1C push iamA and CollisionInfo*. /RTC1 checks callee cleanup.
@@ -323,8 +400,7 @@ int main() {
   assert(Near(feedback.mRoadWave.fAmplitude[0], record.fAmplitudeMin));
   assert(feedback.mWheelArg == 1 && RumbleTelemetry.nWheel == 1);
 
-  // Slots 15 and 17 are safe no-ops.
-  vReservedUC15(&feedback, 0, 0, 0);
+  // Slot 17 is a wheel-only no-op.
   vUpdateSteering(&feedback, 0.5f);
 
   // Slot 9: UpdateRPM updates throttle and powerband telemetry
@@ -344,60 +420,172 @@ int main() {
   vUpdateShifting(&feedback, true);
   assert(feedback.mMW.shifting == true);
 
-  // Slot 14: UpdateDriftSlip (active, slipAngle, lateralSlip)
+  // Native BeginUpdate clears phases as well as parameters in all six wave
+  // groups. The executable audit independently executes its stores for 3 ports.
   Reset(feedback);
-  feedback.mMW.drift.offset = 0.25f;
+  for (RumbleWave* wave : {&feedback.mRoadWave, &feedback.mSkidWave,
+                          &feedback.mSlipWave, &feedback.mCollisionWave})
+    for (int ch = 0; ch < 4; ++ch) wave->fPhase[ch] = 0.25f*(ch+1);
+  feedback.mMW.driftLeft = feedback.mMW.driftRight = {0.75f,0.5f,60,0.1f};
+  feedback.mMW.nos.Start(1, 0.5f, 1.25f);
+  vBeginUpdate(&feedback);
+  for (RumbleWave* wave : {&feedback.mRoadWave, &feedback.mSkidWave,
+                          &feedback.mSlipWave, &feedback.mCollisionWave})
+    for (int ch = 0; ch < 4; ++ch)
+      assert(!wave->fPhase[ch] && !wave->fFrequency[ch] && !wave->fAmplitude[ch] && !wave->fOffset[ch]);
+  assert(!feedback.mMW.driftLeft.phase && !feedback.mMW.driftRight.phase);
+  assert(Near(feedback.mMW.nos.remaining, 1.25f)); // ramp times survive Begin
 
-  // Inactive drift: does not update drift wave
-  vUpdateDriftSlip(&feedback, false, 0.05f, 0.0f);
-  assert(feedback.mMW.drift.amplitude == 0.0f && Near(feedback.mMW.drift.offset, 0.25f));
+  // Stream consecutive producer frames at varying rates, checking the previous
+  // frame's Push and this frame's Run independently. A continuously integrated
+  // phase sounds different and fails on frame two.
+  Reset(feedback);
+  record = {4,0.6f,0.1f,0,4,0.6f,0.1f,20};
+  const double frameDeltas[] = {1.0/30,1.0/60,1.0/120,0.011,0.027};
+  int previous = 0;
+  for (int frame = 0; frame < 100; ++frame) {
+    double dt = frameDeltas[frame % 5];
+    vBeginUpdate(&feedback);
+    for (int wheel = 0; wheel < 4; ++wheel)
+      vUpdateRoad(&feedback, wheel < 2, roadSurface, 10);
+    Tick(feedback, dt);
+    float phase = (float)dt*4;
+    int expected = (int)((0.1f+0.6f*sinf(6.2831854820251465f*phase))*65535);
+    assert(abs((int)sent.wLeftMotorSpeed-previous) <= 1 && !sent.wRightMotorSpeed);
+    assert(abs(feedback.mMW.outputLeft-expected) <= 1);
+    assert(Near(feedback.mRoadWave.fPhase[0], phase));
+    previous = expected;
+  }
 
-  // Active drift, below threshold (|slipAngle| <= 0.01)
-  vUpdateDriftSlip(&feedback, true, 0.01f, 0.0f);
-  assert(feedback.mMW.drift.amplitude == 0.0f && Near(feedback.mMW.drift.offset, 0.25f));
+  // Literal console transform vectors, including strict piecewise boundaries.
+  assert(Near(RumbleUCSlip(-0.751f, 0.1f), 1));
+  assert(Near(RumbleUCSlip(-0.75f, 0.1f), 0));
+  assert(Near(RumbleUCSlip(1.1f, 0.2f), 0.25f));
+  assert(Near(RumbleUCSkid(0.2f, 0.1f, 0.3f, 0.5f), 0.25f));
+  assert(Near(RumbleUCMap(1, 2, 2), 0));
+  assert(Near(RumbleUCDriftSlip(0.2f, 0.1f), 0.2f));
+  assert(Near(RumbleUCDriftSlip(0.3f, 0.1f), 0));
+  assert(Near(RumbleUCDriftSlip(0.65f, 0.1f), 0.2f));
+  assert(Near(RumbleUCDriftSkid(0.2f, 0.1f, 0.3f), 0.35f));
 
-  // First stage: 0.01 < |slipAngle| <= 0.015
-  vUpdateDriftSlip(&feedback, true, -0.0125f, 0.0f);
-  float expectedT1 = (0.0125f - 0.01f) * 8.16326523f;
-  assert(Near(feedback.mMW.drift.phase, 2500.0f));
-  assert(Near(feedback.mMW.drift.amplitude, expectedT1 * 0.6f + 0.4f));
-  assert(Near(feedback.mMW.drift.frequency, 60.0f));
-  assert(Near(feedback.mMW.drift.offset, 0.25f));
+  // Each tyre callback evaluates its native surface key using normalized input.
+  record = {0,0,0,0,0,1,0,1};
+  auto vSkid = (void(__thiscall*)(IFeedback*, const SimSurface&, float,float,float,float))vtable[7];
+  auto vSlip = (void(__thiscall*)(IFeedback*, const SimSurface&, float,float))vtable[8];
+  auto vDriftSkid = (void(__thiscall*)(IFeedback*, const SimSurface&, float,float,float))vtable[16];
+  vBeginUpdate(&feedback);
+  vSkid(&feedback, roadSurface, 0.2f, 0.1f, 0.3f, 0.5f);
+  assert(lastKey == ATTRIB_KEY_FFB_SKID && Near(feedback.mSkidWave.fAmplitude[0], 0.25f));
+  vSlip(&feedback, roadSurface, 1.1f, 0.2f);
+  assert(lastKey == ATTRIB_KEY_FFB_SLIP && Near(feedback.mSlipWave.fAmplitude[0], 0.25f));
+  vBeginUpdate(&feedback);
+  vDriftTyreSlip(&feedback, roadSurface, 0.2f, 0.1f);
+  assert(lastKey == ATTRIB_KEY_FFB_SLIP && Near(feedback.mSlipWave.fAmplitude[0], 0.2f));
+  vDriftSkid(&feedback, roadSurface, 0.2f, 0.1f, 0.3f);
+  assert(lastKey == ATTRIB_KEY_FFB_DRIFT_SKID && Near(feedback.mSkidWave.fAmplitude[0], 0.35f));
 
-  // Second stage: |slipAngle| > 0.015
+  // Slot 14 writes TWO waves: amplitude = angle*.5+.2, Hz = lateral*30+60.
+  Reset(feedback);
+  simTime = 0;
+  vUpdateDriftSlip(&feedback, true, 0.4f, 1.0f);
+  assert(Near(feedback.mMW.driftLeft.amplitude, 0.4f));
+  assert(Near(feedback.mMW.driftRight.frequency, 90));
+  Tick(feedback, 0.0025);
+  Tick(feedback, 0.0025);
+  int driftMotor = (int)(0.4f * sinf(6.2831854820251465f * 0.225f) * 65535.0f);
+  assert(abs((int)sent.wLeftMotorSpeed - driftMotor) <= 1);
+  assert(sent.wLeftMotorSpeed == sent.wRightMotorSpeed);
+  feedback.BeginUpdate();
+  assert(!feedback.mMW.driftLeft.amplitude && !feedback.mMW.driftLeft.phase);
+  simTime = 2.5f;
+  vUpdateDriftSlip(&feedback, true, -0.2f, 0.5f);
+  assert(Near(feedback.mMW.driftLeft.phase, 2500));
+  assert(Near(feedback.mMW.driftLeft.amplitude, 0.1f));
+  assert(Near(feedback.mMW.driftLeft.frequency, 75));
+  vUpdateDriftSlip(&feedback, false, 1, 1);
+  assert(!feedback.mMW.driftLeft.phase && !feedback.mMW.driftRight.amplitude);
   feedback.PauseEffects();
-  simTime = 0.0f;
-  vUpdateDriftSlip(&feedback, true, 0.075625f, 0.0f);
-  assert(Near(feedback.mMW.drift.phase, 0.0f));
-  assert(Near(feedback.mMW.drift.amplitude, 0.7f));
-  assert(Near(feedback.mMW.drift.frequency, 60.0f));
-  assert(Near(feedback.mMW.drift.offset, 0.0f));
-  feedback.ResumeEffects();
-  Tick(feedback, 0.0025);
-  Tick(feedback, 0.0025);
-  int expectedDriftRight = (int)(0.7f * sinf(6.2831854820251465f * 0.15f) * 65535.0f);
-  assert(sent.wLeftMotorSpeed == 0 && abs((int)sent.wRightMotorSpeed - expectedDriftRight) <= 1);
+  vUpdateDriftSlip(&feedback, true, 1, 1);
+  assert(!feedback.mMW.driftLeft.amplitude);
 
-  // Slot 19: ReportCollision uses 0.25f rear-end scale and 0.75f moving-contact scale
+  // Xbox Run advances shift/potential/engine ramps but omits their samples.
+  Reset(feedback);
+  vUpdateShiftPotential(&feedback, SHIFT_POTENTIAL_PERFECT);
+  vUpdateEngineBlown(&feedback, true);
+  vUpdateShifting(&feedback, true);
+  Tick(feedback); Tick(feedback);
+  assert(!sent.wLeftMotorSpeed && !sent.wRightMotorSpeed);
+  assert(feedback.mMW.shiftLeft.remaining < 0.5f);
+
+  // Slot 18: strict threshold, parity routing, later wheel replaces earlier.
+  auto vBump = (void(__thiscall*)(IFeedback*, unsigned int, float, const SimSurface&))vtable[18];
+  Reset(feedback);
+  vBump(&feedback, 0, 0.2f, roadSurface);
+  assert(!feedback.mMW.bumpLeft.remaining);
+  vBump(&feedback, 0, 1.0f, roadSurface);
+  vBump(&feedback, 2, 0.6f, roadSurface);
+  vBump(&feedback, 1, 0.8f, roadSurface);
+  vBump(&feedback, 4, 100.0f, roadSurface);
+  assert(Near(feedback.mMW.bumpLeft.amplitude, 0.3f));
+  assert(Near(feedback.mMW.bumpRight.amplitude, 0.4f));
+  assert(Near(feedback.mMW.bumpLeft.duration, 0.3f) && Near(feedback.mMW.bumpLeft.floor, 0.1f));
+  Tick(feedback); Tick(feedback);
+  assert(abs((int)sent.wLeftMotorSpeed - (int)((0.3f-0.2f/30)*65535)) <= 1);
+
+  // Collision waves use the feedback collection, not the contact surface.
+  const float mph = 2.236989974975586f;
   for (int owner = 0; owner < 2; ++owner) {
     Reset(feedback);
     COLLISION_INFO hit = Contact(1);
-    hit.objAVel[0] = bodies[0].velocity[0] = 40.0f;
-    hit.objBVel[0] = bodies[1].velocity[0] = 40.0f;
-    vReportCollision(&feedback, hit, owner == 0, RumbleUCVector{1.0f, 2.0f, 3.0f});
-    // rearDelta = 40 * 0.25 = 10 -> (10 - 5) / 20 = 0.25
-    assert(Near(feedback.mMW.collision.amplitude, 0.25f));
+    hit.objAVel[0] = bodies[0].velocity[0] = 24;
+    hit.objBVel[0] = bodies[1].velocity[0] = 40;
+    vReportCollision(&feedback, hit, owner == 0, RumbleUCVector{1,2,3});
+    assert(lastKey == 0xAEF4FB7D);
+    assert(Near(feedback.mCollisionWave.fAmplitude[0], 10*mph/200));
+    assert(!instances && !feedback.mMW.collision.remaining);
   }
-
   Reset(feedback);
   COLLISION_INFO hit = Contact(1);
-  hit.objAVel[0] = bodies[0].velocity[0] = 40.0f;
-  hit.objBVel[0] = bodies[1].velocity[0] = -20.0f;
+  hit.objAVel[0] = 40; bodies[0].velocity[0] = 35;
+  vReportCollision(&feedback, hit, true, RumbleUCVector{});
+  assert(lastKey == 0x3C714126 && Near(feedback.mCollisionWave.fAmplitude[0], 5*mph/200));
+  Reset(feedback);
+  hit = Contact(1);
+  hit.objAVel[0] = bodies[0].velocity[0] = 40;
+  bodies[1].velocity[0] = -20;
   bodies[1].vehicle = false;
   vReportCollision(&feedback, hit, true, RumbleUCVector{});
-  // ((40 - 20) / 30) * 0.75 = 0.5
-  assert(Near(feedback.mMW.collision.amplitude, 0.5f));
+  assert(lastKey == 0x1C2333F7 && Near(feedback.mCollisionWave.fAmplitude[0], 40*mph/200));
+  Reset(feedback);
+  hit = Contact(2);
+  hit.objAVel[0] = 20; bodies[0].velocity[0] = 5;
+  vReportCollision(&feedback, hit, true, RumbleUCVector{});
+  assert(lastKey == 0x7125C7EC && Near(feedback.mCollisionWave.fAmplitude[0], 15*mph/200));
+  hit.normal[0] = 0; hit.normal[1] = 1;
+  vReportCollision(&feedback, hit, true, RumbleUCVector{});
+  assert(lastKey == 0x96A192E8);
+  feedback.BeginUpdate();
+  assert(!feedback.mCollisionWave.fAmplitude[0]);
+  hit = Contact(3); hit.force = 80;
+  vReportCollision(&feedback, hit, true, RumbleUCVector{});
+  assert(lastKey == 0x751D40E5 && Near(feedback.mCollisionWave.fAmplitude[0], 0.4f));
+  // Offset-only records let us check end-to-end motor mixing deterministically.
+  collisionRecord.fOffsetMin = collisionRecord.fOffsetMax = 0.3f;
+  vReportCollision(&feedback, hit, true, RumbleUCVector{});
+  Tick(feedback); Tick(feedback);
+  assert(abs((int)sent.wLeftMotorSpeed - (int)(0.3f*65535)) <= 1 && !sent.wRightMotorSpeed);
+  collisionStereo = true;
+  feedback.BeginUpdate();
+  vReportCollision(&feedback, hit, true, RumbleUCVector{});
+  Tick(feedback); Tick(feedback);
+  assert(sent.wLeftMotorSpeed == sent.wRightMotorSpeed && sent.wLeftMotorSpeed > 0);
+  collectionPresent = false;
+  feedback.BeginUpdate();
+  vReportCollision(&feedback, hit, true, RumbleUCVector{});
+  assert(!instances && !feedback.mCollisionWave.fAmplitude[0]);
+  feedback.PauseEffects();
+  assert(!sent.wLeftMotorSpeed && !sent.wRightMotorSpeed);
 
-  puts("Undercover controls menu, device, motor output, vtable ABI, and collision checks passed");
+  puts("Undercover console curves, mixer, collision collection, motor output and native ABI checks passed");
   return 0;
 }

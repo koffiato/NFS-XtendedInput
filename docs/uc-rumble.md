@@ -1,5 +1,12 @@
 # Need for Speed: Undercover feedback research
 
+The controller adapter uses the verified [Xbox 360 mixer rules](uc-rumble-x360.md).
+That document supersedes the historical platform-parity assumptions below:
+PC wheel feedback and console controller feedback have different effect paths.
+Collision input is routed to authored console-style waves, and shift/engine
+ramps do not contribute to Undercover body motor output.
+
+
 ## Adapter ABI
 
 The PC collision callback takes `(const CollisionInfo&, bool, Vector3)` with
@@ -25,7 +32,7 @@ checks the literal UC participant velocity slot independently of the adapter.
 
 PC and console versions of Undercover inherit the core Black Box feedback architecture from Most
 Wanted (2005), Carbon (2006), and ProStreet (2007). On PC, retail Undercover ships with a complete
-concrete 21-slot `IFeedback` vtable, full MSVC RTTI, an active physical collision evaluator
+concrete 21-slot `IFeedback` vtable, full MSVC RTTI, an active wheel collision evaluator
 (`0x00696420`), and an embedded Logitech Gaming SDK (`LogitechEZWheelWrapper`) supporting 10 force
 feedback effect classes. However, PC retail completely omits gamepad vibration output: its XInput
 controller wrapper stubs the actuator method as `ret 4`, and `XInputSetState` is absent from the
@@ -124,8 +131,8 @@ cleanup conventions and argument counts match ProStreet's 21-slot layout slot-fo
 | **12** | `+0x30` | UpdateEngineBlown | `0x006B1200` | `ret 4` (4) | Stub (1 param: boolean `blown`) |
 | **13** | `+0x34` | UpdateShifting | `0x006B1200` | `ret 4` (4) | Stub (1 param: boolean `shifting`) |
 | **14** | `+0x38` | UpdateDriftSlip | `0x006B0620` | `ret 0xC` (12) | Stub (3 params: 2 float coordinates + flag) |
-| **15** | `+0x3C` | Reserved Slot | `0x006B0620` | `ret 0xC` (12) | Stub (3 params) |
-| **16** | `+0x40` | UpdateDriftSkid | `0x008ECD50` | `ret 0x10` (16) | Stub (4 params: drift angle, velocity) |
+| **15** | `+0x3C` | Drift Tyre Slip | `0x006B0620` | `ret 0xC` (12) | Stub (surface, slip, grip; console evaluates drift slip) |
+| **16** | `+0x40` | UpdateDriftSkid | `0x008ECD50` | `ret 0x10` (16) | Stub (surface, angle, range, threshold; console drift skid curve) |
 | **17** | `+0x44` | SteeringForce | `0x006B1200` | `ret 4` (4) | Stub (1 param: float steering torque) |
 | **18** | `+0x48` | UpdateRoadWithIndex | `0x006B0620` | `ret 0xC` (12) | Stub (3 params: `wheelIdx`, `bumpScalar`, `surface`) |
 | **19** | `+0x4C` | ReportCollision | `0x00696420` | 20 | Contact reference, ownership boolean, and 12-byte velocity-change vector by value; physical wheel feedback evaluator |
@@ -226,10 +233,10 @@ When a contact occurs:
    007BAE20: FF D2           call edx                     ; IFeedback::ReportCollision
    ```
 
-### Concrete collision calculation (`0x00696420`)
+### PC wheel collision calculation (`0x00696420`)
 
-The concrete `ReportCollision` function in `GameDevice` implements identical mathematical formulas
-and constants to Most Wanted, Carbon, and ProStreet:
+The PC `ReportCollision` implementation targets the Logitech wheel path.
+These wheel calculations are not the Xbox controller wave mixer:
 
 1. **Contact Category Bitfield Extraction:**
    Extracted by shifting right arithmetic by 29 bits:
@@ -320,8 +327,8 @@ device, then mixes the game's native feedback events into controller output.
    `LocalPlayer::SetFeedbackDevice` finds it through the device's interface list;
    native collision listeners deliver slot 19 directly.
 3. **Motor Output Pipeline:**
-   Native road feedback uses slot 6. Surface waves, drift and car/collision
-   ramps feed the shared mixer, which is advanced by device polling and sent to
+   Native road feedback uses slot 6. Surface and collision waves, stereo drift, NOS and indexed bump
+   ramps feed the mixer, which is advanced by device polling and sent to
    XInput or WGI. Impulse triggers are an optional extension. Pause, disconnect,
    focus loss and missed-feedback checks stop controller output.
 

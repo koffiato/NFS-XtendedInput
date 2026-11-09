@@ -1,211 +1,169 @@
-# Undercover feedback research (Xbox 360)
+# Undercover Xbox 360 controller feedback
 
-PC and Xbox 360 share the core EA Black Box feedback architecture inherited from Most Wanted (2005),
-Carbon (2006), and ProStreet (2007). On PC, retail Undercover v1.0.1.18 retains the concrete 21-slot
-`IFeedback` vtable and the full Havok collision physics evaluator, but completely omits gamepad
-vibration output (stubs its XInput actuator slot as `ret 4` and omits `XInputSetState` from the PE IAT).
-In contrast, Xbox 360 implements the complete, native force feedback and dual-motor controller
-vibration engine.
+The UC adapter ports the retail console controller mixer using PC producer
+callbacks and PC attributes. This is a code and binary comparison; physical
+controller or emulator trace equivalence has not been established.
 
-This document consolidates the recovered Xbox 360 rumble subsystem, its 21-slot feedback interface,
-internal circular effect buffer, `ControllerVibrationDevice` mixer, Havok collision physics evaluator,
-statically-linked `XFFB` driver, XAM/XInput hardware sink, and direct platform comparison with PC
-retail (`nfs.exe`).
+Verified findings updated on 2026-11-09. This document supersedes the earlier
+Undercover analysis that applied a `+0xDE00` address adjustment, treated the
+wheel actuator as the controller mixer, or preserved wave phase between frames.
 
----
+## Binary and address mapping
 
-## Reference binaries
+Reference `default.exe`: 25,034,752 bytes, SHA-256
+`befa136b20e47fc62b8129ccb32b97e6163ddb0bff52760d532788fc3e925c71`.
+Title ID: `45410876`. The extracted XEX hash is
+`97ac0c072253d46458dc6d57c6609922adbd3b9658216940282c361ad575e221`.
 
-| Binary | Size (bytes) | SHA-256 |
-| :--- | ---: | :--- |
-| PC Retail Live `nfs.exe` (v1.0.1.18) | 10,584,064 | `d1ecded04cbba387c99299d2159b29b5c04b1d095293013caa4b404a43c7d2e9` |
-| Retail `default.xex` | 6,909,952 | `97ac0c072253d46458dc6d57c6609922adbd3b9658216940282c361ad575e221` |
-| XexTool expanded image `default.exe` | 25,034,752 | `befa136b20e47fc62b8129ccb32b97e6163ddb0bff52760d532788fc3e925c71` |
+**This XexTool output is a memory-layout image.** Read instructions at
+`fileOffset = VA - 0x82000000`, including `.text`. The original PE header's
+raw pointer `0x1D2200` is stale: `.text` bytes actually begin at offset
+`0x1E0000`. For example, vtable slot 4 points to `0x82610A48`, whose code
+begins at file offset `0x610A48`. Adding `0xDE00` to vtable entries produces
+incorrect runtime addresses. Older research used that erroneous displacement.
 
-- **Xbox 360 Title ID:** `45410876` (EA-2166).
-- **PE TimeDateStamp:** `0x48FD21F7` (Tue Oct 21 00:27:35 2008 UTC).
-- **Entry Point RVA:** `0x00D5D960` (VA `0x82D5D960`).
-- **Base Address:** `0x82000000`.
+## Interface and actual producers
 
-### Section memory layout & displacement skew
+PC `IFeedback` is at `0x00C0D434`, Xbox at `0x8212CC70`. Both have 21 slots.
+The PC collision callback passes its 12-byte vector by value and must retain
+`ret 0x14` cleanup. Participant velocity is slot 24 (`+0x60`), unlike MW/CB.
+See [PC interface notes](uc-rumble.md).
 
-| Section | Virtual Address | Virtual Size | File Offset | Raw Size | Characteristics |
-| :--- | :---: | :---: | :---: | :---: | :--- |
-| `.rdata` | `0x82000400` | `0x00172280` | `0x00000400` | `0x00172400` | Read-only data & VTables |
-| `.pdata` | `0x82172800` | `0x0005F9C8` | `0x00172800` | `0x0005FA00` | Exception directory & unwind |
-| `.text` | `0x821E0000` | `0x00EA5E2C` | `0x001D2200` | `0x00EA6000` | PowerPC executable code |
-| `.data` | `0x83090000` | `0x006D0538` | `0x01078200` | `0x00080600` | Globals, IAT & variables |
+| Slot | Callback | Xbox VA | Controller behavior |
+| ---: | --- | --- | --- |
+| 4 | BeginUpdate | `0x82610A48` | Clear complete wave records, including phase |
+| 5 | EndUpdate | `0x82610AE8` | Stub; device polling runs the mixer |
+| 6 | Road | `0x82610AF0` | Four `FFB_ROLL` records, speed input |
+| 7 | Tyre skid | `0x82610BE8` | Load-shaped curve into `FFB_SKID` |
+| 8 | Tyre slip | `0x82610D30` | Signed slip curve into `FFB_SLIP` |
+| 9 | RPM | `0x82610E68` | Stub; no independent engine buzz |
+| 10 | Shift potential | `0x82610E70` | Update ramps; Run discards samples |
+| 11 | NOS | `0x826110E8` | Left ramp, 2 s, 1.0 to 0.5 |
+| 12 | Engine blown | `0x82611028` | Update ramps; Run discards samples |
+| 13 | Shifting | `0x826111A8` | Update ramps; Run discards samples |
+| 14 | Drift | `0x82611290` | Two waves, one per body motor |
+| 15 | Drift tyre slip | `0x82611338` | Piecewise curve into normal slip group |
+| 16 | Drift tyre skid | `0x826114A8` | Angle curve using `FFB_DRIFT_SKID` |
+| 17 | Steering | `0x8260F6B8` | Wheel-only stub |
+| 18 | Indexed bump | `0x82611660` | Threshold/gain into side-specific ramps |
+| 19 | Collision | `0x826117E0` | Select authored collision wave records |
 
-> [!NOTE]
-> In XexTool's expanded PE image, `.text` begins at raw file offset `0x001D2200` with virtual base `0x821E0000`.
-> The displacement between virtual addresses and raw offsets creates a constant displacement:
-> $$\Delta = \text{VA}_{\text{text}} - \text{RawOffset}_{\text{text}} = 0x821E0000 - 0x821D2200 = 0xDE00$$
-> Function pointers stored in `.rdata` virtual tables represent unskewed image addresses. Adding **`+0xDE00`**
-> to any stored `.rdata` function pointer resolves directly to the exact runtime instruction prologue in `.text`.
+The ordinary wheel loops in BOTH PC `0x007BA910..0x007BAA15` and Xbox
+`0x827A1C0C..0x827A1D80` dispatch slot 6. They query two chassis values and
+discard them. Contrary to older notes, that loop does not dispatch slots 7/8.
+The adapter preserves the other native callbacks for their separate callers;
+it does not invent extra tyre events or replace the game's producer loop.
 
----
+## Curves and mixing
 
-## Feedback interface and producers
+Drift is not Carbon's absolute-angle threshold curve. When active, slot 14
+writes the same parameters to the left and right waves:
 
-The abstract COM interface `IFeedback` is embedded at offset `+0x2C` inside the concrete device class
-`GameDevice`:
-- **PC:** The concrete `IFeedback` vtable is at `0x00C0D434` (21 slots). `InputDevice::GetInterfaces`
-  is at Slot 9 (`+0x24`), returning the interface list at `InputDevice + 4`.
-- **Xbox 360:** The primary `GameDevice` vtable is at `0x8212CC28` (runtime `0x8261EA28`). The concrete
-  `IFeedback` vtable starts at `.rdata` `0x8212CC70` (runtime `0x8261E698` – `0x8261F5E0`, 21 slots).
+- Phase = simulation time in milliseconds.
+- Amplitude = first float * 0.5 + 0.2.
+- Frequency = second float * 30 + 60 Hz.
+- Inactive clears both waves. Paused callbacks leave state unchanged.
 
-### VTable slot layout and platform comparison
+Undercover BeginUpdate clears phase, amplitude, frequency and offset in all
+six wave groups. It preserves ramp timers. Reusing MW/Carbon phase continuity
+caused the previous adapter to develop a different texture over successive
+frames. The reset map is now checked by executing the retail BeginUpdate
+instructions for ports 0, 1 and 3 in the binary audit.
 
-| Slot | Displacement | Method / Event | PC Address (`nfs.exe`) | Xbox 360 Address (`default.exe`) | Signature and Semantics |
-| :---: | :---: | :--- | :---: | :---: | :--- |
-| **0** | `+0x00` | `Destructor` | `0x0069A860` (thunk) | `0x82621DD8` (thunk) | `addi r3, r3, -0x2c`; branches to `GameDevice` dtor (`0x8261E540`). |
-| **1** | `+0x04` | `PauseEffects` | `0x006778F0` | `0x8261E698` | Pauses effect playback across all active controller channels. |
-| **2** | `+0x08` | `ResumeEffects` | `0x004C7740` (`ret`) | `0x8261E6E0` | Unpauses effects and resets channel timers. |
-| **3** | `+0x0C` | `ResetEffects` | `0x00677960` | `0x8261E728` | Virtual forwarder to Slot 1 (`PauseEffects`). |
-| **4** | `+0x10` | `BeginUpdate` | `0x004C7740` (`ret`) | `0x8261E848` | Resets per-frame scratch accumulators and effect states. |
-| **5** | `+0x14` | `EndUpdate` | `0x004C7740` (`ret`) | `0x8261E8E8` | Empty return (`blr`). Mixing runs in `ControllerVibrationDevice::Update`. |
-| **6** | `+0x18` | `UpdateRoadNoise` | `0x006B0620` (`ret 0xC`) | `0x8261E8F0` | Surface roughness and wheel bump feedback. |
-| **7** | `+0x1C` | `UpdateTireSkid` | `0x0054E260` (`ret 0x14`)| `0x8261E9E8` | 5 parameters: surface attribute, skid scalar, load, grip, total load. |
-| **8** | `+0x20` | `UpdateTireSlip` | `0x006B0620` (`ret 0xC`) | `0x8261EB30` | 3 parameters: surface attribute, longitudinal slip, lateral scrubbing. |
-| **9** | `+0x24` | `UpdateRPM` | `0x006B0620` (`ret 0xC`) | `0x8261EC68` | Stub (`blr`). (PC retail uses Logitech DirectInput periodic effects). |
-| **10** | `+0x28` | `UpdateShiftPotential` | `0x006B1200` (`ret 4`) | `0x8261EC70` | Evaluates potential levels (1, 2, 3) for tachometer vibration. |
-| **11** | `+0x2C` | `UpdateNOS` | `0x0064C980` (`ret 8`) | `0x8261EEE8` | Reads/writes `[GameDevice + 0x748]`; engages nitrous vibration. |
-| **12** | `+0x30` | `UpdateEngineBlown` | `0x006B1200` (`ret 4`) | `0x8261EE28` | Reads/writes `[GameDevice + 0x749]`; pulses engine blown flutter. |
-| **13** | `+0x34` | `UpdateShifting` | `0x006B1200` (`ret 4`) | `0x8261EFA8` | Reads/writes `[GameDevice + 0x74A]`; pulses gear shift engagement click. |
-| **14** | `+0x38` | `UpdateDriftSlip` | `0x006B0620` (`ret 0xC`) | `0x8261F090` | Lateral drift telemetry and oversteer slide feedback. |
-| **15** | `+0x3C` | `Reserved15` | `0x006B0620` (`ret 0xC`) | `0x8261F138` | Internal device state synchronizer. |
-| **16** | `+0x40` | `UpdateDriftSkid` | `0x008ECD50` (`ret 0x10`)| `0x8261F2A8` | High drift angle sustained tire skid vibration. |
-| **17** | `+0x44` | `SteeringForce` | `0x006B1200` (`ret 4`) | `0x8261D4B8` | Wheel centering torque stub (`blr`) for gamepads. |
-| **18** | `+0x48` | `UpdateRoadWithIndex` | `0x006B0620` (`ret 0xC`) | `0x8261F460` | Per-wheel road surface bump injection with wheel index routing (0..3). |
-| **19** | `+0x4C` | `ReportCollision` | `0x00696420` | `0x8261F5E0` | **Active physics evaluator (>2.5 KB).** Havok rigid-body impact processor. |
-| **20** | `+0x50` | `GetControllerType` | `0x006822A0` | `0x825D03B8` | Returns controller classification (`0x820FEB44`). |
+Surface evaluation (`0x82617910`) interpolates frequency, amplitude and offset
+between each record's two endpoints, then keeps the maximum of each component
+across wheels. The wave sampler (`0x8260E0D0`) retains signed samples and the
+console's single-subtraction phase wrapping.
 
-### Producer calling sequence (`LocalPlayer::DoFFB`)
+Normal slip below -0.75 gives 1.0; positive slip above grip maps to 0..0.5.
+Skid maps up/down around its threshold, raises that level to
+`(1-load)*2`, then multiplies by load. Drift tyre slip uses the separate
+0.3 breakpoint; drift skid uses its own angle curve and attribute key.
+No MW front-wheel quarter-strength damping is applied to UC skid input.
 
-Feedback generation executes every frame in `LocalPlayer::DoFFB` (`0x827AF7D0` – `0x827AFE34`):
-1. **Feedback Device Pointer:** `LocalPlayer` holds the active `IFeedback` pointer at `this + 0x50` (`lwz r11, 0x50(r28)`).
-2. **Lifecycle Start:** Dispatches `ResumeEffects` (Slot 2) and `BeginUpdate` (Slot 4) via `0x827AF95C` / `0x827AF974`.
-3. **Four-Wheel Sampling Loop:**
-   - Evaluates each wheel (counter `r30` = 0..3).
-   - Checks blown tyre state using universal attribute hash **`0xD929E923`** (`0x827AF9FC`).
-   - Queries surface friction via `Attrib::Instance::GetAttributePointer` (`0x8227E850`):
-     - `GetFFBRoll` (`0x825D00F8`, attribute `0xBA1297DA`)
-     - `GetFFBSkid` (`0x825D0140`, attribute `0x0C149044`)
-     - `GetFFBSlip` (`0x825D0188`, attribute `0x8FD11D27`)
-   - Dispatches `UpdateRoadNoise` (Slot 6), `UpdateTireSlip` (Slot 8), and `UpdateTireSkid` (Slot 7).
-4. **Vehicle State Dispatches:**
-   - Calls **`UpdateRPM`** (Slot 9) at `0x827AFC38`.
-   - Calls **`UpdateShiftPotential`** (Slot 10) at `0x827AFC68`.
-   - Calls **`UpdateNOS`** (Slot 11) at `0x827AFCD4`.
-   - If blown, calls **`UpdateEngineBlown`** (Slot 12) at `0x827AFD48`; otherwise calls **`UpdateShifting`** (Slot 13) at `0x827AFDA0`.
-   - Calls **`UpdateDriftSlip`** (Slot 14) at `0x827AFDF0`.
-5. **Lifecycle End:** Calls **`EndUpdate`** (Slot 5) at `0x827AFE1C`.
+Indexed bumps use strict `signal > FFB_BUMP_THRESHOLD` and amplitude
+`clamp(FFB_BUMP_GAIN * signal)`. Wheels 0/2 select left and 1/3 right.
+A later wheel replaces the side's ramp even if weaker. Duration is 0.3 s,
+floor 0.1. Slot 18 does not synthesize another road-roll wave.
 
----
+Controller Run (`0x8260F6F0`) advances all ramps, but shift-potential,
+engine-blown and shifting samples are discarded. Body output takes maxima of
+road, skid, slip, collision, drift, NOS and indexed bumps. NOS is left only.
+Push (`0x8260FBC0`) precedes Run, retaining the one-poll body-output delay.
+Impulse triggers remain an optional extension.
 
-## Console effect state and actuator mixer
+## Collisions
 
-### `GameDevice` object layout
+The controller branch (`0x82611FF8`) evaluates four collision wave records;
+it does not use the separate wheel actuator's 300 ms/50 ms envelope or MW's
+scalar collision ramp. BeginUpdate clears collision wave inputs each frame.
+
+The adapter opens the same PC feedback collection as native ReportCollision:
+class `0xD93FC53A`, collection `0xEEC2271A`, using `0x00464A20`,
+constructing an Attrib::Instance with `0x00462C80`, and releasing it through
+`0x00468820`. Missing collections/attributes remain silent.
+
+| Contact | Attribute key | Wave input |
+| --- | --- | --- |
+| Type 3 | `0x751D40E5` | Contact force |
+| Barrier glance | `0x96A192E8` | Live own speed * 2.23699 |
+| Barrier direct | `0x7125C7EC` | Own velocity change * 2.23699 |
+| Vehicle rear contact | `0xAEF4FB7D` | max(stored A speed, stored B speed) * 0.25 * 2.23699 |
+| Moving vehicle contact | `0x1C2333F7` | Live own speed * 2.23699 |
+| Vehicle impact (delta >= 5 m/s) | `0x3C714126` | Own velocity change * 2.23699 |
+
+The barrier classifier uses absolute normalized stored velocity projected on
+the contact normal, with a 0.1 threshold. Low-delta vehicle rear contacts
+require another vehicle, normalized velocity dot > 0.1, and estimated delta
+> 5. Other moving contacts require own live speed > 2 and other live velocity
+relative to own stored velocity > 2. Both player A/B orientations are supported.
+PC stores the contact category in the low three bits; Xbox uses bits 29..31.
+The by-value velocity-change argument is retained for ABI compatibility;
+the console evaluator itself recomputes participant velocity changes.
+
+## Validation and limits
+
+`tests\uc.cmd` checks literal vtable calls with runtime stack validation,
+collection reference balancing, curve boundary vectors, stereo drift, indexed
+bumps, collision keys/inputs, pause behavior and captured XInput output.
+It also checks 100 consecutive producer/poll frames at changing intervals,
+including phase resets and the one-poll delay. Another 64 synthetic state
+vectors were evaluated through the retail PowerPC mixer and compared against
+the adapter within two motor units out of 65535. This is a scalar reference
+comparison; its sine call uses host math rather than emulating the Xbox CRT.
+`python tools/uc_console_audit.py <path-to-default.exe>` verifies the reference
+hash, vtable mapping, key constants and representative instructions directly
+from the console image without requiring a disassembler.
+
+PC attribute records remain the source of authored wave data. A direct audit
+of the local `GLOBAL/ATTRIBUTES.BIN` banks resolves inheritance and compares
+119 wave records across 82 surface/feedback collections: all match after
+endian conversion. Run it with:
+
+```bat
+python tools\uc_attribute_audit.py <PC-ATTRIBUTES.BIN> <X360-ATTRIBUTES.BIN>
 ```
-[GameDevice Object Layout]
-+0x000: Primary GameDevice VTable (0x8212CC28 -> runtime 0x8261EA28)
-+0x02C: Concrete IFeedback VTable (0x8212CC70 -> runtime 0x8261E698)
-+0x034: ControllerVibrationDevice / tRumbler (0x8212CBF8 -> runtime 0x8261C368)
-        +0x008: XFFB Device Handle
-        +0x00C: Active/Connected Flag (uint8)
-        +0x00D: Device Enabled Flag (uint8)
-        +0x010: Effect Slots Buffer (8 channels * 116 bytes = 0x3A0 bytes)
-        +0x434: Last Collision Type (uint32)
-        +0x438: Last Collision Impulse Intensity (float 0.0f - 1.0f)
-+0x748: mNOSActive (uint8)
-+0x749: mEngineBlown (uint8)
-+0x74A: mShifting (uint8)
+
+PC bank SHA-256: `adeb6c25fbdf290dad6c117a021fdce043b7faaafafdbcb2858767451c5f3980`.
+Xbox bank SHA-256: `ab11b15bccc764c003b2beb793a2010ec369feb05ffb8e47a7c69c48513d1ddc`.
+Other banks or modified game data have not been compared.
+
+The Xbox clock is also elapsed real time, computed during port 0 polling
+(`0x826101BC..0x82610200`), rather than a fixed 30 Hz feedback scheduler.
+The adapter therefore retains its elapsed polling clock; it does not add an
+invented fixed cadence. Frame/poll scheduling can still differ by platform.
+Physical controller trace equivalence has not been verified.
+
+Validation for this revision passed all seven build targets (`UG`, `UG2`,
+`MW`, `CB`, `UC`, `PS`, `W`), the UC/MW/Carbon/ProStreet feedback suites,
+and shared runtime checks for those four feedback targets. Reproduce the
+UC-specific checks from an x86 developer prompt at the repository root:
+
+```bat
+build.cmd UC
+tests\uc.cmd
+tests\runtime.cmd UC
 ```
 
-### Circular effect buffer
-Constructed in `0x8261C4C0`, the actuator mixer zeroes `0x3A0` bytes (928 bytes) starting at `this + 0x10`.
-The buffer houses **8 effect channels**, each allocated **116 bytes (`0x74`)** containing envelope timings,
-motor masks, intensity levels, and playback frequencies.
-
-### `ControllerVibrationDevice` VTable (`0x8212CBF8`)
-The mixer exposes 11 virtual slots:
-- **Slot 1 (`0x8261C8B8`):** `Update` / Motor Mixer. Evaluates active channel envelopes, resolves motor duty
-  cycles, and transmits packets to `XFFB`.
-- **Slot 9 (`0x8261BFB0`):** `TriggerCollisionFeedback(int type, float intensity)`:
-  ```asm
-  0x8261BFB0: stw        r4, 0x434(r3)    ; writes collision type / severity
-  0x8261BFB4: stfs       f1, 0x438(r3)    ; writes normalized intensity (0.0f - 1.0f)
-  0x8261BFB8: blr
-  ```
-
-### Hardware output sink (`XFFB` & `XAM`)
-In Slot 1 (`0x8261C8B8`), the mixer dispatches to Microsoft `XFFB v2.0.7645.0`:
-- **`0x82D68538` (`XFFB_SetDeviceState`):** Prepares device output channels.
-- **`0x82D68410` (`XFFB_UpdateMotors`):** Writes motor duty cycles to dispatch pointers `[0x83111994]` and
-  `[0x8311198C]`, calling `xam.xex` Ordinal `0x192` (402: `XInputSetState`).
-
----
-
-## Collision interception and Havok dynamics
-
-### `LocalPlayer::OnCollision` (`0x827AFFF0`)
-The collision listener is implemented at offset `+0x4C` of `LocalPlayer` (VTable `0x8214B1BC`) and
-`RecordablePlayer` (VTable `0x8214B43C`):
-1. **Simable Resolution:** Extracts `cinfo->objA` (`+0x3C`) and calls `GetSimable` (`0x822532e8`).
-2. **Profile Gatekeeper Check (`0x827B0078`):**
-   ```asm
-   0x827B0078: lbz        r11, 9(r3)       ; PlayerSettings::mRumbleEnabled (+0x09)
-   0x827B007C: cmplwi     cr6, r11, 0      ; is rumble enabled in user profile?
-   0x827B0080: beq        cr6, 0x827b0180  ; IF ZERO, BYPASS REPORTCOLLISION!
-   ```
-   > [!IMPORTANT]
-   > NOPing the 4-byte conditional branch at `0x827B0080` with `60 00 00 00` (`nop`) forces collision
-   > delivery regardless of savegame profile states.
-3. **Participant Identification (`iamA`):**
-   Compares `simableA->mHandle` with `mySimable->mHandle` (`0x827B0144` – `0x827B0154`), setting `r5 = (handleA == myHandle) ? 1 : 0`.
-4. **Dispatch:** Calls `IFeedback::ReportCollision` (Slot 19 / `0x4C(r11)`), passing `cinfo` in `r4`, `iamA` in `r5`,
-   and the 12-byte velocity delta vector `vlive - vpre` in `r6`–`r7`.
-
-### Havok physics evaluator (`ReportCollision` at `0x8261F5E0`)
-1. **Orientation:** Resolves `mySimable` (`r31`) and `otherSimable` (`r30`) according to `iamA`.
-2. **Closing Velocity Estimation:** Queries live Havok rigid body velocity (`ISimable::GetVelocity` at Slot 24 / `0x60(r11)`),
-   computes velocity delta against pre-impact velocity, and enforces the Black Box **5.0 m/s closing velocity threshold**.
-3. **Collision Domains:** Evaluates `cinfo->flags >> 29`:
-   - **Type 1: Vehicle-to-Vehicle (`0x8261F99C`):** Computes angle of incidence, halves estimated impulse
-     (`estimate *= 0.5f`), and queries vehicle scrape attributes **`0xAEF4FB7D`** and **`0x1C2333F7`**.
-   - **Type 2: World Barrier Impact (`0x8261F830`):** Projects velocity against contact normal:
-     $$\text{projection} = |\mathbf{v}_{\text{closing}} \cdot \mathbf{n}_{\text{contact}}|$$
-     Compares against 5.0 m/s threshold (`-0x2358(r26)`). If below 5.0 m/s, queries barrier glance/scrape
-     attribute **`0x96A192E8`**; if direct structural crash, queries **`0x7125C7EC`**.
-   - **Type 3: World Prop / Object (`0x8261F7B8`):** Queries prop impact attribute **`0x751D40E5`**, scaling by mass.
-4. **4-Wheel Force Ramp & Dispatch:** Computes force ramps across all 4 wheels against surface friction, divides
-   total force by wheel count (`f12 / f11`), and invokes Actuator Slot 9 (`0x8261FDE8`) to play the impulse.
-
----
-
-## Direct platform parity analysis
-
-| Architectural Component | PC Retail v1.0.1.18 (`nfs.exe`) | Xbox 360 Retail (`default.exe`) | Parity Status |
-| :--- | :--- | :--- | :--- |
-| **`IFeedback` VTable** | `0x00C0D434` (21 slots, `+0x2C`) | `0x8212CC70` (21 slots, `+0x2C`) | **100% Identical:** Same 21 slots, same displacements, same parameters. |
-| **`XInputSetState`** | Absent from PE IAT (`XINPUT1_3.dll`) | Imported (`xam.xex` Ordinal 402) | PC omitted hardware actuation; console uses native driver. |
-| **Actuator Engine** | Stubbed as `ret 4` (`0x006B1200`) | Native `ControllerVibrationDevice` (`0x8261C2D0`)| Console maintains 8-slot, 928-byte circular mixer buffer. |
-| **`ReportCollision`** | `0x00696420` (>2.5 KB evaluator) | `0x8261F5E0` (>2.5 KB evaluator) | **100% Identical:** Both binaries house full Havok collision evaluator. |
-| **Gatekeeper Jump** | `0x007BAD13` (`je 0x007BAE26`) | `0x827B0080` (`beq 0x827b0180`) | **Identical:** Checks `PlayerSettings::mRumbleEnabled` (byte `+0x09`). |
-| **Blown Tyre Hash** | `0xD929E923` (`0x007BC84C`) | `0xD929E923` (`0x827AF9FC`) | **100% Identical:** Universal Black Box engine flat tyre attribute. |
-| **Closing Velocity Gate**| `5.0 m/s` (`0x00B2B284`) | `5.0 m/s` (`-0x2358(r26)`) | **100% Identical:** Same glance vs direct crash velocity threshold. |
-| **Barrier Scrape Key** | `0x96A192E8` | `0x96A192E8` (`0x8261F8D8`) | **100% Identical:** Shared surface friction attribute key. |
-| **Barrier Impact Key** | `0x7125C7EC` | `0x7125C7EC` (`0x8261F948`) | **100% Identical:** Shared structural crash attribute key. |
-| **Vehicle Scrape Key** | `0xAEF4FB7D` | `0xAEF4FB7D` (`0x8261FAE0`) | **100% Identical:** Shared vehicle glancing scrape attribute key. |
-| **Vehicle Crash Key** | `0x1C2333F7` | `0x1C2333F7` (`0x8261FB68`) | **100% Identical:** Shared vehicle T-bone impact attribute key. |
-| **World Prop Key** | `0x751D40E5` | `0x751D40E5` (`0x8261F7D8`) | **100% Identical:** Shared destructible prop attribute key. |
-
----
-
-## Integration blueprint for `NFS-XtendedInput`
-
-1. **Leverage PC Havok Physics:** PC retail already contains the intact `ReportCollision` evaluator (`0x00696420`). XtendedInput does not need to re-implement impact physics or estimate velocity changes manually.
-2. **Hook Concrete `IFeedback` (`0x00C0D434`):** Replace `GameDevice + 0x2C` with an XtendedInput `IFeedback` adapter, routing all 21 slots to our modern XInput motor mixer.
-3. **Capture Slot 19 (`ReportCollision`):** Intercept the pre-calculated, normalized collision events, shaping them into tactile heavy/light motor pulses using the console envelope model (300 ms duration, 50 ms attack).
-4. **Patch Profile Gatekeeper (`0x007BAD13`):** NOP the 6-byte gatekeeper jump on PC (`90 90 90 90 90 90` at `0x007BAD13`), ensuring collision delivery regardless of user savegame state.
-5. **Console Modding / Emulator Parity:** On Xbox 360 title patches, NOP `0x827B0080` with `60 00 00 00` (`nop`) to force native rumble playback under all conditions.
+The normal PC producer, profile-gate bypass, output watchdog and optional
+trigger routing remain in use.

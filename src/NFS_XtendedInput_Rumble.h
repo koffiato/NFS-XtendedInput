@@ -74,6 +74,9 @@ void RumbleInstallPatches() {
 
 #include "rumble/Vehicle.h"
 #include "rumble/Surface.h"
+#ifdef GAME_UC
+#include "rumble/Undercover.h"
+#endif
 #include "rumble/Telemetry.h"
 
 #ifdef GAME_PROSTREET
@@ -162,6 +165,9 @@ class IFeedback {
   RumbleWave         mRoadWave;
   RumbleWave         mSkidWave;
   RumbleWave         mSlipWave;
+#ifdef GAME_UC
+  RumbleWave         mCollisionWave;
+#endif
   float              mWheelSkid[RUMBLE_MAX_WHEELS];  // from DoFFB, |lateral m/s|
   int                mWheelArg;                      // wheel DoFFB is reporting
   // Optional trigger extension: proportional braking/throttle slip and car ramps.
@@ -194,6 +200,9 @@ class IFeedback {
     mRoadWave = {};
     mSkidWave = {};
     mSlipWave = {};
+#ifdef GAME_UC
+    mCollisionWave = {};
+#endif
     ClearEffects();
   }
 
@@ -216,6 +225,9 @@ class IFeedback {
     mRoadWave.Begin();
     mSkidWave.Begin();
     mSlipWave.Begin();
+#ifdef GAME_UC
+    mCollisionWave.Begin();
+#endif
     mNOSEngaged         = false;
     mShifting           = false;
     mEngineBlown        = false;
@@ -331,6 +343,9 @@ class IFeedback {
     mRoadWave.Begin();
     mSkidWave.Begin();
     mSlipWave.Begin();
+#ifdef GAME_UC
+    mCollisionWave.Begin();
+#endif
     RumbleTelemetry.nWheel = 0;
   }
 
@@ -422,6 +437,11 @@ class IFeedback {
     mHasVehicle = (bRumbleTelemetry || mOnWGI) && RumbleReadVehicle(mVehicle);
     mMixer.Begin();
     mMW.Mix(dt, mMixer);
+#ifdef GAME_UC
+    float collisionLeft, collisionRight;
+    mCollisionWave.Sample(dt, collisionLeft, collisionRight);
+    mMixer.Add(kRumbleImpacts, collisionLeft, collisionRight);
+#endif
     float roadLeft, roadRight;
     mRoadWave.Sample(dt, roadLeft, roadRight);
 #ifndef GAME_PROSTREET
@@ -484,11 +504,15 @@ class IFeedback {
     RumbleTelemetryPSCallback(mDeviceIndex,8,mWheelArg,&surface,slip,grip,0,0,input);
   }
 #elif defined(GAME_UC)
-  virtual void UpdateTireSkid(const SimSurface& surface, float skid, float /*load*/, float /*grip*/, float /*totalLoad*/) {
-    AddSkid(mWheelArg < 2, surface, fabsf(skid));
+  virtual void UpdateTireSkid(const SimSurface& surface, float skid, float range, float threshold, float load) {
+    if (mPaused || !_finite(skid) || !_finite(range) || !_finite(threshold) || !_finite(load)) return;
+    mSkidWave.Add(&surface, ATTRIB_KEY_FFB_SKID, RumbleUCSkid(skid, range, threshold, load));
+    RecordSkid(skid);
   }
-  virtual void UpdateTireSlip(const SimSurface& surface, float slip, float /*grip*/) {
-    AddSlip(surface, slip);
+  virtual void UpdateTireSlip(const SimSurface& surface, float slip, float grip) {
+    if (mPaused || !_finite(slip) || !_finite(grip)) return;
+    mSlipWave.Add(&surface, ATTRIB_KEY_FFB_SLIP, RumbleUCSlip(slip, grip));
+    RecordSlip(slip);
   }
 #else
   virtual void UpdateTireSkid(bool front, const SimSurface& surface, float skid) {
@@ -563,18 +587,30 @@ class IFeedback {
 #endif
 
 #ifdef GAME_UC
-  virtual void UpdateDriftSlip(bool active, float slipAngle, float /*lateralSlip*/) {
-    if (active) mMW.Drift(slipAngle, RumbleSimTime());
+  virtual void UpdateDriftSlip(bool active, float slipAngle, float lateralSlip) {
+    if (!mPaused) mMW.Drift(active, slipAngle, lateralSlip, RumbleSimTime());
   }
-  virtual void ReservedUC15(uintptr_t, uintptr_t, uintptr_t) {}
-  virtual void UpdateDriftSkid(const SimSurface& surface, float skid, float /*load*/, float /*grip*/) {
-    AddSkid(mWheelArg < 2, surface, fabsf(skid));
+  virtual void UpdateDriftTyreSlip(const SimSurface& surface, float slip, float grip) {
+    if (mPaused || !_finite(slip) || !_finite(grip)) return;
+    mSlipWave.Add(&surface, ATTRIB_KEY_FFB_SLIP, RumbleUCDriftSlip(slip, grip));
+    RecordSlip(slip);
+  }
+  virtual void UpdateDriftSkid(const SimSurface& surface, float skid, float range, float threshold) {
+    if (mPaused || !_finite(skid) || !_finite(range) || !_finite(threshold)) return;
+    mSkidWave.Add(&surface, ATTRIB_KEY_FFB_DRIFT_SKID, RumbleUCDriftSkid(skid, range, threshold));
+    RecordSkid(skid);
   }
   virtual void UpdateSteering(float /*steering*/) {}
-  virtual void UpdateRoadWithIndex(unsigned int wheel, float /*bumpScalar*/, const SimSurface& surface) {
+  virtual void UpdateRoadWithIndex(unsigned int wheel, float bumpScalar, const SimSurface& surface) {
     mWheelArg = wheel < RUMBLE_MAX_WHEELS ? (int)wheel : RUMBLE_MAX_WHEELS;
     if (mWheelArg == RUMBLE_MAX_WHEELS) return;
-    if (mHasVehicle) mRoadWave.Add(&surface, ATTRIB_KEY_FFB_ROLL, mVehicle.fSpeed);
+    float threshold, gain;
+    if (!mPaused && _finite(bumpScalar) &&
+        RumbleReadSurfaceFloat(&surface, ATTRIB_KEY_FFB_BUMP_THRESHOLD, threshold) && bumpScalar > threshold &&
+        RumbleReadSurfaceFloat(&surface, ATTRIB_KEY_FFB_BUMP_GAIN, gain)) {
+      MWRamp& bump = (wheel & 1) ? mMW.bumpRight : mMW.bumpLeft;
+      bump.Start(RumbleClamp(gain * bumpScalar), 0.1f, 0.3f);
+    }
     if (bRumbleTelemetry) RumbleTelemetry.iSurface[wheel] = RumbleTelemetrySurfaceId(&surface);
     if (RumbleTelemetry.nWheel < (int)wheel+1) RumbleTelemetry.nWheel = wheel+1;
   }
@@ -633,7 +669,47 @@ class IFeedback {
     void* other = RumbleMWCollisionBody(iamA ? cinfo.objB : cinfo.objA, otherVelocity);
     const float* before = iamA ? cinfo.objAVel : cinfo.objBVel;
     float delta[3] = {ownVelocity[0]-before[0], ownVelocity[1]-before[1], ownVelocity[2]-before[2]};
-    float dv = Length(delta), strength = 0;
+    float dv = Length(delta);
+#ifndef GAME_UC
+    float strength = 0;
+#endif
+#ifdef GAME_UC
+    // Console pad branch (0x82611FF8) uses authored collision waves, not
+    // the wheel actuator's fixed envelope or MW's scalar collision ramp.
+    unsigned int key = 0;
+    float input = 0;
+    const float mph = 2.236989974975586f;
+    switch (cinfo.flags & 7) { // PC bitfield order; X360 stores type in bits 29..31.
+      case 3: key = 0x751D40E5; input = cinfo.force; break;
+      case 2: {
+        float speed = Length(before);
+        float projection = speed > 0 ? fabsf(before[0]*cinfo.normal[0] + before[1]*cinfo.normal[1] + before[2]*cinfo.normal[2]) / speed : 0;
+        key = projection < 0.1f ? 0x96A192E8 : 0x7125C7EC;
+        input = (projection < 0.1f ? Length(ownVelocity) : dv) * mph;
+        break;
+      }
+      case 1:
+        if (dv >= 5) { key = 0x3C714126; input = dv * mph; }
+        else {
+          const float* otherBefore = iamA ? cinfo.objBVel : cinfo.objAVel;
+          float ownSpeed = Length(before), otherSpeed = Length(otherBefore);
+          bool rear = other && RumbleMWCollisionVehicle(other) && ownSpeed > 0 && otherSpeed > 0 &&
+              (before[0]*otherBefore[0] + before[1]*otherBefore[1] + before[2]*otherBefore[2]) / (ownSpeed*otherSpeed) > 0.1f;
+          float estimate = (std::max)(ownSpeed, otherSpeed) * 0.25f;
+          if (rear && estimate > 5) { key = 0xAEF4FB7D; input = estimate * mph; }
+          else if (other) {
+            float otherDelta[3] = {otherVelocity[0]-before[0], otherVelocity[1]-before[1], otherVelocity[2]-before[2]};
+            float liveSpeed = Length(ownVelocity);
+            if (liveSpeed > 2 && Length(otherDelta) > 2) { key = 0x1C2333F7; input = liveSpeed * mph; }
+          }
+        }
+        break;
+    }
+    if (key) RumbleUCAddCollision(mCollisionWave, key, input);
+    if (bRumbleTelemetry)
+      RumbleTelemetryPrintf("C,%.4f,%d,0x%02X,%.2f,%.2f,%.2f,%.2f,%.2f,%d\n", RumbleGetTime()-RumbleTelemetry.fStartTime,
+          cinfo.flags & 7, cinfo.flags & 0xFF, Length(cinfo.closingVel), input, Length(cinfo.slidingVel), dv, 0.0f, key != 0);
+#else
     switch (cinfo.flags & 7) {
       case 2: strength = Clamp01(dv / 30); break;
       case 3: strength = Clamp01((dv - 1) / 3); break;
@@ -665,6 +741,7 @@ class IFeedback {
         cinfo.flags & 7, cinfo.flags & 0xFF, Length(cv), fabsf(cv[0]*n[0] + cv[1]*n[1] + cv[2]*n[2]), Length(cinfo.slidingVel), dv, strength, 1);
     }
     mMW.Collision(strength);
+#endif
   }
 #ifdef GAME_PROSTREET
   virtual int GetControllerType() { return 5; } // native PC default; no force-feedback wheel
