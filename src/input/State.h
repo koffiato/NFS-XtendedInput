@@ -13,6 +13,7 @@
 
 #pragma once
 #include <windows.h>
+#pragma comment(lib, "user32.lib")
 #include <XInput.h>
 #include "ConfigDefaults.h"
 #include "Analog.h"
@@ -83,6 +84,21 @@ extern bool bUseDynamicFEngSwitching;
 extern bool bEnableMouseHiding;
 extern HCURSOR NFSCursor;
 #define MOUSEHIDE_TIME 5000
+
+enum IconFallbackMode {
+  ICON_MODE_CUSTOM = 0,
+  ICON_MODE_BUILTIN = 1,
+  ICON_MODE_PLAINTEXT = 2
+};
+
+extern IconFallbackMode CurrentIconMode;
+extern bool bCustomButtonTexLoaded;
+extern bool bHaveBuiltinIcons;
+extern char ButtonTexFilename[128];
+
+bool HasBuiltinIcons();
+void ResolveCursorFallback();
+void ResolveIconFallback();
 
 float GetAnalogStickValue(int port, WORD binding);
 uint16_t GetAnalogActivity(int port = 0);

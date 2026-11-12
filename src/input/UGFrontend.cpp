@@ -307,47 +307,82 @@ void __stdcall SetControllerFEng(char* pkgname)
 {
 	if (!bLoadedConsoleButtonTex)
 	{
-		LoadResourceFile("GLOBAL\\UG_ConsoleButtons.tpk", RESOURCE_FILE_NONE, 0, NULL, 0, 0, 0);
-		ServiceResourceLoading();
+		ResolveIconFallback();
+		if (CurrentIconMode == ICON_MODE_CUSTOM)
+		{
+			DWORD attr = GetFileAttributesA(ButtonTexFilename);
+			if (attr != INVALID_FILE_ATTRIBUTES && !(attr & FILE_ATTRIBUTE_DIRECTORY))
+			{
+				LoadResourceFile(ButtonTexFilename, RESOURCE_FILE_NONE, 0, NULL, 0, 0, 0);
+				ServiceResourceLoading();
+				bCustomButtonTexLoaded = true;
+			}
+			else
+			{
+				CurrentIconMode = bHaveBuiltinIcons ? ICON_MODE_BUILTIN : ICON_MODE_PLAINTEXT;
+			}
+		}
 		bLoadedConsoleButtonTex = true;
 	}
 
 	if (*(int*)GAMEFLOWMANAGER_STATUS_ADDR == 3)
 	{
-		if (LastControlledDevice == LASTCONTROLLED_CONTROLLER)
+		if (CurrentIconMode == ICON_MODE_CUSTOM)
 		{
-			switch (ControllerIconMode)
+			if (LastControlledDevice == LASTCONTROLLED_CONTROLLER)
 			{
-			case CONTROLLERICON_PS4:
-				SetPlayStationFEButtons(pkgname);
-				break;
-			case CONTROLLERICON_XBOXONE:
-			default:
-				SetXboxFEButtons(pkgname);
-				break;
+				switch (ControllerIconMode)
+				{
+				case CONTROLLERICON_PS4:
+					SetPlayStationFEButtons(pkgname);
+					break;
+				case CONTROLLERICON_XBOXONE:
+				default:
+					SetXboxFEButtons(pkgname);
+					break;
+				}
+			}
+			if (LastControlledDevice == LASTCONTROLLED_KB)
+				SetPCFEButtons(pkgname);
+		}
+		else if (CurrentIconMode == ICON_MODE_BUILTIN)
+		{
+			SetPCFEButtons(pkgname);
+		}
+		else // ICON_MODE_PLAINTEXT
+		{
+			if (FEHashUpper(pkgname) == 0x2729D8C3) // LS_Splash_PC.fng
+			{
+				wcstombs(CurrentSplashText, *(wchar_t**)(FEngFindString("LS_Splash_PC.fng", 0x13CF446D) + 0x60), 0x800);
+				if (FEHashUpper(CurrentSplashText) != 0xE7126192) // "Press enter to continue"
+					FEPrintf((void*)FEngFindString("LS_Splash_PC.fng", 0x13CF446D), "Press enter to continue");
 			}
 		}
-		if (LastControlledDevice == LASTCONTROLLED_KB)
-			SetPCFEButtons(pkgname);
-
 	}
 	if (*(int*)GAMEFLOWMANAGER_STATUS_ADDR == 6)
 	{
-		if (LastControlledDevice == LASTCONTROLLED_CONTROLLER)
+		if (CurrentIconMode == ICON_MODE_CUSTOM)
 		{
-			switch (ControllerIconMode)
+			if (LastControlledDevice == LASTCONTROLLED_CONTROLLER)
 			{
-			case CONTROLLERICON_PS4:
-				SetPlayStationIGButtons(pkgname);
-				break;
-			case CONTROLLERICON_XBOXONE:
-			default:
-				SetXboxIGButtons(pkgname);
-				break;
+				switch (ControllerIconMode)
+				{
+				case CONTROLLERICON_PS4:
+					SetPlayStationIGButtons(pkgname);
+					break;
+				case CONTROLLERICON_XBOXONE:
+				default:
+					SetXboxIGButtons(pkgname);
+					break;
+				}
 			}
+			if (LastControlledDevice == LASTCONTROLLED_KB)
+				SetPCIGButtons(pkgname);
 		}
-		if (LastControlledDevice == LASTCONTROLLED_KB)
+		else if (CurrentIconMode == ICON_MODE_BUILTIN)
+		{
 			SetPCIGButtons(pkgname);
+		}
 	}
 }
 

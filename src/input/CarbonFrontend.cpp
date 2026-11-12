@@ -36,7 +36,8 @@ void* __stdcall FEPackage_FindObjectByHash_Show_Hook(unsigned int namehash) {
   unsigned int thethis = 0;
   _asm mov     thethis, ecx;
 
-  FEngSetVisible(FEPackage_FindObjectByHash((void*)thethis, WORLDMAP_BUTTONGROUP_CONSOLE));
+  if (CurrentIconMode != ICON_MODE_PLAINTEXT)
+    FEngSetVisible(FEPackage_FindObjectByHash((void*)thethis, WORLDMAP_BUTTONGROUP_CONSOLE));
 
   return FEPackage_FindObjectByHash((void*)thethis, namehash);
 }
@@ -58,7 +59,7 @@ void __stdcall FEWorldMapStateManager_HandleScreenTick_Hook() {
       FEngSetInvisible(FEngFindObject(*(char**)(*(int*)WORLDMAP_INSTANCE_ADDR + 0xC), WORLDMAP_BUTTONGROUP_CONSOLE));
       FEngSetInvisible(FEngFindObject(*(char**)(*(int*)WORLDMAP_INSTANCE_ADDR + 0xC), WORLDMAP_BUTTONGROUP_PC));
     } else if (*(int*)WORLDMAP_INSTANCE_ADDR) {
-      if (bConsoleFEng)
+      if (bConsoleFEng && CurrentIconMode != ICON_MODE_PLAINTEXT)
         FEngSetVisible(FEngFindObject(*(char**)(*(int*)WORLDMAP_INSTANCE_ADDR + 0xC), WORLDMAP_BUTTONGROUP_CONSOLE));
       else
         FEngSetVisible(FEngFindObject(*(char**)(*(int*)WORLDMAP_INSTANCE_ADDR + 0xC), WORLDMAP_BUTTONGROUP_PC));
@@ -83,7 +84,7 @@ void __stdcall WorldMap_UnfocusQuickList_Hook() {
 
   bQuickListFocused = false;
 
-  if (bConsoleFEng)
+  if (bConsoleFEng && CurrentIconMode != ICON_MODE_PLAINTEXT)
     FEngSetVisible(FEngFindObject(*(char**)(*(int*)WORLDMAP_INSTANCE_ADDR + 0xC), WORLDMAP_BUTTONGROUP_CONSOLE));
   else
     FEngSetVisible(FEngFindObject(*(char**)(*(int*)WORLDMAP_INSTANCE_ADDR + 0xC), WORLDMAP_BUTTONGROUP_PC));

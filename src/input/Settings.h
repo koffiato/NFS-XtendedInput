@@ -50,4 +50,6 @@ void InitConfig() {
 #if INPUT_SCANNERS
   SetupScannerConfig();
 #endif
+  ResolveCursorFallback();
+  ResolveIconFallback();
 }

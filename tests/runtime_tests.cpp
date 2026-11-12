@@ -475,6 +475,8 @@ int TestTitlePrint(void* object, const char* text, ...) {
 void CheckTitleScreen() {
   bool previousConsole = bConsoleFEng;
   unsigned int previousIcons = ControllerIconMode;
+  IconFallbackMode previousMode = CurrentIconMode;
+  CurrentIconMode = ICON_MODE_CUSTOM;
   const char* expected[] = {"Press MENU or A button", "Press OPTIONS or X button", "Press START or A button",
                             "Press START or X button", "Press + button", "Press START or A button"};
   for (unsigned int mode = 0; mode < 6; ++mode) {
@@ -486,6 +488,29 @@ void CheckTitleScreen() {
   }
   ControllerIconMode = 999;
   assert(!strcmp(TitleScreenPrompt(), "Press MENU or A button"));
+
+  // Check built-in icon prompts
+  CurrentIconMode = ICON_MODE_BUILTIN;
+  bConsoleFEng = false;
+  assert(!strcmp(TitleScreenPrompt(), "CLICK or ENTER to continue"));
+  bConsoleFEng = true;
+  ControllerIconMode = CONTROLLERICON_PS4;
+#if defined(GAME_MW) || defined(GAME_CARBON)
+  assert(!strcmp(TitleScreenPrompt(), "Press OPTIONS or X button"));
+  ControllerIconMode = CONTROLLERICON_XBOXONE;
+  assert(!strcmp(TitleScreenPrompt(), "Press START or X button"));
+#else
+  assert(!strcmp(TitleScreenPrompt(), "Press MENU or A button"));
+#endif
+
+  // Check plaintext fallback prompts
+  CurrentIconMode = ICON_MODE_PLAINTEXT;
+  bConsoleFEng = true;
+  assert(!strcmp(TitleScreenPrompt(), "CLICK or ENTER to continue"));
+  bConsoleFEng = false;
+  assert(!strcmp(TitleScreenPrompt(), "CLICK or ENTER to continue"));
+
+  CurrentIconMode = ICON_MODE_CUSTOM;
 #if defined(GAME_CARBON) || defined(GAME_PROSTREET)
   // Exercise the separately compiled title module through replaceable native bindings.
   auto previousFind = FEngFindObject_Title;
@@ -504,8 +529,117 @@ void CheckTitleScreen() {
 #endif
   bConsoleFEng = previousConsole;
   ControllerIconMode = previousIcons;
+  CurrentIconMode = previousMode;
 }
 #endif
+
+void CheckFallbacks() {
+  // 1. Cursor fallback tests
+  bool origWin32 = bUseWin32Cursor;
+  bool origCustom = bUseCustomCursor;
+  HCURSOR origCursor = NFSCursor;
+
+  // Custom cursor file missing -> falls back to game's native cursor (bUseWin32Cursor = false)
+  bUseWin32Cursor = true;
+  bUseCustomCursor = true;
+  ResolveCursorFallback();
+  assert(!bUseWin32Cursor);
+  assert(!bUseCustomCursor);
+  assert(NFSCursor == NULL);
+#if !INPUT_SCANNERS && !defined(NO_FENG)
+  assert(!GetUseWin32Cursor());
+#endif
+
+  // Custom cursor disabled -> uses Win32 arrow cursor IDC_ARROW
+  bUseWin32Cursor = true;
+  bUseCustomCursor = false;
+  ResolveCursorFallback();
+  assert(bUseWin32Cursor);
+  assert(!bUseCustomCursor);
+  assert(NFSCursor != NULL);
+#if !INPUT_SCANNERS && !defined(NO_FENG)
+  assert(GetUseWin32Cursor());
+#endif
+
+  // Win32 cursor disabled -> no Win32 cursor
+  bUseWin32Cursor = false;
+  bUseCustomCursor = false;
+  ResolveCursorFallback();
+  assert(!bUseWin32Cursor);
+  assert(NFSCursor == NULL);
+#if !INPUT_SCANNERS && !defined(NO_FENG)
+  assert(!GetUseWin32Cursor());
+#endif
+
+  bUseWin32Cursor = origWin32;
+  bUseCustomCursor = origCustom;
+  NFSCursor = origCursor;
+
+  // 2. Icon fallback tests
+  IconFallbackMode origMode = CurrentIconMode;
+  bool origBuiltin = bHaveBuiltinIcons;
+  bool origConsole = bConsoleFEng;
+  bool origDynamic = bUseDynamicFEngSwitching;
+  char origFilename[128];
+  strcpy_s(origFilename, ButtonTexFilename);
+
+  // Missing button file with built-in icons available -> ICON_MODE_BUILTIN
+  strcpy_s(ButtonTexFilename, "nonexistent_buttons.tpk");
+  bHaveBuiltinIcons = true;
+  CurrentIconMode = ICON_MODE_CUSTOM;
+  ResolveIconFallback();
+  assert(CurrentIconMode == ICON_MODE_BUILTIN);
+
+  // Missing button file without built-in icons -> ICON_MODE_PLAINTEXT
+  bHaveBuiltinIcons = false;
+  CurrentIconMode = ICON_MODE_CUSTOM;
+  bConsoleFEng = true;
+  ResolveIconFallback();
+  assert(CurrentIconMode == ICON_MODE_PLAINTEXT);
+  assert(!bConsoleFEng);
+
+  // Existing button file -> ICON_MODE_CUSTOM
+  char existingFile[MAX_PATH];
+  assert(GetModuleFileNameA(NULL, existingFile, MAX_PATH) > 0);
+  strcpy_s(ButtonTexFilename, existingFile);
+  CurrentIconMode = ICON_MODE_PLAINTEXT;
+  ResolveIconFallback();
+  assert(CurrentIconMode == ICON_MODE_CUSTOM);
+
+  // Device switching behavior in plaintext mode vs custom/builtin
+  bUseDynamicFEngSwitching = true;
+  CurrentIconMode = ICON_MODE_PLAINTEXT;
+  InputSetActiveDevice(LASTCONTROLLED_CONTROLLER);
+  assert(!bConsoleFEng);
+  InputSetActiveDevice(LASTCONTROLLED_KB);
+  assert(!bConsoleFEng);
+
+  CurrentIconMode = ICON_MODE_CUSTOM;
+  InputSetActiveDevice(LASTCONTROLLED_CONTROLLER);
+  assert(bConsoleFEng);
+  InputSetActiveDevice(LASTCONTROLLED_KB);
+  assert(!bConsoleFEng);
+
+  CurrentIconMode = ICON_MODE_BUILTIN;
+  InputSetActiveDevice(LASTCONTROLLED_CONTROLLER);
+  assert(bConsoleFEng);
+  InputSetActiveDevice(LASTCONTROLLED_KB);
+  assert(!bConsoleFEng);
+
+  bHaveBuiltinIcons = origBuiltin;
+  // Built-in icon capabilities per target
+#if defined(GAME_MW) || defined(GAME_CARBON) || defined(GAME_UG)
+  assert(HasBuiltinIcons() == true);
+#else
+  assert(HasBuiltinIcons() == false);
+#endif
+
+  CurrentIconMode = origMode;
+  bHaveBuiltinIcons = origBuiltin;
+  bConsoleFEng = origConsole;
+  bUseDynamicFEngSwitching = origDynamic;
+  strcpy_s(ButtonTexFilename, origFilename);
+}
 
 void CheckBindings() {
   XINPUT_GAMEPAD pad = {};
@@ -557,6 +691,7 @@ int main() {
   CheckPolling();
   CheckKeyboard();
   CheckBindings();
+  CheckFallbacks();
 #if !INPUT_SCANNERS && !defined(NO_FENG)
   CheckTitleScreen();
 #endif

@@ -53,6 +53,59 @@ bool bUseDynamicFEngSwitching = ConfigDefaults::Icons::UseDynamicFEngSwitching;
 bool bEnableMouseHiding = ConfigDefaults::Input::EnableMouseHiding;
 HCURSOR NFSCursor;
 
+#if defined(GAME_MW) || defined(GAME_CARBON) || defined(GAME_UG)
+bool bHaveBuiltinIcons = true;
+#else
+bool bHaveBuiltinIcons = false;
+#endif
+
+IconFallbackMode CurrentIconMode = ICON_MODE_CUSTOM;
+bool bCustomButtonTexLoaded = false;
+
+#if defined(GAME_UG)
+char ButtonTexFilename[128] = "GLOBAL\\UG_ConsoleButtons.tpk";
+#else
+char ButtonTexFilename[128] = "GLOBAL\\XtendedInputButtons.tpk";
+#endif
+
+bool HasBuiltinIcons() {
+  return bHaveBuiltinIcons;
+}
+
+void ResolveCursorFallback() {
+  if (bUseWin32Cursor && bUseCustomCursor) {
+    DWORD attr = GetFileAttributesA(cursorSkinPath);
+    if (attr == INVALID_FILE_ATTRIBUTES || (attr & FILE_ATTRIBUTE_DIRECTORY)) {
+      bUseWin32Cursor = false;
+      bUseCustomCursor = false;
+      NFSCursor = NULL;
+      return;
+    }
+    NFSCursor = LoadCursorFromFileA(cursorSkinPath);
+    if (!NFSCursor) {
+      bUseWin32Cursor = false;
+      bUseCustomCursor = false;
+      return;
+    }
+  } else if (bUseWin32Cursor) {
+    NFSCursor = LoadCursor(NULL, IDC_ARROW);
+  } else {
+    NFSCursor = NULL;
+  }
+}
+
+void ResolveIconFallback() {
+  DWORD attr = GetFileAttributesA(ButtonTexFilename);
+  if (attr != INVALID_FILE_ATTRIBUTES && !(attr & FILE_ATTRIBUTE_DIRECTORY)) {
+    CurrentIconMode = ICON_MODE_CUSTOM;
+  } else if (bHaveBuiltinIcons) {
+    CurrentIconMode = ICON_MODE_BUILTIN;
+  } else {
+    CurrentIconMode = ICON_MODE_PLAINTEXT;
+    bConsoleFEng = false;
+  }
+}
+
 float GetAnalogStickValue(int port, WORD binding) {
   return InputAnalogValue(g_Controllers[port].state.Gamepad, binding);
 }
@@ -64,7 +117,12 @@ uint16_t GetAnalogActivity(int port) {
 
 void InputSetActiveDevice(unsigned int device) {
   LastControlledDevice = device;
-  if (bUseDynamicFEngSwitching) bConsoleFEng = device == LASTCONTROLLED_CONTROLLER;
+  if (bUseDynamicFEngSwitching) {
+    if (CurrentIconMode == ICON_MODE_PLAINTEXT)
+      bConsoleFEng = false;
+    else
+      bConsoleFEng = (device == LASTCONTROLLED_CONTROLLER);
+  }
 }
 
 char defMappingName[MAX_PATH] = "scripts\\NFS_XtendedInput.default.ini";

@@ -8,7 +8,14 @@
 #include "TitleScreen.h"
 
 const char* TitleScreenPrompt() {
-  if (!bConsoleFEng) return FE_SPLASH_TEXT_PC;
+  if (!bConsoleFEng || CurrentIconMode == ICON_MODE_PLAINTEXT) return FE_SPLASH_TEXT_PC;
+  if (CurrentIconMode == ICON_MODE_BUILTIN) {
+#if defined(GAME_MW) || defined(GAME_CARBON)
+    return ControllerIconMode == CONTROLLERICON_PS4 ? FE_SPLASH_TEXT_PS4 : FE_SPLASH_TEXT_PS3;
+#else
+    return FE_SPLASH_TEXT_XBOX;
+#endif
+  }
   switch (ControllerIconMode) {
     case CONTROLLERICON_PS3: return FE_SPLASH_TEXT_PS3;
     case CONTROLLERICON_XB360MW:

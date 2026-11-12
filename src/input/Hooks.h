@@ -344,6 +344,9 @@ void InstallGameHooks() {
 #endif
 
 #ifndef NO_FENG
+  ResolveCursorFallback();
+  ResolveIconFallback();
+
   // Mouse stuff
   injector::MakeJMP(FEMOUSE_UPDATE_CALL_ADDR, UpdateFECursorPos, true);
 
@@ -366,7 +369,7 @@ void InstallGameHooks() {
     injector::MakeCALL(SHOWCURSOR_HOOK_ADDR2, DummyFuncStd, true);
 #endif
 
-    if (LastControlledDevice == LASTCONTROLLED_CONTROLLER) bConsoleFEng = true;
+    if (LastControlledDevice == LASTCONTROLLED_CONTROLLER && CurrentIconMode != ICON_MODE_PLAINTEXT) bConsoleFEng = true;
 
   } else
     SetCursor(NULL);
@@ -380,7 +383,7 @@ void InstallGameHooks() {
   // FE VISUAL STUFF
 
   // custom Win32 mouse cursor
-  if (bUseWin32Cursor) {
+  if (bUseWin32Cursor && !NFSCursor) {
     if (bUseCustomCursor)
       NFSCursor = LoadCursorFromFile(cursorSkinPath);
     else
@@ -407,7 +410,7 @@ void InstallGameHooks() {
     injector::MakeNOP(0x00562C60, 2, true);
   } else {
     // make MW PC behave exactly like console version here... hide all PC elements instead
-    if (LastControlledDevice == LASTCONTROLLED_CONTROLLER) {
+    if (LastControlledDevice == LASTCONTROLLED_CONTROLLER && CurrentIconMode != ICON_MODE_PLAINTEXT) {
       injector::WriteMemory<unsigned char>(0x005A45B9, FE_CONTROL_FLAG_PC, true);
       injector::WriteMemory<unsigned char>(0x00514CCD, FE_CONTROL_FLAG_PC, true);
       injector::WriteMemory<unsigned char>(0x0052AEC2, FE_CONTROL_FLAG_PC, true);
@@ -434,7 +437,7 @@ void InstallGameHooks() {
     injector::MakeNOP(CFENG_RENDEROBJ_NOP2_ADDR, CFENG_RENDEOBJ_NOP_AMOUNT, true);  // cFEng render object
 #endif
   } else {
-    if (LastControlledDevice == LASTCONTROLLED_CONTROLLER) {
+    if (LastControlledDevice == LASTCONTROLLED_CONTROLLER && CurrentIconMode != ICON_MODE_PLAINTEXT) {
       injector::WriteMemory<unsigned char>(CFENG_RENDEROBJ_FLAG_ADDR, FE_CONTROL_FLAG_PC, true);
     }
   }
@@ -465,7 +468,7 @@ void InstallGameHooks() {
     injector::MakeCALL(0x005CE309, WorldMap_SetQuickListInFocus_Hook, true);
 
   } else {
-    if (LastControlledDevice == LASTCONTROLLED_CONTROLLER) {
+    if (LastControlledDevice == LASTCONTROLLED_CONTROLLER && CurrentIconMode != ICON_MODE_PLAINTEXT) {
       injector::WriteMemory<unsigned int>(0x005C3910, WORLDMAP_BUTTONGROUP_CONSOLE, true);
       injector::WriteMemory<unsigned int>(0x005CDD67, WORLDMAP_BUTTONGROUP_CONSOLE, true);
       injector::WriteMemory<unsigned int>(0x005B901D, WORLDMAP_BUTTONGROUP_CONSOLE, true);

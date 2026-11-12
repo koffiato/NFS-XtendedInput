@@ -29,7 +29,6 @@
 // FE texture button re-mapping
 unsigned int ButtonTexHashes[FE_TEX_HASH_COUNT];
 bool         bLoadedConsoleButtonTex = false;
-char         ButtonTexFilename[128];
 
 #ifdef GAME_MW
 #define FE_CONTROL_FLAG_PC 0x8
@@ -536,7 +535,7 @@ void SetControllerFEng(FEObject* inobj) {
   int HideFlags = FE_CONTROL_FLAG_CONSOLE;
   int ShowFlags = FE_CONTROL_FLAG_PC;
 
-  if (bConsoleFEng) {
+  if (bConsoleFEng && CurrentIconMode != ICON_MODE_PLAINTEXT) {
     HideFlags = FE_CONTROL_FLAG_PC;
     ShowFlags = FE_CONTROL_FLAG_CONSOLE;
   }
@@ -559,8 +558,10 @@ void SetControllerFEng(FEObject* inobj) {
   }
 
   if (inobj->Type == FE_Image) {
-    for (int i = 0; i < FE_TEX_HASH_COUNT; i++) {
-      FEngSwapTextureHash(inobj, FE_DefaultButtonTexHashes[i], ButtonTexHashes[i]);
+    if (CurrentIconMode == ICON_MODE_CUSTOM) {
+      for (int i = 0; i < FE_TEX_HASH_COUNT; i++) {
+        FEngSwapTextureHash(inobj, FE_DefaultButtonTexHashes[i], ButtonTexHashes[i]);
+      }
     }
   }
   if (bEnableSplashTakeover) SetTitleScreenText();
@@ -578,9 +579,17 @@ bool bInPCControllerConfig() {
 
 void UpdateControllerFEng(FEObject* inobj) {
   if (!bLoadedConsoleButtonTex) {
-    if (PathFileExists(ButtonTexFilename)) {
-      LoadResourceFile(ButtonTexFilename, 0, 0, NULL, 0, 0, 0);
-      ServiceResourceLoading();
+    ResolveIconFallback();
+    if (CurrentIconMode == ICON_MODE_CUSTOM) {
+      DWORD attr = GetFileAttributesA(ButtonTexFilename);
+      if (attr != INVALID_FILE_ATTRIBUTES && !(attr & FILE_ATTRIBUTE_DIRECTORY)) {
+        LoadResourceFile(ButtonTexFilename, 0, 0, NULL, 0, 0, 0);
+        ServiceResourceLoading();
+        bCustomButtonTexLoaded = true;
+      } else {
+        CurrentIconMode = bHaveBuiltinIcons ? ICON_MODE_BUILTIN : ICON_MODE_PLAINTEXT;
+        if (CurrentIconMode == ICON_MODE_PLAINTEXT) bConsoleFEng = false;
+      }
     }
     bLoadedConsoleButtonTex = true;
   }
