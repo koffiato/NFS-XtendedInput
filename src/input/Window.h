@@ -28,17 +28,28 @@ LRESULT WINAPI CustomWndProc(HWND window, UINT message, WPARAM wParam, LPARAM lP
       if (KeyboardReadingMode != KB_READINGMODE_UNBUFFERED_RAW) InputSetActiveDevice(LASTCONTROLLED_KB);
       break;
 #ifndef GAME_UG
-    case WM_LBUTTONDOWN: InputSetActiveDevice(LASTCONTROLLED_KB); bMousePressedDown = true; return 0;
+    case WM_LBUTTONDOWN:
+      if (!bCursorHidden) { InputSetActiveDevice(LASTCONTROLLED_KB); bMousePressedDown = true; }
+      else { TimeSinceLastMouseMovement = timeGetTime(); }
+      return 0;
     case WM_LBUTTONUP: bMousePressedDown = false; return 0;
-    case WM_RBUTTONDOWN: InputSetActiveDevice(LASTCONTROLLED_KB); bMouse3PressedDown = true; return 0;
+    case WM_RBUTTONDOWN:
+      if (!bCursorHidden) { InputSetActiveDevice(LASTCONTROLLED_KB); bMouse3PressedDown = true; }
+      else { TimeSinceLastMouseMovement = timeGetTime(); }
+      return 0;
     case WM_RBUTTONUP: bMouse3PressedDown = false; return 0;
-    case WM_MBUTTONDOWN: InputSetActiveDevice(LASTCONTROLLED_KB); bMouse2PressedDown = true; return 0;
+    case WM_MBUTTONDOWN:
+      if (!bCursorHidden) { InputSetActiveDevice(LASTCONTROLLED_KB); bMouse2PressedDown = true; }
+      else { TimeSinceLastMouseMovement = timeGetTime(); }
+      return 0;
     case WM_MBUTTONUP: bMouse2PressedDown = false; return 0;
     case WM_SETFOCUS:
       if (bConfineMouse) { GetWindowRect(window, &windowRect); ClipCursor(&windowRect); }
       break;
 #if !INPUT_SCANNERS && !defined(NO_FENG)
-    case WM_MOUSEWHEEL: InputSetActiveDevice(LASTCONTROLLED_KB); MouseWheelValue = GET_WHEEL_DELTA_WPARAM(wParam); return 0;
+    case WM_MOUSEWHEEL:
+      if (!bCursorHidden) { InputSetActiveDevice(LASTCONTROLLED_KB); MouseWheelValue = GET_WHEEL_DELTA_WPARAM(wParam); }
+      return 0;
     case WM_MOUSEMOVE: if (!bUseWin32Cursor) bLastUsedVirtualMouse = false; return 0;
 #endif
 #endif

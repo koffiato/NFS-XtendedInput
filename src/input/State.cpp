@@ -51,6 +51,7 @@ bool bUseCustomCursor = ConfigDefaults::Input::UseCustomCursor;
 bool bLastUsedVirtualMouse = false;
 bool bUseDynamicFEngSwitching = ConfigDefaults::Icons::UseDynamicFEngSwitching;
 bool bEnableMouseHiding = ConfigDefaults::Input::EnableMouseHiding;
+bool bCursorHidden = false;
 HCURSOR NFSCursor;
 
 #if defined(GAME_MW) || defined(GAME_CARBON) || defined(GAME_UG)
@@ -117,6 +118,9 @@ uint16_t GetAnalogActivity(int port) {
 
 void InputSetActiveDevice(unsigned int device) {
   LastControlledDevice = device;
+  if (device == LASTCONTROLLED_CONTROLLER && bEnableMouseHiding) {
+    TimeSinceLastMouseMovement = 0;
+  }
   if (bUseDynamicFEngSwitching) {
     if (CurrentIconMode == ICON_MODE_PLAINTEXT)
       bConsoleFEng = false;

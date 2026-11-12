@@ -239,8 +239,8 @@ void* __stdcall InputMapping_Constructor(InputDevice* device, void* AttribCollec
 
 #ifndef NO_FENG
 void HandleSelectCarCamera(void* SelectCarObj, SHORT XAxis, SHORT YAxis) {
-  if (XAxis || YAxis || bMousePressedDown) {
-    if (bMousePressedDown) {
+  if (XAxis || YAxis || (bMousePressedDown && !bCursorHidden)) {
+    if (bMousePressedDown && !bCursorHidden) {
       float HSpeed = *(int*)FEMOUSECURSOR_CARORBIT_X_ADDR;
       float VSpeed = *(int*)FEMOUSECURSOR_CARORBIT_Y_ADDR;
 
@@ -272,7 +272,7 @@ void HandleSelectCarCamera(void* SelectCarObj, SHORT XAxis, SHORT YAxis) {
     SelectCarCameraMover_SetVRotateSpeed(SelectCarObj, 0, false);
   }
 
-  if (g_Controllers[0].state.Gamepad.bLeftTrigger || (MouseWheelValue < 0)) {
+  if (g_Controllers[0].state.Gamepad.bLeftTrigger || (!bCursorHidden && MouseWheelValue < 0)) {
     if (MouseWheelValue)  // TODO: maybe enhance it with a proper accel delta???
       SelectCarCameraMover_SetZoomSpeed(SelectCarObj, 1.0, true);
     if (g_Controllers[0].state.Gamepad.bLeftTrigger) {
@@ -281,7 +281,7 @@ void HandleSelectCarCamera(void* SelectCarObj, SHORT XAxis, SHORT YAxis) {
     }
   }
 
-  else if (g_Controllers[0].state.Gamepad.bRightTrigger || (MouseWheelValue > 0)) {
+  else if (g_Controllers[0].state.Gamepad.bRightTrigger || (!bCursorHidden && MouseWheelValue > 0)) {
     if (MouseWheelValue) SelectCarCameraMover_SetZoomSpeed(SelectCarObj, -1.0, true);
     if (g_Controllers[0].state.Gamepad.bRightTrigger) {
       float Speed = g_Controllers[0].state.Gamepad.bRightTrigger / float(0xFF);

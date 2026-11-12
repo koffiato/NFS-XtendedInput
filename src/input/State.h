@@ -82,6 +82,7 @@ extern bool bUseCustomCursor;
 extern bool bLastUsedVirtualMouse;
 extern bool bUseDynamicFEngSwitching;
 extern bool bEnableMouseHiding;
+extern bool bCursorHidden;
 extern HCURSOR NFSCursor;
 #define MOUSEHIDE_TIME 5000
 

@@ -639,6 +639,105 @@ void CheckFallbacks() {
   bConsoleFEng = origConsole;
   bUseDynamicFEngSwitching = origDynamic;
   strcpy_s(ButtonTexFilename, origFilename);
+
+  // 3. Cursor hiding and input suppression tests
+#ifndef GAME_UG
+  bool origCursorHidden = bCursorHidden;
+  bool origMouse1 = bMousePressedDown;
+  bool origMouse2 = bMouse2PressedDown;
+  bool origMouse3 = bMouse3PressedDown;
+  int origWheel = MouseWheelValue;
+  unsigned int origDevice = LastControlledDevice;
+
+  // When cursor is hidden, clicks, buttons and wheel must NOT register
+  bCursorHidden = true;
+  LastControlledDevice = LASTCONTROLLED_CONTROLLER;
+  bMousePressedDown = false;
+  bMouse2PressedDown = false;
+  bMouse3PressedDown = false;
+  MouseWheelValue = 0;
+
+  // LBUTTONDOWN while hidden
+  CustomWndProc(NULL, WM_LBUTTONDOWN, 0, 0);
+  assert(!bMousePressedDown);
+  assert(LastControlledDevice == LASTCONTROLLED_CONTROLLER);
+
+  // RBUTTONDOWN while hidden
+  CustomWndProc(NULL, WM_RBUTTONDOWN, 0, 0);
+  assert(!bMouse3PressedDown);
+  assert(LastControlledDevice == LASTCONTROLLED_CONTROLLER);
+
+  // MBUTTONDOWN while hidden
+  CustomWndProc(NULL, WM_MBUTTONDOWN, 0, 0);
+  assert(!bMouse2PressedDown);
+  assert(LastControlledDevice == LASTCONTROLLED_CONTROLLER);
+
+#if !INPUT_SCANNERS && !defined(NO_FENG)
+  // MOUSEWHEEL while hidden
+  CustomWndProc(NULL, WM_MOUSEWHEEL, MAKEWPARAM(0, 120), 0);
+  assert(MouseWheelValue == 0);
+  assert(LastControlledDevice == LASTCONTROLLED_CONTROLLER);
+#endif
+
+  // When cursor is visible, inputs register normally
+  bCursorHidden = false;
+  CustomWndProc(NULL, WM_LBUTTONDOWN, 0, 0);
+  assert(bMousePressedDown);
+  assert(LastControlledDevice == LASTCONTROLLED_KB);
+  CustomWndProc(NULL, WM_LBUTTONUP, 0, 0);
+  assert(!bMousePressedDown);
+
+  LastControlledDevice = LASTCONTROLLED_CONTROLLER;
+  CustomWndProc(NULL, WM_RBUTTONDOWN, 0, 0);
+  assert(bMouse3PressedDown);
+  assert(LastControlledDevice == LASTCONTROLLED_KB);
+  CustomWndProc(NULL, WM_RBUTTONUP, 0, 0);
+  assert(!bMouse3PressedDown);
+
+  LastControlledDevice = LASTCONTROLLED_CONTROLLER;
+  CustomWndProc(NULL, WM_MBUTTONDOWN, 0, 0);
+  assert(bMouse2PressedDown);
+  assert(LastControlledDevice == LASTCONTROLLED_KB);
+  CustomWndProc(NULL, WM_MBUTTONUP, 0, 0);
+  assert(!bMouse2PressedDown);
+
+#if !INPUT_SCANNERS && !defined(NO_FENG)
+  LastControlledDevice = LASTCONTROLLED_CONTROLLER;
+  CustomWndProc(NULL, WM_MOUSEWHEEL, MAKEWPARAM(0, 120), 0);
+  assert(MouseWheelValue == 120);
+  assert(LastControlledDevice == LASTCONTROLLED_KB);
+  MouseWheelValue = 0;
+#endif
+
+  bCursorHidden = origCursorHidden;
+  bMousePressedDown = origMouse1;
+  bMouse2PressedDown = origMouse2;
+  bMouse3PressedDown = origMouse3;
+  MouseWheelValue = origWheel;
+  LastControlledDevice = origDevice;
+
+  // Active controller input clears TimeSinceLastMouseMovement when mouse hiding is enabled
+  bool origHiding = bEnableMouseHiding;
+  DWORD origMovementTime = TimeSinceLastMouseMovement;
+  bEnableMouseHiding = true;
+  TimeSinceLastMouseMovement = 123456;
+  InputSetActiveDevice(LASTCONTROLLED_CONTROLLER);
+  assert(TimeSinceLastMouseMovement == 0);
+
+  bEnableMouseHiding = false;
+  TimeSinceLastMouseMovement = 654321;
+  InputSetActiveDevice(LASTCONTROLLED_CONTROLLER);
+  assert(TimeSinceLastMouseMovement == 654321);
+
+  bEnableMouseHiding = true;
+  TimeSinceLastMouseMovement = 999999;
+  InputSetActiveDevice(LASTCONTROLLED_KB);
+  assert(TimeSinceLastMouseMovement == 999999);
+
+  bEnableMouseHiding = origHiding;
+  TimeSinceLastMouseMovement = origMovementTime;
+  LastControlledDevice = origDevice;
+#endif
 }
 
 void CheckBindings() {
